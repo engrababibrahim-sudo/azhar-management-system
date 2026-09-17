@@ -12,7 +12,22 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  LayoutDashboard,
+  ClipboardCheck,
+  BarChart3,
+  UserCog,
+  Megaphone,
+  FileSpreadsheet,
+  Settings,
+  Menu,
+  X,
+  Bell,
+  ChevronLeft,
+  Activity,
+  School,
+  ClipboardList,
 } from "lucide-react";
+
 import { supabase } from "../lib/supabase/client";
 
 type Institute = {
@@ -27,11 +42,65 @@ type Institute = {
   is_active: boolean | null;
 };
 
+const menuItems = [
+  {
+    title: "لوحة التحكم",
+    href: "/",
+    icon: LayoutDashboard,
+  },
+  {
+    title: "إدارة المعاهد",
+    href: "/institutes",
+    icon: Building2,
+  },
+  {
+    title: "الطلاب",
+    href: "/students",
+    icon: GraduationCap,
+  },
+  {
+    title: "المدرسون",
+    href: "/teachers",
+    icon: UserCog,
+  },
+  {
+    title: "الحضور والغياب",
+    href: "/attendance",
+    icon: ClipboardCheck,
+  },
+  {
+    title: "التقارير والإحصائيات",
+    href: "/attendance-report",
+    icon: BarChart3,
+  },
+  {
+    title: "المهام والمتابعة",
+    href: "/tasks",
+    icon: ClipboardList,
+  },
+  {
+    title: "الإعلانات",
+    href: "/announcements",
+    icon: Megaphone,
+  },
+  {
+    title: "استيراد البيانات",
+    href: "/import",
+    icon: FileSpreadsheet,
+  },
+  {
+    title: "الإعدادات",
+    href: "/settings",
+    icon: Settings,
+  },
+];
+
 export default function Home() {
   const [institutes, setInstitutes] = useState<Institute[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   async function loadInstitutes() {
     setLoading(true);
@@ -70,7 +139,9 @@ export default function Home() {
   const filteredInstitutes = useMemo(() => {
     const value = search.trim().toLowerCase();
 
-    if (!value) return institutes;
+    if (!value) {
+      return institutes;
+    }
 
     return institutes.filter((institute) =>
       [
@@ -101,298 +172,499 @@ export default function Home() {
     (institute) => institute.is_active !== false
   ).length;
 
+  const inactiveInstitutes = institutes.filter(
+    (institute) => institute.is_active === false
+  ).length;
+
   return (
     <main
       dir="rtl"
       className="min-h-screen bg-slate-100 text-slate-800"
     >
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-4">
+      {/* Mobile Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
 
-          <div>
-            <h1 className="text-2xl font-bold">
-              الإدارة التعليمية الأزهرية
-            </h1>
+      {/* Sidebar */}
+      <aside
+        className={`
+          fixed top-0 right-0 z-50
+          h-screen w-72
+          bg-slate-950 text-white
+          transform transition-transform duration-300
+          lg:translate-x-0
+          ${
+            mobileMenuOpen
+              ? "translate-x-0"
+              : "translate-x-full lg:translate-x-0"
+          }
+        `}
+      >
+        <div className="h-full flex flex-col">
+          {/* Logo */}
+          <div className="p-6 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600 flex items-center justify-center shadow-lg">
+                <School size={25} />
+              </div>
 
-            <p className="text-slate-500 mt-1">
-              نظام الإدارة والمتابعة المركزية للمعاهد الأزهرية
+              <div>
+                <h1 className="font-bold text-lg">
+                  الإدارة الأزهرية
+                </h1>
+
+                <p className="text-xs text-slate-400 mt-1">
+                  نظام الإدارة والمتابعة
+                </p>
+              </div>
+
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="mr-auto lg:hidden text-slate-400 hover:text-white"
+              >
+                <X size={22} />
+              </button>
+            </div>
+          </div>
+
+          {/* Profile */}
+          <div className="p-5">
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-emerald-600 flex items-center justify-center font-bold">
+                  م
+                </div>
+
+                <div>
+                  <p className="font-semibold text-sm">
+                    مدير الإدارة
+                  </p>
+
+                  <p className="text-xs text-slate-400 mt-1">
+                    الإدارة التعليمية الأزهرية
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="px-4 flex-1 overflow-y-auto">
+            <p className="text-xs text-slate-500 font-semibold px-3 mb-3">
+              القائمة الرئيسية
             </p>
+
+            <div className="space-y-1">
+              {menuItems.map((item, index) => {
+                const Icon = item.icon;
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`
+                      flex items-center gap-3
+                      px-4 py-3
+                      rounded-xl
+                      transition
+                      ${
+                        index === 0
+                          ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20"
+                          : "text-slate-300 hover:bg-white/5 hover:text-white"
+                      }
+                    `}
+                  >
+                    <Icon size={19} />
+
+                    <span className="text-sm font-medium">
+                      {item.title}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </nav>
+
+          {/* Bottom */}
+          <div className="p-4 border-t border-white/10">
+            <div className="rounded-2xl bg-emerald-600/10 border border-emerald-500/20 p-4">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <Activity size={18} />
+
+                <span className="text-sm font-semibold">
+                  النظام يعمل
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-500 mt-2">
+                جميع الخدمات متاحة حاليًا
+              </p>
+            </div>
           </div>
-
-          <button
-            onClick={loadInstitutes}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50"
-          >
-            <RefreshCw size={18} />
-            تحديث
-          </button>
         </div>
-      </header>
+      </aside>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-
-        {/* Welcome */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold">
-            لوحة الإدارة التعليمية
-          </h2>
-
-          <p className="text-slate-500 mt-2">
-            متابعة شاملة لأداء المعاهد التابعة للإدارة
-          </p>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-
-          <StatCard
-            title="إجمالي المعاهد"
-            value={institutes.length}
-            icon={<Building2 size={25} />}
-          />
-
-          <StatCard
-            title="إجمالي الطلاب"
-            value={totalStudents.toLocaleString("ar-EG")}
-            icon={<GraduationCap size={25} />}
-          />
-
-          <StatCard
-            title="إجمالي المدرسين"
-            value={totalTeachers.toLocaleString("ar-EG")}
-            icon={<Users size={25} />}
-          />
-
-        </div>
-
-        {/* Status */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-8">
-
-          <div className="flex items-center justify-between">
-
+      {/* Main Content */}
+      <div className="lg:mr-72">
+        {/* Header */}
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
+          <div className="px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="text-emerald-600" />
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="lg:hidden w-11 h-11 rounded-xl border border-slate-200 flex items-center justify-center hover:bg-slate-50"
+              >
+                <Menu size={22} />
+              </button>
 
               <div>
-                <h3 className="font-bold">
-                  حالة النظام
-                </h3>
-
-                <p className="text-sm text-slate-500">
-                  تم الاتصال بقاعدة البيانات بنجاح
+                <p className="text-xs text-slate-400">
+                  الإدارة التعليمية الأزهرية
                 </p>
+
+                <h2 className="font-bold text-lg">
+                  لوحة الإدارة والمتابعة
+                </h2>
               </div>
             </div>
 
-            <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-sm font-semibold">
-              {activeInstitutes} معهد نشط
-            </span>
-
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="mb-6 rounded-2xl bg-red-50 border border-red-200 p-5 text-red-700">
-
             <div className="flex items-center gap-3">
-              <AlertCircle />
+              <button
+                className="relative w-11 h-11 rounded-xl border border-slate-200 bg-white flex items-center justify-center hover:bg-slate-50"
+                title="الإشعارات"
+              >
+                <Bell size={19} />
 
-              <div>
-                <p className="font-bold">
-                  حدث خطأ أثناء تحميل المعاهد
-                </p>
+                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />
+              </button>
 
-                <p className="text-sm mt-1">
-                  {error}
-                </p>
+              <button
+                onClick={loadInstitutes}
+                disabled={loading}
+                className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm font-medium disabled:opacity-50"
+              >
+                <RefreshCw
+                  size={17}
+                  className={loading ? "animate-spin" : ""}
+                />
+
+                تحديث
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div className="p-4 sm:p-6 lg:p-8">
+          {/* Hero */}
+          <section className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-slate-950 via-slate-900 to-emerald-950 text-white p-6 sm:p-8 lg:p-10 mb-8">
+            <div className="relative z-10 max-w-3xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-emerald-300 text-xs font-semibold mb-5">
+                <CheckCircle2 size={15} />
+                النظام متصل ويعمل بشكل طبيعي
+              </div>
+
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">
+                مرحبًا بك في لوحة الإدارة التعليمية
+              </h1>
+
+              <p className="mt-4 text-slate-300 leading-7 max-w-2xl">
+                نظام مركزي لإدارة ومتابعة المعاهد الأزهرية،
+                ومتابعة الطلاب والمدرسين والحضور والتقارير
+                والمهام والبيانات الإدارية من مكان واحد.
+              </p>
+
+              <div className="flex flex-wrap gap-3 mt-7">
+                <Link
+                  href="/institutes"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold transition"
+                >
+                  إدارة المعاهد
+                  <ArrowLeft size={17} />
+                </Link>
+
+                <Link
+                  href="/attendance-report"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 font-semibold transition"
+                >
+                  عرض التقارير
+                  <BarChart3 size={17} />
+                </Link>
               </div>
             </div>
 
-          </div>
-        )}
+            <div className="absolute -left-16 -bottom-24 w-72 h-72 rounded-full bg-emerald-500/10 blur-3xl" />
+            <div className="absolute left-40 -top-24 w-64 h-64 rounded-full bg-emerald-400/10 blur-3xl" />
+          </section>
 
-        {/* Institutes */}
-        <section className="bg-white rounded-2xl border border-slate-200">
+          {/* Statistics */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+            <StatCard
+              title="إجمالي المعاهد"
+              value={institutes.length}
+              subtitle={`${activeInstitutes} معهد نشط`}
+              icon={<Building2 size={23} />}
+            />
 
-          <div className="p-6 border-b border-slate-200">
+            <StatCard
+              title="إجمالي الطلاب"
+              value={totalStudents.toLocaleString("ar-EG")}
+              subtitle="طلاب مسجلون"
+              icon={<GraduationCap size={23} />}
+            />
 
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <StatCard
+              title="إجمالي المدرسين"
+              value={totalTeachers.toLocaleString("ar-EG")}
+              subtitle="أعضاء هيئة التدريس"
+              icon={<Users size={23} />}
+            />
 
+            <StatCard
+              title="حالة المعاهد"
+              value={activeInstitutes}
+              subtitle={
+                inactiveInstitutes > 0
+                  ? `${inactiveInstitutes} غير نشط`
+                  : "جميع المعاهد نشطة"
+              }
+              icon={<Activity size={23} />}
+            />
+          </section>
+
+          {/* Quick Actions */}
+          <section className="mb-8">
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-xl font-bold">
-                  المعاهد التابعة للإدارة
+                  الوصول السريع
                 </h2>
 
                 <p className="text-sm text-slate-500 mt-1">
-                  بيانات المعاهد المسجلة في قاعدة البيانات
+                  أهم الإجراءات المستخدمة في الإدارة
                 </p>
               </div>
-
-              {/* Search */}
-              <div className="relative w-full md:w-80">
-
-                <Search
-                  size={18}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="ابحث عن معهد..."
-                  className="w-full pr-10 pl-4 py-3 rounded-xl border border-slate-300 outline-none focus:border-emerald-600"
-                />
-
-              </div>
-
             </div>
 
-          </div>
-
-          {/* Loading */}
-          {loading && (
-            <div className="p-12 text-center">
-
-              <Loader2
-                className="animate-spin mx-auto text-emerald-600"
-                size={35}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <QuickAction
+                href="/institutes"
+                icon={<Building2 size={21} />}
+                title="المعاهد"
+                description="إدارة المعاهد"
               />
 
-              <p className="mt-4 text-slate-500">
-                جاري تحميل بيانات المعاهد...
-              </p>
+              <QuickAction
+                href="/students"
+                icon={<GraduationCap size={21} />}
+                title="الطلاب"
+                description="بيانات الطلاب"
+              />
 
+              <QuickAction
+                href="/teachers"
+                icon={<UserCog size={21} />}
+                title="المدرسون"
+                description="بيانات المدرسين"
+              />
+
+              <QuickAction
+                href="/attendance"
+                icon={<ClipboardCheck size={21} />}
+                title="الحضور"
+                description="متابعة الحضور"
+              />
             </div>
-          )}
+          </section>
 
-          {/* Empty */}
-          {!loading && !error && filteredInstitutes.length === 0 && (
-            <div className="p-12 text-center text-slate-500">
-              لا توجد معاهد مطابقة للبحث
+          {/* Status */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-lg font-bold">
+                    حالة النظام
+                  </h2>
+
+                  <p className="text-sm text-slate-500 mt-1">
+                    ملخص حالة البيانات والخدمات
+                  </p>
+                </div>
+
+                <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Activity size={21} />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <SystemStatus
+                  title="قاعدة البيانات"
+                  description="Supabase / PostgreSQL"
+                />
+
+                <SystemStatus
+                  title="خدمة المعاهد"
+                  description={`${institutes.length} معاهد مسجلة`}
+                />
+
+                <SystemStatus
+                  title="خدمة البيانات"
+                  description={`${totalStudents.toLocaleString(
+                    "ar-EG"
+                  )} طالب و ${totalTeachers.toLocaleString(
+                    "ar-EG"
+                  )} مدرس`}
+                />
+              </div>
             </div>
-          )}
 
-          {/* Table */}
-          {!loading && filteredInstitutes.length > 0 && (
-            <div className="overflow-x-auto">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+                  <Bell size={21} />
+                </div>
 
-              <table className="w-full text-sm">
+                <div>
+                  <h2 className="font-bold">
+                    التنبيهات
+                  </h2>
 
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-right p-4 font-bold">
-                      المعهد
-                    </th>
+                  <p className="text-sm text-slate-500 mt-1">
+                    آخر المستجدات
+                  </p>
+                </div>
+              </div>
 
-                    <th className="text-right p-4 font-bold">
-                      الكود
-                    </th>
+              <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 mt-2" />
 
-                    <th className="text-right p-4 font-bold">
-                      شيخ المعهد
-                    </th>
+                  <div>
+                    <p className="text-sm font-semibold">
+                      النظام جاهز للعمل
+                    </p>
 
-                    <th className="text-right p-4 font-bold">
-                      الطلاب
-                    </th>
+                    <p className="text-xs text-slate-500 mt-1 leading-5">
+                      تم الاتصال بقاعدة البيانات وتحميل بيانات
+                      المعاهد بنجاح.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
 
-                    <th className="text-right p-4 font-bold">
-                      المدرسون
-                    </th>
+          {/* Institutes */}
+          <section className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold">
+                    المعاهد التابعة للإدارة
+                  </h2>
 
-                    <th className="text-right p-4 font-bold">
-                      الحالة
-                    </th>
+                  <p className="text-sm text-slate-500 mt-1">
+                    عرض سريع للمعاهد المسجلة ويمكن فتح تفاصيل
+                    أي معهد
+                  </p>
+                </div>
 
-                    <th className="text-right p-4 font-bold">
-                      التفاصيل
-                    </th>
-                  </tr>
-                </thead>
+                <div className="relative w-full lg:w-80">
+                  <Search
+                    size={18}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
 
-                <tbody>
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="ابحث عن معهد أو شيخ..."
+                    className="w-full pr-10 pl-4 py-3 rounded-xl border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition"
+                  />
+                </div>
+              </div>
+            </div>
 
+            {/* Loading */}
+            {loading && (
+              <div className="p-16 text-center">
+                <Loader2
+                  size={38}
+                  className="animate-spin mx-auto text-emerald-600"
+                />
+
+                <p className="mt-4 text-slate-500">
+                  جاري تحميل بيانات المعاهد...
+                </p>
+              </div>
+            )}
+
+            {/* Error */}
+            {!loading && error && (
+              <div className="m-6 rounded-2xl bg-red-50 border border-red-200 p-5 text-red-700">
+                <div className="flex items-start gap-3">
+                  <AlertCircle size={21} />
+
+                  <div>
+                    <p className="font-bold">
+                      حدث خطأ أثناء تحميل المعاهد
+                    </p>
+
+                    <p className="text-sm mt-1">
+                      {error}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Empty */}
+            {!loading &&
+              !error &&
+              filteredInstitutes.length === 0 && (
+                <div className="p-16 text-center">
+                  <Building2
+                    size={42}
+                    className="mx-auto text-slate-300"
+                  />
+
+                  <p className="mt-4 font-semibold text-slate-600">
+                    لا توجد معاهد مطابقة للبحث
+                  </p>
+
+                  <p className="text-sm text-slate-400 mt-1">
+                    جرّبي البحث باسم المعهد أو الكود أو شيخ
+                    المعهد
+                  </p>
+                </div>
+              )}
+
+            {/* Institute Cards */}
+            {!loading &&
+              !error &&
+              filteredInstitutes.length > 0 && (
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                   {filteredInstitutes.map((institute) => (
-
-                    <tr
+                    <InstituteCard
                       key={institute.id}
-                      className="border-t border-slate-100 hover:bg-slate-50"
-                    >
-
-                      <td className="p-4">
-                        <div className="font-semibold">
-                          {institute.name}
-                        </div>
-
-                        <div className="text-xs text-slate-400 mt-1">
-                          {institute.educational_stage ||
-                            institute.institute_type ||
-                            "—"}
-                        </div>
-                      </td>
-
-                      <td className="p-4 text-slate-500">
-                        {institute.code}
-                      </td>
-
-                      <td className="p-4">
-                        {institute.director_name || "غير محدد"}
-                      </td>
-
-                      <td className="p-4 font-semibold">
-                        {(institute.student_count || 0).toLocaleString(
-                          "ar-EG"
-                        )}
-                      </td>
-
-                      <td className="p-4 font-semibold">
-                        {(institute.teacher_count || 0).toLocaleString(
-                          "ar-EG"
-                        )}
-                      </td>
-
-                      <td className="p-4">
-
-                        {institute.is_active !== false ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">
-                            <CheckCircle2 size={15} />
-                            نشط
-                          </span>
-                        ) : (
-                          <span className="px-3 py-1 rounded-full bg-red-100 text-red-700">
-                            غير نشط
-                          </span>
-                        )}
-
-                      </td>
-
-                      <td className="p-4">
-
-                        <Link
-                          href={`/institutes/${institute.id}`}
-                          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 text-white hover:bg-emerald-800"
-                        >
-                          فتح المعهد
-                          <ArrowLeft size={16} />
-                        </Link>
-
-                      </td>
-
-                    </tr>
-
+                      institute={institute}
+                    />
                   ))}
+                </div>
+              )}
+          </section>
 
-                </tbody>
-
-              </table>
-
-            </div>
-          )}
-
-        </section>
-
+          {/* Footer */}
+          <footer className="py-8 text-center">
+            <p className="text-xs text-slate-400">
+              نظام إدارة المعاهد الأزهرية © 2026
+            </p>
+          </footer>
+        </div>
       </div>
     </main>
   );
@@ -401,33 +673,212 @@ export default function Home() {
 function StatCard({
   title,
   value,
+  subtitle,
   icon,
 }: {
   title: string;
   value: string | number;
+  subtitle: string;
   icon: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6">
-
-      <div className="flex items-center justify-between">
-
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-md transition">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm text-slate-500">
             {title}
           </p>
 
-          <p className="text-3xl font-bold mt-2">
+          <p className="text-3xl font-bold mt-2 text-slate-900">
             {value}
+          </p>
+
+          <p className="text-xs text-slate-400 mt-2">
+            {subtitle}
           </p>
         </div>
 
-        <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+        <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuickAction({
+  href,
+  icon,
+  title,
+  description,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group bg-white rounded-2xl border border-slate-200 p-5 hover:border-emerald-300 hover:shadow-md transition"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition">
           {icon}
         </div>
 
+        <ChevronLeft
+          size={18}
+          className="text-slate-300 group-hover:text-emerald-600 transition"
+        />
       </div>
 
+      <h3 className="font-bold mt-4">
+        {title}
+      </h3>
+
+      <p className="text-xs text-slate-400 mt-1">
+        {description}
+      </p>
+    </Link>
+  );
+}
+
+function SystemStatus({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+          <CheckCircle2 size={18} />
+        </div>
+
+        <div>
+          <p className="text-sm font-semibold">
+            {title}
+          </p>
+
+          <p className="text-xs text-slate-400 mt-1">
+            {description}
+          </p>
+        </div>
+      </div>
+
+      <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
+        يعمل
+      </span>
+    </div>
+  );
+}
+
+function InstituteCard({
+  institute,
+}: {
+  institute: Institute;
+}) {
+  const isActive = institute.is_active !== false;
+
+  return (
+    <div className="group rounded-2xl border border-slate-200 bg-white p-5 hover:border-emerald-300 hover:shadow-lg transition">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-12 h-12 shrink-0 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+            <Building2 size={23} />
+          </div>
+
+          <div className="min-w-0">
+            <h3 className="font-bold truncate">
+              {institute.name}
+            </h3>
+
+            <p className="text-xs text-slate-400 mt-1">
+              {institute.code}
+            </p>
+          </div>
+        </div>
+
+        {isActive ? (
+          <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
+            <CheckCircle2 size={13} />
+            نشط
+          </span>
+        ) : (
+          <span className="shrink-0 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-xs font-semibold">
+            غير نشط
+          </span>
+        )}
+      </div>
+
+      <div className="mt-5 pt-5 border-t border-slate-100 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-500">
+            شيخ المعهد
+          </span>
+
+          <span className="text-sm font-semibold text-slate-700">
+            {institute.director_name || "غير محدد"}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-500">
+            المرحلة
+          </span>
+
+          <span className="text-sm font-semibold text-slate-700">
+            {institute.educational_stage ||
+              institute.institute_type ||
+              "غير محدد"}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mt-5">
+        <div className="rounded-xl bg-slate-50 p-3">
+          <div className="flex items-center gap-2 text-slate-400">
+            <GraduationCap size={16} />
+
+            <span className="text-xs">
+              الطلاب
+            </span>
+          </div>
+
+          <p className="font-bold mt-1">
+            {(institute.student_count || 0).toLocaleString(
+              "ar-EG"
+            )}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <div className="flex items-center gap-2 text-slate-400">
+            <Users size={16} />
+
+            <span className="text-xs">
+              المدرسون
+            </span>
+          </div>
+
+          <p className="font-bold mt-1">
+            {(institute.teacher_count || 0).toLocaleString(
+              "ar-EG"
+            )}
+          </p>
+        </div>
+      </div>
+
+      <Link
+        href={`/institutes/${institute.id}`}
+        className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-950 text-white hover:bg-emerald-700 transition font-semibold text-sm"
+      >
+        فتح المعهد
+        <ArrowLeft size={16} />
+      </Link>
     </div>
   );
 }
