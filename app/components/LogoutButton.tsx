@@ -1,10 +1,9 @@
-```tsx
 "use client";
 
 import { LogOut, Loader2 } from "lucide-react";
-import { supabase } from "../../lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { supabase } from "../../lib/supabase/client";
 
 export default function LogoutButton() {
   const router = useRouter();
@@ -39,18 +38,7 @@ export default function LogoutButton() {
       type="button"
       onClick={handleLogout}
       disabled={loading}
-      className="
-        flex items-center gap-3
-        w-full
-        px-4 py-3
-        rounded-xl
-        text-red-600
-        hover:bg-red-50
-        hover:text-red-700
-        transition
-        disabled:opacity-50
-        disabled:cursor-not-allowed
-      "
+      className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {loading ? (
         <Loader2 size={20} className="animate-spin" />
@@ -64,4 +52,3 @@ export default function LogoutButton() {
     </button>
   );
 }
-```
