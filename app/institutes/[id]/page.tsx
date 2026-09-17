@@ -1,3 +1,4 @@
+```tsx
 "use client";
 
 import Link from "next/link";
@@ -25,6 +26,7 @@ import {
   LogOut,
   ArrowRight,
   RefreshCw,
+  MessageSquareWarning,
 } from "lucide-react";
 
 import { useParams, useRouter } from "next/navigation";
@@ -166,7 +168,6 @@ export default function InstituteDashboard() {
     >
       {/* Sidebar */}
       <aside className="fixed right-0 top-0 hidden h-screen w-72 flex-col bg-slate-950 text-white lg:flex">
-
         {/* Logo */}
         <div className="border-b border-white/10 px-6 py-6">
           <div className="text-lg font-bold">
@@ -181,7 +182,6 @@ export default function InstituteDashboard() {
         {/* Current Institute */}
         <div className="border-b border-white/10 px-5 py-5">
           <div className="rounded-2xl bg-white/5 p-4">
-
             <div className="text-xs text-slate-400">
               المعهد الحالي
             </div>
@@ -193,13 +193,11 @@ export default function InstituteDashboard() {
             <div className="mt-2 text-xs text-slate-400">
               كود المعهد: {institute.code || "-"}
             </div>
-
           </div>
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5">
-
           <MenuItem
             icon={LayoutDashboard}
             title="لوحة التحكم"
@@ -249,6 +247,14 @@ export default function InstituteDashboard() {
             title="المراسلات"
           />
 
+          {/* الشكاوى والبلاغات */}
+          <Link href="/complaints">
+            <MenuItem
+              icon={MessageSquareWarning}
+              title="الشكاوى والبلاغات"
+            />
+          </Link>
+
           <MenuItem
             icon={FileText}
             title="التقارير"
@@ -268,54 +274,43 @@ export default function InstituteDashboard() {
             icon={Settings}
             title="إعدادات المعهد"
           />
-
         </nav>
 
         {/* User */}
         <div className="border-t border-white/10 p-4">
-
           <div className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
-
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white font-bold text-slate-900">
               إ
             </div>
 
             <div className="min-w-0">
-
               <div className="text-sm font-semibold">
                 إدارة المعهد
               </div>
 
               <div className="text-xs text-slate-400">
-                مدير الإدارة التعليمية
+                شيخ المعهد
               </div>
-
             </div>
-
           </div>
 
           <button
+            type="button"
             onClick={handleLogout}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300 transition hover:bg-red-500 hover:text-white"
           >
             <LogOut size={18} />
             تسجيل الخروج
           </button>
-
         </div>
-
       </aside>
 
       {/* Main */}
       <section className="lg:mr-72">
-
         {/* Header */}
         <header className="border-b border-slate-200 bg-white">
-
           <div className="flex min-h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
-
             <div>
-
               <div className="text-xs text-slate-400">
                 الإدارة التعليمية الأزهرية
               </div>
@@ -323,11 +318,9 @@ export default function InstituteDashboard() {
               <h1 className="mt-1 text-xl font-bold text-slate-900">
                 لوحة تحكم المعهد
               </h1>
-
             </div>
 
             <div className="flex items-center gap-3">
-
               <Link
                 href="/institutes"
                 className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
@@ -336,7 +329,10 @@ export default function InstituteDashboard() {
                 كل المعاهد
               </Link>
 
-              <button className="relative rounded-xl border border-slate-200 p-2.5">
+              <button
+                type="button"
+                className="relative rounded-xl border border-slate-200 p-2.5"
+              >
                 <Bell size={20} />
 
                 <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">
@@ -344,31 +340,26 @@ export default function InstituteDashboard() {
                 </span>
               </button>
 
-              <button className="rounded-xl border border-slate-200 p-2.5">
+              <button
+                type="button"
+                className="rounded-xl border border-slate-200 p-2.5"
+              >
                 <Settings size={20} />
               </button>
-
             </div>
-
           </div>
-
         </header>
 
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-
           {/* Institute Identity */}
           <section className="rounded-3xl bg-slate-900 p-6 text-white shadow-xl sm:p-8">
-
             <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-
               <div className="flex items-center gap-4">
-
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/10">
                   <Building2 size={30} />
                 </div>
 
                 <div>
-
                   <div className="text-sm text-slate-400">
                     المعهد
                   </div>
@@ -378,7 +369,6 @@ export default function InstituteDashboard() {
                   </h2>
 
                   <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-300">
-
                     <span>
                       كود: {institute.code || "-"}
                     </span>
@@ -394,15 +384,11 @@ export default function InstituteDashboard() {
                     <span>
                       {institute.institute_type || "-"}
                     </span>
-
                   </div>
-
                 </div>
-
               </div>
 
               <div className="rounded-2xl bg-white/10 px-5 py-4">
-
                 <div className="text-xs text-slate-400">
                   شيخ المعهد
                 </div>
@@ -410,16 +396,12 @@ export default function InstituteDashboard() {
                 <div className="mt-1 font-semibold">
                   {institute.director_name || "-"}
                 </div>
-
               </div>
-
             </div>
-
           </section>
 
           {/* Statistics */}
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
             <StatCard
               icon={GraduationCap}
               title="الطلاب"
@@ -449,18 +431,13 @@ export default function InstituteDashboard() {
               description="آخر نتائج معتمدة"
               positive
             />
-
           </section>
 
           {/* Monitoring */}
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
-
               <div className="mb-5 flex items-center justify-between">
-
                 <div>
-
                   <h3 className="font-bold text-slate-900">
                     متابعة المعهد
                   </h3>
@@ -468,15 +445,12 @@ export default function InstituteDashboard() {
                   <p className="mt-1 text-xs text-slate-500">
                     أهم المؤشرات التي تحتاجها إدارة المعهد
                   </p>
-
                 </div>
 
                 <BarChart3 size={21} />
-
               </div>
 
               <div className="space-y-5">
-
                 <ProgressRow
                   title="انتظام الطلاب"
                   value={96}
@@ -500,18 +474,13 @@ export default function InstituteDashboard() {
                   value={88}
                   target="80%"
                 />
-
               </div>
-
             </div>
 
             {/* Alerts */}
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-
               <div className="mb-5 flex items-center justify-between">
-
                 <div>
-
                   <h3 className="font-bold">
                     التنبيهات
                   </h3>
@@ -519,17 +488,14 @@ export default function InstituteDashboard() {
                   <p className="mt-1 text-xs text-slate-500">
                     تحتاج إلى مراجعة
                   </p>
-
                 </div>
 
                 <div className="rounded-xl bg-red-50 p-2 text-red-600">
                   <Bell size={19} />
                 </div>
-
               </div>
 
               <div className="space-y-3">
-
                 <Alert
                   title="متابعة الطلاب"
                   text="يوجد طلاب يحتاجون إلى متابعة"
@@ -545,18 +511,13 @@ export default function InstituteDashboard() {
                   title="تكليف إداري"
                   text="يوجد تكليف جديد"
                 />
-
               </div>
-
             </div>
-
           </section>
 
           {/* Quick Actions */}
           <section>
-
             <div className="mb-4">
-
               <h3 className="text-lg font-bold">
                 إجراءات سريعة
               </h3>
@@ -564,11 +525,9 @@ export default function InstituteDashboard() {
               <p className="mt-1 text-sm text-slate-500">
                 العمليات الأكثر استخدامًا داخل المعهد
               </p>
-
             </div>
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-
               <Link href="/students">
                 <Action
                   icon={UserPlus}
@@ -600,22 +559,19 @@ export default function InstituteDashboard() {
                 title="مراسلة الإدارة"
               />
 
-              <Action
-                icon={CalendarDays}
-                title="الجدول"
-              />
-
+              <Link href="/complaints">
+                <Action
+                  icon={MessageSquareWarning}
+                  title="الشكاوى والبلاغات"
+                />
+              </Link>
             </div>
-
           </section>
 
           {/* Tasks */}
           <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-
             <div className="flex items-center justify-between border-b border-slate-100 p-6">
-
               <div>
-
                 <h3 className="font-bold">
                   التكليفات الواردة من الإدارة التعليمية
                 </h3>
@@ -623,15 +579,12 @@ export default function InstituteDashboard() {
                 <p className="mt-1 text-xs text-slate-500">
                   التكليفات التي تحتاج إلى تنفيذ أو رد
                 </p>
-
               </div>
 
               <ClipboardList size={21} />
-
             </div>
 
             <div className="divide-y divide-slate-100">
-
               <Task
                 title="رفع تقرير الحضور الأسبوعي"
                 date="موعد التسليم: غدًا"
@@ -650,20 +603,14 @@ export default function InstituteDashboard() {
                 date="تم إرسال التكليف منذ يومين"
                 status="تم الرد"
               />
-
             </div>
-
           </section>
 
           {/* Attendance */}
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-
               <div className="mb-6 flex items-center justify-between">
-
                 <div>
-
                   <h3 className="font-bold">
                     حضور الطلاب
                   </h3>
@@ -671,15 +618,12 @@ export default function InstituteDashboard() {
                   <p className="mt-1 text-xs text-slate-500">
                     ملخص اليوم
                   </p>
-
                 </div>
 
                 <ClipboardCheck size={21} />
-
               </div>
 
               <div className="grid grid-cols-3 gap-3">
-
                 <AttendanceBox
                   value="816"
                   label="حاضر"
@@ -697,34 +641,26 @@ export default function InstituteDashboard() {
                   label="متأخر"
                   type="warning"
                 />
-
               </div>
 
               <div className="mt-5 rounded-2xl bg-slate-50 p-4">
-
                 <div className="flex justify-between text-sm">
                   <span>نسبة الحضور</span>
                   <strong>96%</strong>
                 </div>
 
                 <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200">
-
                   <div
                     className="h-full rounded-full bg-emerald-500"
                     style={{ width: "96%" }}
                   />
-
                 </div>
-
               </div>
-
             </div>
 
             {/* Activity */}
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-
               <div className="mb-6">
-
                 <h3 className="font-bold">
                   آخر الأنشطة
                 </h3>
@@ -732,11 +668,9 @@ export default function InstituteDashboard() {
                 <p className="mt-1 text-xs text-slate-500">
                   سجل مختصر لأحدث العمليات
                 </p>
-
               </div>
 
               <div className="space-y-4">
-
                 <Activity
                   text="تم تسجيل حضور الطلاب"
                   time="منذ 15 دقيقة"
@@ -756,20 +690,14 @@ export default function InstituteDashboard() {
                   text="تم استلام تكليف جديد من الإدارة"
                   time="منذ 3 ساعات"
                 />
-
               </div>
-
             </div>
-
           </section>
 
           {/* Reports */}
           <section className="rounded-3xl bg-slate-900 p-6 text-white">
-
             <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-
               <div>
-
                 <h3 className="text-lg font-bold">
                   تقارير المعهد
                 </h3>
@@ -778,7 +706,6 @@ export default function InstituteDashboard() {
                   يستطيع مدير المعهد استخراج تقارير الطلاب والحضور
                   والعاملين والتكليفات ورفعها للإدارة التعليمية.
                 </p>
-
               </div>
 
               <Link
@@ -788,17 +715,13 @@ export default function InstituteDashboard() {
                 <FileText size={18} />
                 فتح التقارير
               </Link>
-
             </div>
-
           </section>
 
           <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-400">
             نظام إدارة ومتابعة المعاهد الأزهرية — لوحة المعهد V2.0
           </footer>
-
         </div>
-
       </section>
     </main>
   );
@@ -818,7 +741,7 @@ function MenuItem({
   active?: boolean;
 }) {
   return (
-    <button
+    <div
       className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
         active
           ? "bg-white font-semibold text-slate-950"
@@ -827,7 +750,7 @@ function MenuItem({
     >
       <Icon size={18} />
       {title}
-    </button>
+    </div>
   );
 }
 
@@ -846,11 +769,8 @@ function StatCard({
 }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-
       <div className="flex items-start justify-between">
-
         <div>
-
           <div className="text-sm text-slate-500">
             {title}
           </div>
@@ -862,13 +782,11 @@ function StatCard({
           <div className="mt-1 text-xs text-slate-400">
             {description}
           </div>
-
         </div>
 
         <div className="rounded-2xl bg-slate-100 p-3">
           <Icon size={21} />
         </div>
-
       </div>
 
       {positive && (
@@ -877,7 +795,6 @@ function StatCard({
           مؤشر جيد
         </div>
       )}
-
     </div>
   );
 }
@@ -893,30 +810,24 @@ function ProgressRow({
 }) {
   return (
     <div>
-
       <div className="mb-2 flex justify-between text-sm">
-
         <span>{title}</span>
 
         <span className="font-bold">
           {value}%
         </span>
-
       </div>
 
       <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-
         <div
           className="h-full rounded-full bg-slate-800"
           style={{ width: `${value}%` }}
         />
-
       </div>
 
       <div className="mt-1 text-[11px] text-slate-400">
         المستهدف {target}
       </div>
-
     </div>
   );
 }
@@ -932,7 +843,6 @@ function Alert({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
-
       <div
         className={`rounded-xl p-2 ${
           danger
@@ -944,7 +854,6 @@ function Alert({
       </div>
 
       <div>
-
         <div className="text-sm font-semibold">
           {title}
         </div>
@@ -952,9 +861,7 @@ function Alert({
         <div className="mt-1 text-xs text-slate-500">
           {text}
         </div>
-
       </div>
-
     </div>
   );
 }
@@ -967,8 +874,7 @@ function Action({
   title: string;
 }) {
   return (
-    <button className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-right shadow-sm transition hover:-translate-y-1 hover:shadow-md">
-
+    <div className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-right shadow-sm transition hover:-translate-y-1 hover:shadow-md">
       <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
         <Icon size={19} />
       </div>
@@ -976,8 +882,7 @@ function Action({
       <div className="text-sm font-semibold">
         {title}
       </div>
-
-    </button>
+    </div>
   );
 }
 
@@ -994,15 +899,12 @@ function Task({
 }) {
   return (
     <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-
       <div className="flex items-center gap-3">
-
         <div className="rounded-xl bg-slate-100 p-2.5">
           <ClipboardList size={18} />
         </div>
 
         <div>
-
           <div className="font-semibold">
             {title}
           </div>
@@ -1010,9 +912,7 @@ function Task({
           <div className="mt-1 text-xs text-slate-400">
             {date}
           </div>
-
         </div>
-
       </div>
 
       <span
@@ -1026,7 +926,6 @@ function Task({
       >
         {status}
       </span>
-
     </div>
   );
 }
@@ -1049,7 +948,6 @@ function AttendanceBox({
 
   return (
     <div className={`rounded-2xl p-4 text-center ${style}`}>
-
       <div className="text-2xl font-bold">
         {value}
       </div>
@@ -1057,7 +955,6 @@ function AttendanceBox({
       <div className="mt-1 text-xs">
         {label}
       </div>
-
     </div>
   );
 }
@@ -1071,13 +968,11 @@ function Activity({
 }) {
   return (
     <div className="flex items-center gap-3">
-
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100">
         <CircleCheck size={16} />
       </div>
 
       <div>
-
         <div className="text-sm font-medium">
           {text}
         </div>
@@ -1085,9 +980,8 @@ function Activity({
         <div className="mt-1 text-xs text-slate-400">
           {time}
         </div>
-
       </div>
-
     </div>
   );
 }
+```
