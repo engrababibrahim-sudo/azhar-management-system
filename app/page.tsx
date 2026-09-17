@@ -67,13 +67,17 @@ function StatCard({
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-slate-500">{title}</p>
+          <p className="text-sm font-medium text-slate-500">
+            {title}
+          </p>
 
           <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
             {value}
           </p>
 
-          <p className="mt-2 text-xs text-slate-500">{subtitle}</p>
+          <p className="mt-2 text-xs text-slate-500">
+            {subtitle}
+          </p>
         </div>
 
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
@@ -110,7 +114,10 @@ function QuickAction({
       </div>
 
       <div className="min-w-0 flex-1">
-        <h3 className="font-bold text-slate-900">{title}</h3>
+        <h3 className="font-bold text-slate-900">
+          {title}
+        </h3>
+
         <p className="mt-1 text-xs leading-5 text-slate-500">
           {description}
         </p>
@@ -134,7 +141,7 @@ function SystemStatus() {
           </h2>
 
           <p className="mt-1 text-xs text-slate-500">
-            آخر حالة للخدمات الأساسية
+            حالة الخدمات الأساسية
           </p>
         </div>
 
@@ -144,7 +151,11 @@ function SystemStatus() {
       <div className="mt-5 space-y-3">
         <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
           <div className="flex items-center gap-3">
-            <CheckCircle2 size={18} className="text-emerald-600" />
+            <CheckCircle2
+              size={18}
+              className="text-emerald-600"
+            />
+
             <span className="text-sm font-medium text-slate-700">
               قاعدة البيانات
             </span>
@@ -157,7 +168,11 @@ function SystemStatus() {
 
         <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
           <div className="flex items-center gap-3">
-            <CheckCircle2 size={18} className="text-emerald-600" />
+            <CheckCircle2
+              size={18}
+              className="text-emerald-600"
+            />
+
             <span className="text-sm font-medium text-slate-700">
               نظام الدخول والصلاحيات
             </span>
@@ -170,7 +185,11 @@ function SystemStatus() {
 
         <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
           <div className="flex items-center gap-3">
-            <ShieldCheck size={18} className="text-emerald-600" />
+            <ShieldCheck
+              size={18}
+              className="text-emerald-600"
+            />
+
             <span className="text-sm font-medium text-slate-700">
               حماية الصفحات
             </span>
@@ -227,7 +246,10 @@ function InstituteCard({
             <div className="rounded-xl bg-slate-50 p-3">
               <div className="flex items-center gap-2 text-slate-500">
                 <GraduationCap size={15} />
-                <span className="text-[11px]">الطلاب</span>
+
+                <span className="text-[11px]">
+                  الطلاب
+                </span>
               </div>
 
               <p className="mt-1 font-bold text-slate-900">
@@ -238,7 +260,10 @@ function InstituteCard({
             <div className="rounded-xl bg-slate-50 p-3">
               <div className="flex items-center gap-2 text-slate-500">
                 <Users size={15} />
-                <span className="text-[11px]">المدرسون</span>
+
+                <span className="text-[11px]">
+                  المدرسون
+                </span>
               </div>
 
               <p className="mt-1 font-bold text-slate-900">
@@ -259,11 +284,19 @@ function InstituteCard({
 }
 
 export default function Home() {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(
+    null
+  );
+
+  const [institutes, setInstitutes] = useState<Institute[]>(
+    []
+  );
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState("");
+
   const [errorMessage, setErrorMessage] = useState("");
 
   async function loadDashboard(showRefresh = false) {
@@ -291,14 +324,16 @@ export default function Home() {
         return;
       }
 
-      const { data: profileData, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select(
-            "role, full_name, institute_id, directorate_id"
-          )
-          .eq("id", user.id)
-          .single();
+      const {
+        data: profileData,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select(
+          "role, full_name, institute_id, directorate_id"
+        )
+        .eq("id", user.id)
+        .single();
 
       if (profileError) {
         throw profileError;
@@ -350,10 +385,17 @@ export default function Home() {
       }
 
       setInstitutes(institutesData || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Dashboard error:", error);
+
+      const message =
+        error?.message ||
+        error?.details ||
+        error?.hint ||
+        "خطأ غير معروف";
+
       setErrorMessage(
-        "تعذر تحميل بيانات لوحة التحكم. يرجى المحاولة مرة أخرى."
+        "خطأ قاعدة البيانات: " + message
       );
     } finally {
       setLoading(false);
@@ -373,8 +415,12 @@ export default function Home() {
     }
 
     return institutes.filter((institute) => {
-      const name = institute.name?.toLowerCase() || "";
-      const code = institute.code?.toLowerCase() || "";
+      const name =
+        institute.name?.toLowerCase() || "";
+
+      const code =
+        institute.code?.toLowerCase() || "";
+
       const stage =
         institute.education_stage?.toLowerCase() || "";
 
@@ -417,6 +463,7 @@ export default function Home() {
         className="min-h-screen bg-slate-100 text-slate-800"
       >
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+
           {/* Header */}
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -434,7 +481,9 @@ export default function Home() {
 
               <p className="mt-1 text-sm text-slate-500">
                 {profile?.full_name
-                  ? `مرحبًا ${profile.full_name}، إليك ملخص حالة النظام`
+                  ? "مرحبًا " +
+                    profile.full_name +
+                    "، إليك ملخص حالة النظام"
                   : "إليك ملخص حالة النظام والإدارة التعليمية"}
               </p>
             </div>
@@ -454,7 +503,9 @@ export default function Home() {
                 />
 
                 <span>
-                  {refreshing ? "جاري التحديث..." : "تحديث"}
+                  {refreshing
+                    ? "جاري التحديث..."
+                    : "تحديث"}
                 </span>
               </button>
 
@@ -495,20 +546,30 @@ export default function Home() {
 
           {/* Error */}
           {errorMessage && (
-            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
-              <AlertTriangle
-                size={20}
-                className="mt-0.5 shrink-0"
-              />
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
+              <div className="flex items-start gap-3">
+                <AlertTriangle
+                  size={21}
+                  className="mt-0.5 shrink-0"
+                />
 
-              <div>
-                <p className="font-semibold">
-                  حدث خطأ
-                </p>
+                <div className="min-w-0">
+                  <p className="font-bold">
+                    حدث خطأ أثناء تحميل البيانات
+                  </p>
 
-                <p className="mt-1 text-sm">
-                  {errorMessage}
-                </p>
+                  <p className="mt-2 break-words text-sm leading-6">
+                    {errorMessage}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => loadDashboard(true)}
+                    className="mt-4 rounded-xl bg-red-700 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-800"
+                  >
+                    المحاولة مرة أخرى
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -544,7 +605,11 @@ export default function Home() {
                     " معهد نشط"
                   }
                   icon={<Building2 size={23} />}
-                  href={isDirector ? "/institutes" : undefined}
+                  href={
+                    isDirector
+                      ? "/institutes"
+                      : undefined
+                  }
                 />
 
                 <StatCard
@@ -623,6 +688,7 @@ export default function Home() {
 
           {/* Main content */}
           <section className="grid gap-6 lg:grid-cols-3">
+
             {/* Institutes */}
             <div className="lg:col-span-2">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -678,12 +744,14 @@ export default function Home() {
                       <div className="h-36 animate-pulse rounded-2xl bg-slate-50" />
                     </>
                   ) : filteredInstitutes.length > 0 ? (
-                    filteredInstitutes.map((institute) => (
-                      <InstituteCard
-                        key={institute.id}
-                        institute={institute}
-                      />
-                    ))
+                    filteredInstitutes.map(
+                      (institute) => (
+                        <InstituteCard
+                          key={institute.id}
+                          institute={institute}
+                        />
+                      )
+                    )
                   ) : (
                     <div className="rounded-2xl bg-slate-50 p-8 text-center">
                       <Building2
