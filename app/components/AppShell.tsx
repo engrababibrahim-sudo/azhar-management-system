@@ -2,20 +2,20 @@
 
 import {
   Bell,
+  BookOpenCheck,
   Building2,
   CheckSquare,
   ClipboardList,
   FileBarChart,
   GraduationCap,
   LayoutDashboard,
-  Menu,
   Megaphone,
-  Settings,
-  Users,
-  UserRound,
-  X,
-  BookOpenCheck,
+  Menu,
   MessageSquareWarning,
+  Settings,
+  UserRound,
+  Users,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -62,7 +62,13 @@ const allMenuItems = [
     title: "الطلاب",
     href: "/students",
     icon: GraduationCap,
-    roles: ["director", "sheikh", "deputy", "teacher", "super_admin"],
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "teacher",
+      "super_admin",
+    ],
   },
   {
     title: "المدرسون",
@@ -74,7 +80,13 @@ const allMenuItems = [
     title: "الحضور والغياب",
     href: "/attendance",
     icon: ClipboardList,
-    roles: ["director", "sheikh", "deputy", "teacher", "super_admin"],
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "teacher",
+      "super_admin",
+    ],
   },
   {
     title: "التقارير والإحصائيات",
@@ -92,7 +104,13 @@ const allMenuItems = [
     title: "الإعلانات",
     href: "/announcements",
     icon: Megaphone,
-    roles: ["director", "sheikh", "deputy", "teacher", "super_admin"],
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "teacher",
+      "super_admin",
+    ],
   },
   {
     title: "الشكاوى والبلاغات",
@@ -186,47 +204,54 @@ export default function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen w-full overflow-x-hidden bg-slate-100">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <button
           type="button"
           aria-label="إغلاق القائمة"
           onClick={closeSidebar}
-          className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden"
         />
       )}
 
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 right-0 z-50
-          h-screen w-72
+          fixed inset-y-0 right-0 z-50
+          h-screen
+          w-[min(18rem,calc(100vw-1rem))]
+          overflow-hidden
           bg-slate-950 text-white
           shadow-2xl
-          transition-transform duration-300
-          ${sidebarOpen ? "translate-x-0" : "translate-x-full"}
+          transform-gpu
+          transition-transform duration-300 ease-in-out
+          ${
+            sidebarOpen
+              ? "translate-x-0"
+              : "translate-x-full"
+          }
           lg:translate-x-0
         `}
       >
-        <div className="flex h-full flex-col">
+        <div className="flex h-full min-h-0 flex-col">
           {/* Logo */}
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-5">
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-4">
             <Link
               href="/"
               onClick={closeSidebar}
-              className="flex items-center gap-3"
+              className="flex min-w-0 items-center gap-3"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-950 shadow-lg">
-                <Building2 size={23} />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-950 shadow-lg">
+                <Building2 size={22} />
               </div>
 
-              <div>
-                <div className="text-sm font-bold">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold">
                   نظام إدارة المعاهد
                 </div>
 
-                <div className="mt-1 text-xs text-slate-400">
+                <div className="mt-1 truncate text-xs text-slate-400">
                   الإدارة التعليمية الأزهرية
                 </div>
               </div>
@@ -235,21 +260,22 @@ export default function AppShell({
             <button
               type="button"
               onClick={closeSidebar}
-              className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
+              aria-label="إغلاق القائمة"
+              className="shrink-0 rounded-xl p-2 text-slate-400 transition hover:bg-white/10 hover:text-white lg:hidden"
             >
               <X size={20} />
             </button>
           </div>
 
           {/* Profile */}
-          <div className="border-b border-white/10 px-4 py-4">
-            <div className="rounded-2xl bg-white/5 p-4">
+          <div className="shrink-0 border-b border-white/10 px-3 py-3">
+            <div className="rounded-2xl bg-white/5 p-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-slate-950">
-                  <UserRound size={21} />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-950">
+                  <UserRound size={20} />
                 </div>
 
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   {loadingProfile ? (
                     <>
                       <div className="h-4 w-24 animate-pulse rounded bg-white/10" />
@@ -261,7 +287,7 @@ export default function AppShell({
                         {profile?.full_name || "المستخدم"}
                       </div>
 
-                      <div className="mt-1 text-xs text-slate-400">
+                      <div className="mt-1 truncate text-xs text-slate-400">
                         {roleLabels[role] || "مستخدم"}
                       </div>
                     </>
@@ -276,7 +302,7 @@ export default function AppShell({
                     className="mt-0.5 shrink-0"
                   />
 
-                  <span className="leading-5">
+                  <span className="break-words leading-5">
                     {institute.name}
                   </span>
                 </div>
@@ -285,7 +311,7 @@ export default function AppShell({
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             <div className="mb-3 px-3 text-[11px] font-bold tracking-wide text-slate-500">
               القائمة الرئيسية
             </div>
@@ -298,7 +324,7 @@ export default function AppShell({
                   item.href === "/"
                     ? pathname === "/"
                     : pathname === item.href ||
-                      pathname.startsWith(`${item.href}/`);
+                      pathname.startsWith(item.href + "/");
 
                 return (
                   <Link
@@ -316,8 +342,10 @@ export default function AppShell({
                       }
                     `}
                   >
-                    <Icon size={19} />
-                    <span>{item.title}</span>
+                    <Icon size={19} className="shrink-0" />
+                    <span className="truncate">
+                      {item.title}
+                    </span>
                   </Link>
                 );
               })}
@@ -325,52 +353,59 @@ export default function AppShell({
           </nav>
 
           {/* Notifications */}
-          <div className="px-3 pb-2">
+          <div className="shrink-0 px-3 pb-2">
             <Link
               href="/announcements"
               onClick={closeSidebar}
               className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
             >
-              <Bell size={19} />
-              <span>التنبيهات والإشعارات</span>
+              <Bell size={19} className="shrink-0" />
+              <span className="truncate">
+                التنبيهات والإشعارات
+              </span>
             </Link>
           </div>
 
           {/* Logout */}
-          <div className="border-t border-white/10 p-3">
+          <div className="shrink-0 border-t border-white/10 p-3">
             <LogoutButton />
           </div>
         </div>
       </aside>
 
       {/* Main area */}
-      <div className="min-h-screen lg:pr-72">
+      <div className="min-h-screen w-full lg:pr-72">
         {/* Mobile header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 shadow-sm backdrop-blur lg:hidden">
+        <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white/95 px-3 shadow-sm backdrop-blur lg:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="rounded-xl p-2 text-slate-700 hover:bg-slate-100"
+            aria-label="فتح القائمة"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100"
           >
             <Menu size={23} />
           </button>
 
           <Link
             href="/"
-            className="text-sm font-bold text-slate-900"
+            className="min-w-0 flex-1 px-2 text-center text-sm font-bold text-slate-900"
           >
-            نظام إدارة المعاهد الأزهرية
+            <span className="block truncate">
+              نظام إدارة المعاهد الأزهرية
+            </span>
           </Link>
 
           <Link
             href="/announcements"
-            className="rounded-xl p-2 text-slate-700 hover:bg-slate-100"
+            aria-label="التنبيهات"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 transition hover:bg-slate-100"
           >
             <Bell size={21} />
           </Link>
         </header>
 
-        <main className="min-h-[calc(100vh-4rem)]">
+        {/* Page content */}
+        <main className="min-h-[calc(100vh-4rem)] w-full min-w-0 overflow-x-hidden">
           {children}
         </main>
       </div>
