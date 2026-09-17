@@ -15,6 +15,7 @@ import {
   UserRound,
   X,
   BookOpenCheck,
+  MessageSquareWarning,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -92,6 +93,20 @@ const allMenuItems = [
     href: "/announcements",
     icon: Megaphone,
     roles: ["director", "sheikh", "deputy", "teacher", "super_admin"],
+  },
+  {
+    title: "الشكاوى والبلاغات",
+    href: "/complaints",
+    icon: MessageSquareWarning,
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "teacher",
+      "employee",
+      "parent",
+      "super_admin",
+    ],
   },
   {
     title: "استيراد البيانات",
@@ -210,6 +225,7 @@ export default function AppShell({
                 <div className="text-sm font-bold">
                   نظام إدارة المعاهد
                 </div>
+
                 <div className="mt-1 text-xs text-slate-400">
                   الإدارة التعليمية الأزهرية
                 </div>
@@ -255,8 +271,14 @@ export default function AppShell({
 
               {institute && (
                 <div className="mt-3 flex items-start gap-2 border-t border-white/10 pt-3 text-xs text-slate-400">
-                  <Building2 size={15} className="mt-0.5 shrink-0" />
-                  <span className="leading-5">{institute.name}</span>
+                  <Building2
+                    size={15}
+                    className="mt-0.5 shrink-0"
+                  />
+
+                  <span className="leading-5">
+                    {institute.name}
+                  </span>
                 </div>
               )}
             </div>
@@ -348,7 +370,9 @@ export default function AppShell({
           </Link>
         </header>
 
-        <main className="min-h-[calc(100vh-4rem)]">{children}</main>
+        <main className="min-h-[calc(100vh-4rem)]">
+          {children}
+        </main>
       </div>
     </div>
   );
