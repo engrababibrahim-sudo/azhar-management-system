@@ -2,37 +2,22 @@
 
 import {
   Activity,
-  AlertTriangle,
   ArrowLeft,
   Bell,
-  BookOpen,
+  BookOpenCheck,
   Building2,
   CheckCircle2,
-  ClipboardCheck,
+  ClipboardList,
   FileBarChart,
   GraduationCap,
   RefreshCw,
-  Search,
-  ShieldCheck,
   Users,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-
+import { useEffect, useState } from "react";
 import AppShell from "./components/AppShell";
 import { supabase } from "../lib/supabase/client";
-
-type Institute = {
-  id: string;
-  name: string;
-  code: string;
-  institute_type: string | null;
-  education_stage: string | null;
-  director_name: string | null;
-  student_count: number | null;
-  teacher_count: number | null;
-  is_active: boolean | null;
-};
 
 type Profile = {
   role: string;
@@ -41,262 +26,97 @@ type Profile = {
   directorate_id: string | null;
 };
 
-type StatCardProps = {
-  title: string;
-  value: string | number;
-  subtitle: string;
-  icon: React.ReactNode;
-  href?: string;
-};
-
-type QuickActionProps = {
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  href: string;
+type Institute = {
+  id: string;
+  name: string;
+  code: string | null;
+  institute_type: string | null;
+  director_name: string | null;
+  student_count: number | null;
+  teacher_count: number | null;
+  is_active: boolean | null;
 };
 
 function StatCard({
   title,
   value,
   subtitle,
-  icon,
   href,
-}: StatCardProps) {
-  const content = (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex items-start justify-between gap-4">
+  icon,
+}: {
+  title: string;
+  value: number;
+  subtitle: string;
+  href: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+    >
+      <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-500">
-            {title}
+          <p className="text-sm font-medium text-slate-500">{title}</p>
+
+          <p className="mt-3 text-3xl font-black tracking-tight text-slate-900">
+            {value.toLocaleString("ar-EG")}
           </p>
 
-          <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
-            {value}
-          </p>
-
-          <p className="mt-2 text-xs text-slate-500">
-            {subtitle}
-          </p>
+          <p className="mt-2 text-xs text-slate-500">{subtitle}</p>
         </div>
 
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
           {icon}
         </div>
       </div>
-    </div>
+    </Link>
   );
-
-  if (href) {
-    return (
-      <Link href={href} className="block">
-        {content}
-      </Link>
-    );
-  }
-
-  return content;
 }
 
 function QuickAction({
   title,
   description,
-  icon,
   href,
-}: QuickActionProps) {
-  return (
-    <Link
-      href={href}
-      className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-    >
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
-        {icon}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <h3 className="font-bold text-slate-900">
-          {title}
-        </h3>
-
-        <p className="mt-1 text-xs leading-5 text-slate-500">
-          {description}
-        </p>
-      </div>
-
-      <ArrowLeft
-        size={18}
-        className="shrink-0 text-slate-400 transition group-hover:-translate-x-1 group-hover:text-slate-700"
-      />
-    </Link>
-  );
-}
-
-function SystemStatus() {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-bold text-slate-900">
-            حالة النظام
-          </h2>
-
-          <p className="mt-1 text-xs text-slate-500">
-            حالة الخدمات الأساسية
-          </p>
-        </div>
-
-        <Activity size={20} className="text-slate-500" />
-      </div>
-
-      <div className="mt-5 space-y-3">
-        <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
-          <div className="flex items-center gap-3">
-            <CheckCircle2
-              size={18}
-              className="text-emerald-600"
-            />
-
-            <span className="text-sm font-medium text-slate-700">
-              قاعدة البيانات
-            </span>
-          </div>
-
-          <span className="text-xs font-semibold text-emerald-600">
-            متصل
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
-          <div className="flex items-center gap-3">
-            <CheckCircle2
-              size={18}
-              className="text-emerald-600"
-            />
-
-            <span className="text-sm font-medium text-slate-700">
-              نظام الدخول والصلاحيات
-            </span>
-          </div>
-
-          <span className="text-xs font-semibold text-emerald-600">
-            يعمل
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
-          <div className="flex items-center gap-3">
-            <ShieldCheck
-              size={18}
-              className="text-emerald-600"
-            />
-
-            <span className="text-sm font-medium text-slate-700">
-              حماية الصفحات
-            </span>
-          </div>
-
-          <span className="text-xs font-semibold text-emerald-600">
-            مفعلة
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InstituteCard({
-  institute,
+  icon,
 }: {
-  institute: Institute;
+  title: string;
+  description: string;
+  href: string;
+  icon: React.ReactNode;
 }) {
   return (
     <Link
-      href={`/institutes/${institute.id}`}
-      className="group block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+      href={href}
+      className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
     >
       <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-          <Building2 size={22} />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
+          {icon}
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="truncate font-bold text-slate-900">
-                {institute.name}
-              </h3>
+          <h3 className="font-bold text-slate-900">{title}</h3>
 
-              <p className="mt-1 text-xs text-slate-500">
-                كود المعهد: {institute.code}
-              </p>
-            </div>
-
-            <span
-              className={
-                institute.is_active
-                  ? "shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
-                  : "shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700"
-              }
-            >
-              {institute.is_active ? "نشط" : "غير نشط"}
-            </span>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="flex items-center gap-2 text-slate-500">
-                <GraduationCap size={15} />
-
-                <span className="text-[11px]">
-                  الطلاب
-                </span>
-              </div>
-
-              <p className="mt-1 font-bold text-slate-900">
-                {institute.student_count ?? 0}
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="flex items-center gap-2 text-slate-500">
-                <Users size={15} />
-
-                <span className="text-[11px]">
-                  المدرسون
-                </span>
-              </div>
-
-              <p className="mt-1 font-bold text-slate-900">
-                {institute.teacher_count ?? 0}
-              </p>
-            </div>
-          </div>
-
-          {institute.education_stage && (
-            <p className="mt-4 text-xs text-slate-500">
-              المرحلة: {institute.education_stage}
-            </p>
-          )}
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            {description}
+          </p>
         </div>
+
+        <ArrowLeft
+          size={18}
+          className="mt-1 shrink-0 text-slate-400 transition group-hover:-translate-x-1 group-hover:text-slate-900"
+        />
       </div>
     </Link>
   );
 }
 
-export default function Home() {
-  const [profile, setProfile] = useState<Profile | null>(
-    null
-  );
-
-  const [institutes, setInstitutes] = useState<Institute[]>(
-    []
-  );
-
+export default function HomePage() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [institutes, setInstitutes] = useState<Institute[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  const [searchTerm, setSearchTerm] = useState("");
-
   const [errorMessage, setErrorMessage] = useState("");
 
   async function loadDashboard(showRefresh = false) {
@@ -319,19 +139,12 @@ export default function Home() {
       }
 
       if (!user) {
-        setProfile(null);
-        setInstitutes([]);
-        return;
+        throw new Error("لم يتم العثور على المستخدم الحالي");
       }
 
-      const {
-        data: profileData,
-        error: profileError,
-      } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select(
-          "role, full_name, institute_id, directorate_id"
-        )
+        .select("role, full_name, institute_id, directorate_id")
         .eq("id", user.id)
         .single();
 
@@ -339,52 +152,47 @@ export default function Home() {
         throw profileError;
       }
 
+      if (!profileData) {
+        throw new Error("لم يتم العثور على ملف المستخدم");
+      }
+
       setProfile(profileData);
 
-      let institutesQuery = supabase
+      let query = supabase
         .from("institutes")
         .select(
-          "id, name, code, institute_type, education_stage, director_name, student_count, teacher_count, is_active"
+          "id, name, code, institute_type, director_name, student_count, teacher_count, is_active"
         )
         .order("name", { ascending: true });
 
       if (
         profileData.role === "director" ||
-        profileData.role === "deputy" ||
-        profileData.role === "super_admin"
+        profileData.role === "deputy"
       ) {
-        if (
-          profileData.role !== "super_admin" &&
-          profileData.directorate_id
-        ) {
-          institutesQuery = institutesQuery.eq(
-            "directorate_id",
-            profileData.directorate_id
-          );
+        if (!profileData.directorate_id) {
+          throw new Error("الحساب غير مرتبط بإدارة تعليمية");
         }
-      } else if (
-        profileData.role === "sheikh" &&
-        profileData.institute_id
-      ) {
-        institutesQuery = institutesQuery.eq(
-          "id",
-          profileData.institute_id
+
+        query = query.eq(
+          "directorate_id",
+          profileData.directorate_id
         );
-      } else {
-        setInstitutes([]);
-        return;
+      } else if (profileData.role === "sheikh") {
+        if (!profileData.institute_id) {
+          throw new Error("حساب شيخ المعهد غير مرتبط بمعهد");
+        }
+
+        query = query.eq("id", profileData.institute_id);
       }
 
-      const {
-        data: institutesData,
-        error: institutesError,
-      } = await institutesQuery;
+      const { data: instituteData, error: instituteError } =
+        await query;
 
-      if (institutesError) {
-        throw institutesError;
+      if (instituteError) {
+        throw instituteError;
       }
 
-      setInstitutes(institutesData || []);
+      setInstitutes((instituteData || []) as Institute[]);
     } catch (error: any) {
       console.error("Dashboard error:", error);
 
@@ -394,9 +202,8 @@ export default function Home() {
         error?.hint ||
         "خطأ غير معروف";
 
-      setErrorMessage(
-        "خطأ قاعدة البيانات: " + message
-      );
+      setErrorMessage("خطأ قاعدة البيانات: " + message);
+      setInstitutes([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -407,84 +214,56 @@ export default function Home() {
     loadDashboard();
   }, []);
 
-  const filteredInstitutes = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-
-    if (!term) {
-      return institutes;
-    }
-
-    return institutes.filter((institute) => {
-      const name =
-        institute.name?.toLowerCase() || "";
-
-      const code =
-        institute.code?.toLowerCase() || "";
-
-      const stage =
-        institute.education_stage?.toLowerCase() || "";
-
-      return (
-        name.includes(term) ||
-        code.includes(term) ||
-        stage.includes(term)
-      );
-    });
-  }, [institutes, searchTerm]);
+  const totalInstitutes = institutes.length;
 
   const activeInstitutes = institutes.filter(
-    (institute) => institute.is_active
+    (item) => item.is_active !== false
   ).length;
 
-  const inactiveInstitutes =
-    institutes.length - activeInstitutes;
+  const inactiveInstitutes = institutes.filter(
+    (item) => item.is_active === false
+  ).length;
 
   const totalStudents = institutes.reduce(
-    (total, institute) =>
-      total + Number(institute.student_count || 0),
+    (total, item) => total + Number(item.student_count || 0),
     0
   );
 
   const totalTeachers = institutes.reduce(
-    (total, institute) =>
-      total + Number(institute.teacher_count || 0),
+    (total, item) => total + Number(item.teacher_count || 0),
     0
   );
 
-  const isDirector =
-    profile?.role === "director" ||
-    profile?.role === "deputy" ||
-    profile?.role === "super_admin";
+  const roleTitle =
+    profile?.role === "sheikh"
+      ? "شيخ المعهد"
+      : profile?.role === "deputy"
+        ? "وكيل الإدارة التعليمية الأزهرية"
+        : profile?.role === "super_admin"
+          ? "مدير النظام"
+          : "مدير الإدارة التعليمية الأزهرية";
+
+  const welcomeName =
+    profile?.full_name || roleTitle;
 
   return (
     <AppShell>
-      <main
-        dir="rtl"
-        className="min-h-screen bg-slate-100 text-slate-800"
-      >
+      <div className="min-h-screen bg-slate-100">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-
-          {/* Header */}
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
                 <span>الرئيسية</span>
                 <span>/</span>
-                <span className="text-slate-800">
-                  لوحة التحكم
-                </span>
+                <span>لوحة التحكم</span>
               </div>
 
-              <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">
                 لوحة التحكم
               </h1>
 
-              <p className="mt-1 text-sm text-slate-500">
-                {profile?.full_name
-                  ? "مرحبًا " +
-                    profile.full_name +
-                    "، إليك ملخص حالة النظام"
-                  : "إليك ملخص حالة النظام والإدارة التعليمية"}
+              <p className="mt-2 text-sm text-slate-500">
+                مرحبًا {welcomeName}، إليك ملخص حالة النظام
               </p>
             </div>
 
@@ -497,75 +276,66 @@ export default function Home() {
               >
                 <RefreshCw
                   size={17}
-                  className={
-                    refreshing ? "animate-spin" : ""
-                  }
+                  className={refreshing ? "animate-spin" : ""}
                 />
 
                 <span>
-                  {refreshing
-                    ? "جاري التحديث..."
-                    : "تحديث"}
+                  {refreshing ? "جاري التحديث..." : "تحديث"}
                 </span>
               </button>
 
               <Link
                 href="/announcements"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
-                aria-label="التنبيهات"
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+                title="التنبيهات"
               >
                 <Bell size={19} />
               </Link>
             </div>
           </div>
 
-          {/* Hero */}
-          <section className="mb-6 overflow-hidden rounded-3xl bg-slate-900 p-6 text-white shadow-lg sm:p-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="max-w-2xl">
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-slate-200">
-                  <Activity size={14} />
-                  منصة الإدارة التعليمية الأزهرية
-                </div>
+          <section className="relative mb-6 overflow-hidden rounded-3xl bg-slate-950 p-6 text-white shadow-xl sm:p-8">
+            <div className="absolute -left-16 -top-16 h-40 w-40 rounded-full bg-white/5" />
+            <div className="absolute -bottom-20 right-10 h-48 w-48 rounded-full bg-white/5" />
 
-                <h2 className="text-2xl font-bold leading-tight sm:text-3xl">
-                  الإدارة والمتابعة المركزية للمعاهد الأزهرية
-                </h2>
-
-                <p className="mt-3 max-w-xl text-sm leading-7 text-slate-300">
-                  متابعة المعاهد والطلاب والمدرسين والحضور
-                  والتقارير والمهام من خلال منصة موحدة.
-                </p>
+            <div className="relative z-10 max-w-3xl">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200">
+                <Activity size={14} />
+                منصة الإدارة التعليمية الأزهرية
               </div>
 
-              <div className="hidden h-24 w-24 items-center justify-center rounded-3xl bg-white/10 lg:flex">
-                <Building2 size={42} />
-              </div>
+              <h2 className="text-2xl font-black sm:text-3xl">
+                الإدارة والمتابعة المركزية للمعاهد الأزهرية
+              </h2>
+
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
+                متابعة المعاهد والطلاب والمدرسين والحضور والتقارير
+                والمهام من خلال منصة موحدة.
+              </p>
             </div>
           </section>
 
-          {/* Error */}
           {errorMessage && (
-            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5">
               <div className="flex items-start gap-3">
-                <AlertTriangle
-                  size={21}
-                  className="mt-0.5 shrink-0"
+                <XCircle
+                  size={22}
+                  className="mt-0.5 shrink-0 text-red-600"
                 />
 
                 <div className="min-w-0">
-                  <p className="font-bold">
+                  <h3 className="font-bold text-red-800">
                     حدث خطأ أثناء تحميل البيانات
-                  </p>
+                  </h3>
 
-                  <p className="mt-2 break-words text-sm leading-6">
+                  <p className="mt-2 break-words text-sm leading-6 text-red-700">
                     {errorMessage}
                   </p>
 
                   <button
                     type="button"
                     onClick={() => loadDashboard(true)}
-                    className="mt-4 rounded-xl bg-red-700 px-4 py-2 text-xs font-bold text-white transition hover:bg-red-800"
+                    className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
                   >
                     المحاولة مرة أخرى
                   </button>
@@ -574,268 +344,357 @@ export default function Home() {
             </div>
           )}
 
-          {/* Statistics */}
-          <section className="mb-6">
+          <section className="mb-8">
             <div className="mb-4">
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 className="text-lg font-black text-slate-900">
                 الملخص العام
               </h2>
 
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-sm text-slate-500">
                 مؤشرات سريعة عن البيانات المتاحة
               </p>
             </div>
 
-            {loading ? (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {[1, 2, 3, 4].map((item) => (
-                  <div
-                    key={item}
-                    className="h-32 animate-pulse rounded-2xl bg-white"
-                  />
-                ))}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard
+                title="إجمالي المعاهد"
+                value={totalInstitutes}
+                subtitle={
+                  activeInstitutes +
+                  " معهد نشط"
+                }
+                href="/institutes"
+                icon={<Building2 size={22} />}
+              />
+
+              <StatCard
+                title="إجمالي الطلاب"
+                value={totalStudents}
+                subtitle="طالب مسجل"
+                href="/students"
+                icon={<GraduationCap size={22} />}
+              />
+
+              <StatCard
+                title="إجمالي المدرسين"
+                value={totalTeachers}
+                subtitle="مدرس وعضو هيئة تعليمية"
+                href="/teachers"
+                icon={<Users size={22} />}
+              />
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">
+                      المعاهد النشطة
+                    </p>
+
+                    <p className="mt-3 text-3xl font-black text-slate-900">
+                      {activeInstitutes.toLocaleString("ar-EG")}
+                    </p>
+
+                    <p className="mt-2 text-xs text-slate-500">
+                      {inactiveInstitutes.toLocaleString("ar-EG")} معهد غير نشط
+                    </p>
+                  </div>
+
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                    <CheckCircle2 size={22} />
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <StatCard
-                  title="إجمالي المعاهد"
-                  value={institutes.length}
-                  subtitle={
-                    activeInstitutes +
-                    " معهد نشط"
-                  }
-                  icon={<Building2 size={23} />}
-                  href={
-                    isDirector
-                      ? "/institutes"
-                      : undefined
-                  }
-                />
-
-                <StatCard
-                  title="إجمالي الطلاب"
-                  value={totalStudents}
-                  subtitle="طالب مسجل"
-                  icon={<GraduationCap size={23} />}
-                  href="/students"
-                />
-
-                <StatCard
-                  title="إجمالي المدرسين"
-                  value={totalTeachers}
-                  subtitle="مدرس وعضو هيئة تعليمية"
-                  icon={<Users size={23} />}
-                  href="/teachers"
-                />
-
-                <StatCard
-                  title="المعاهد النشطة"
-                  value={activeInstitutes}
-                  subtitle={
-                    inactiveInstitutes +
-                    " معهد غير نشط"
-                  }
-                  icon={<CheckCircle2 size={23} />}
-                />
-              </div>
-            )}
+            </div>
           </section>
 
-          {/* Quick actions */}
-          <section className="mb-6">
-            <div className="mb-4">
-              <h2 className="text-lg font-bold text-slate-900">
-                الوصول السريع
-              </h2>
+          <section className="mb-8">
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-black text-slate-900">
+                  الوصول السريع
+                </h2>
 
-              <p className="mt-1 text-xs text-slate-500">
-                أهم الوظائف المتاحة حسب صلاحيات المستخدم
-              </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  أهم الوظائف المتاحة حسب صلاحيات المستخدم
+                </p>
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {isDirector && (
-                <QuickAction
-                  title="إدارة المعاهد"
-                  description="إضافة المعاهد وتعديل بياناتها ومتابعة حالتها."
-                  icon={<Building2 size={22} />}
-                  href="/institutes"
-                />
-              )}
+              <QuickAction
+                title="إدارة المعاهد"
+                description="إضافة المعاهد وتعديل بياناتها ومتابعة حالتها."
+                href="/institutes"
+                icon={<Building2 size={21} />}
+              />
 
               <QuickAction
                 title="إدارة الطلاب"
                 description="عرض الطلاب وإضافة بيانات جديدة ومتابعة الفصول."
-                icon={<GraduationCap size={22} />}
                 href="/students"
+                icon={<GraduationCap size={21} />}
               />
 
               <QuickAction
                 title="الحضور والغياب"
                 description="تسجيل ومتابعة حضور وغياب الطلاب."
-                icon={<ClipboardCheck size={22} />}
                 href="/attendance"
+                icon={<ClipboardList size={21} />}
               />
 
               <QuickAction
                 title="التقارير والإحصائيات"
                 description="عرض مؤشرات وتقارير الحضور والطلاب."
-                icon={<FileBarChart size={22} />}
                 href="/attendance-report"
+                icon={<FileBarChart size={21} />}
               />
             </div>
           </section>
 
-          {/* Main content */}
-          <section className="grid gap-6 lg:grid-cols-3">
+          <section className="mb-8">
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-black text-slate-900">
+                  المعاهد التابعة للإدارة
+                </h2>
 
-            {/* Institutes */}
-            <div className="lg:col-span-2">
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="font-bold text-slate-900">
-                      {isDirector
-                        ? "المعاهد التابعة للإدارة"
-                        : "بيانات المعهد"}
-                    </h2>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      {isDirector
-                        ? "استعرض المعاهد وانتقل إلى تفاصيل أي معهد"
-                        : "بيانات المعهد المرتبط بحسابك"}
-                    </p>
-                  </div>
-
-                  {isDirector && (
-                    <Link
-                      href="/institutes"
-                      className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-950"
-                    >
-                      عرض الكل
-                      <ArrowLeft size={16} />
-                    </Link>
-                  )}
-                </div>
-
-                {isDirector && (
-                  <div className="relative mt-5">
-                    <Search
-                      size={18}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
-
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(event) =>
-                        setSearchTerm(event.target.value)
-                      }
-                      placeholder="ابحث باسم المعهد أو الكود أو المرحلة..."
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-10 pl-4 text-sm outline-none transition focus:border-slate-400 focus:bg-white"
-                    />
-                  </div>
-                )}
-
-                <div className="mt-5 space-y-3">
-                  {loading ? (
-                    <>
-                      <div className="h-36 animate-pulse rounded-2xl bg-slate-50" />
-                      <div className="h-36 animate-pulse rounded-2xl bg-slate-50" />
-                    </>
-                  ) : filteredInstitutes.length > 0 ? (
-                    filteredInstitutes.map(
-                      (institute) => (
-                        <InstituteCard
-                          key={institute.id}
-                          institute={institute}
-                        />
-                      )
-                    )
-                  ) : (
-                    <div className="rounded-2xl bg-slate-50 p-8 text-center">
-                      <Building2
-                        size={32}
-                        className="mx-auto text-slate-400"
-                      />
-
-                      <p className="mt-3 font-semibold text-slate-700">
-                        لا توجد بيانات معاهد
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-500">
-                        {searchTerm
-                          ? "لم يتم العثور على نتائج مطابقة للبحث."
-                          : "لا توجد معاهد مرتبطة بالحساب الحالي."}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                <p className="mt-1 text-sm text-slate-500">
+                  استعرض المعاهد وانتقل إلى تفاصيل أي معهد
+                </p>
               </div>
+
+              <Link
+                href="/institutes"
+                className="hidden items-center gap-1 text-sm font-bold text-slate-700 hover:text-slate-950 sm:flex"
+              >
+                عرض الكل
+                <ArrowLeft size={16} />
+              </Link>
             </div>
 
-            {/* Side */}
-            <div className="space-y-6">
-              <SystemStatus />
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
-                    <BookOpen
-                      size={20}
-                      className="text-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <h2 className="font-bold text-slate-900">
-                      تنبيهات ومتابعة
-                    </h2>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      آخر المستجدات
-                    </p>
-                  </div>
+            {loading ? (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {[1, 2, 3].map((item) => (
+                  <div
+                    key={item}
+                    className="h-52 animate-pulse rounded-2xl bg-white shadow-sm"
+                  />
+                ))}
+              </div>
+            ) : institutes.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                  <Building2 size={25} />
                 </div>
 
-                <div className="mt-4 rounded-xl bg-slate-50 p-4">
-                  <div className="flex gap-3">
-                    <Bell
-                      size={18}
-                      className="mt-0.5 shrink-0 text-slate-500"
-                    />
+                <h3 className="mt-4 font-bold text-slate-900">
+                  لا توجد بيانات معاهد
+                </h3>
 
-                    <div>
-                      <p className="text-sm font-semibold text-slate-700">
-                        مركز الإعلانات
-                      </p>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                  لا توجد معاهد مرتبطة بالحساب الحالي أو تعذر تحميل بياناتها.
+                </p>
 
-                      <p className="mt-1 text-xs leading-5 text-slate-500">
-                        يمكنك متابعة الإعلانات والتعليمات
-                        من القسم المخصص.
-                      </p>
+                <Link
+                  href="/institutes"
+                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  <Building2 size={17} />
+                  إدارة المعاهد
+                </Link>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {institutes.map((institute) => (
+                  <Link
+                    key={institute.id}
+                    href={"/institutes/" + institute.id}
+                    className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
+                          <Building2 size={21} />
+                        </div>
+
+                        <div className="min-w-0">
+                          <h3 className="truncate font-bold text-slate-900">
+                            {institute.name}
+                          </h3>
+
+                          {institute.code && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              كود المعهد: {institute.code}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <span
+                        className={
+                          institute.is_active === false
+                            ? "shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600"
+                            : "shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600"
+                        }
+                      >
+                        {institute.is_active === false
+                          ? "غير نشط"
+                          : "نشط"}
+                      </span>
                     </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="text-xs text-slate-500">
+                          الطلاب
+                        </div>
+
+                        <div className="mt-1 text-lg font-black text-slate-900">
+                          {Number(
+                            institute.student_count || 0
+                          ).toLocaleString("ar-EG")}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="text-xs text-slate-500">
+                          المدرسون
+                        </div>
+
+                        <div className="mt-1 text-lg font-black text-slate-900">
+                          {Number(
+                            institute.teacher_count || 0
+                          ).toLocaleString("ar-EG")}
+                        </div>
+                      </div>
+                    </div>
+
+                    {institute.director_name && (
+                      <div className="mt-4 border-t border-slate-100 pt-4 text-xs text-slate-500">
+                        <span className="font-semibold text-slate-700">
+                          شيخ المعهد:
+                        </span>{" "}
+                        {institute.director_name}
+                      </div>
+                    )}
+
+                    <div className="mt-4 flex items-center justify-end gap-1 text-xs font-bold text-slate-500 transition group-hover:text-slate-900">
+                      عرض تفاصيل المعهد
+                      <ArrowLeft size={14} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="mb-8">
+            <div className="mb-4">
+              <h2 className="text-lg font-black text-slate-900">
+                حالة النظام
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                حالة الخدمات الأساسية
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <CheckCircle2 size={21} />
+                </div>
+
+                <div>
+                  <div className="text-sm font-bold text-slate-900">
+                    قاعدة البيانات
                   </div>
 
-                  <Link
-                    href="/announcements"
-                    className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-slate-950"
-                  >
-                    الانتقال إلى الإعلانات
-                    <ArrowLeft size={14} />
-                  </Link>
+                  <div className="mt-1 text-xs font-semibold text-emerald-600">
+                    متصل
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <CheckCircle2 size={21} />
+                </div>
+
+                <div>
+                  <div className="text-sm font-bold text-slate-900">
+                    نظام الدخول والصلاحيات
+                  </div>
+
+                  <div className="mt-1 text-xs font-semibold text-emerald-600">
+                    يعمل
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <CheckCircle2 size={21} />
+                </div>
+
+                <div>
+                  <div className="text-sm font-bold text-slate-900">
+                    حماية الصفحات
+                  </div>
+
+                  <div className="mt-1 text-xs font-semibold text-emerald-600">
+                    مفعلة
+                  </div>
                 </div>
               </div>
             </div>
           </section>
 
-          {/* Footer */}
-          <footer className="mt-8 border-t border-slate-200 pt-5 text-center text-xs text-slate-400">
-            نظام إدارة المعاهد الأزهرية — منصة الإدارة
-            والمتابعة التعليمية
-          </footer>
+          <section>
+            <div className="mb-4">
+              <h2 className="text-lg font-black text-slate-900">
+                تنبيهات ومتابعة
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                آخر المستجدات
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <Bell size={21} />
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900">
+                      مركز الإعلانات
+                    </h3>
+
+                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                      يمكنك متابعة الإعلانات والتعليمات من القسم المخصص.
+                    </p>
+                  </div>
+                </div>
+
+                <Link
+                  href="/announcements"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  الانتقال إلى الإعلانات
+                  <ArrowLeft size={16} />
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          <div className="mt-8 border-t border-slate-200 pt-6 text-center text-xs text-slate-400">
+            نظام إدارة المعاهد الأزهرية — منصة الإدارة والمتابعة التعليمية
+          </div>
         </div>
-      </main>
+      </div>
     </AppShell>
   );
 }
