@@ -55,7 +55,9 @@ export default function InstituteDashboard() {
   const [error, setError] = useState("");
 
   async function loadInstitute() {
-    if (!instituteId) return;
+    if (!instituteId) {
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -166,9 +168,7 @@ export default function InstituteDashboard() {
       dir="rtl"
       className="min-h-screen bg-slate-50 text-slate-800"
     >
-      {/* Sidebar */}
       <aside className="fixed right-0 top-0 hidden h-screen w-72 flex-col bg-slate-950 text-white lg:flex">
-        {/* Logo */}
         <div className="border-b border-white/10 px-6 py-6">
           <div className="text-lg font-bold">
             نظام الإدارة الأزهرية
@@ -179,7 +179,6 @@ export default function InstituteDashboard() {
           </div>
         </div>
 
-        {/* Current Institute */}
         <div className="border-b border-white/10 px-5 py-5">
           <div className="rounded-2xl bg-white/5 p-4">
             <div className="text-xs text-slate-400">
@@ -196,7 +195,6 @@ export default function InstituteDashboard() {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5">
           <MenuItem
             icon={LayoutDashboard}
@@ -247,7 +245,6 @@ export default function InstituteDashboard() {
             title="المراسلات"
           />
 
-          {/* الشكاوى والبلاغات */}
           <Link href="/complaints">
             <MenuItem
               icon={MessageSquareWarning}
@@ -276,7 +273,6 @@ export default function InstituteDashboard() {
           />
         </nav>
 
-        {/* User */}
         <div className="border-t border-white/10 p-4">
           <div className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white font-bold text-slate-900">
@@ -305,9 +301,7 @@ export default function InstituteDashboard() {
         </div>
       </aside>
 
-      {/* Main */}
       <section className="lg:mr-72">
-        {/* Header */}
         <header className="border-b border-slate-200 bg-white">
           <div className="flex min-h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
             <div>
@@ -351,7 +345,6 @@ export default function InstituteDashboard() {
         </header>
 
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-          {/* Institute Identity */}
           <section className="rounded-3xl bg-slate-900 p-6 text-white shadow-xl sm:p-8">
             <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-4">
@@ -400,7 +393,6 @@ export default function InstituteDashboard() {
             </div>
           </section>
 
-          {/* Statistics */}
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               icon={GraduationCap}
@@ -433,7 +425,6 @@ export default function InstituteDashboard() {
             />
           </section>
 
-          {/* Monitoring */}
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
               <div className="mb-5 flex items-center justify-between">
@@ -477,7 +468,6 @@ export default function InstituteDashboard() {
               </div>
             </div>
 
-            {/* Alerts */}
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="mb-5 flex items-center justify-between">
                 <div>
@@ -515,7 +505,6 @@ export default function InstituteDashboard() {
             </div>
           </section>
 
-          {/* Quick Actions */}
           <section>
             <div className="mb-4">
               <h3 className="text-lg font-bold">
@@ -568,7 +557,6 @@ export default function InstituteDashboard() {
             </div>
           </section>
 
-          {/* Tasks */}
           <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-6">
               <div>
@@ -606,7 +594,6 @@ export default function InstituteDashboard() {
             </div>
           </section>
 
-          {/* Attendance */}
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="mb-6 flex items-center justify-between">
@@ -658,7 +645,6 @@ export default function InstituteDashboard() {
               </div>
             </div>
 
-            {/* Activity */}
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="mb-6">
                 <h3 className="font-bold">
@@ -694,7 +680,6 @@ export default function InstituteDashboard() {
             </div>
           </section>
 
-          {/* Reports */}
           <section className="rounded-3xl bg-slate-900 p-6 text-white">
             <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
               <div>
@@ -726,10 +711,6 @@ export default function InstituteDashboard() {
     </main>
   );
 }
-
-/* =========================
-   Components
-========================= */
 
 function MenuItem({
   icon: Icon,
@@ -824,7 +805,7 @@ function ProgressRow({
       <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
         <div
           className="h-full rounded-full bg-slate-800"
-          style={{ width: `${value}%` }}
+          style={{ width: value + "%" }}
         />
       </div>
 
@@ -844,16 +825,13 @@ function Alert({
   text: string;
   danger?: boolean;
 }) {
+  const alertClass = danger
+    ? "bg-red-50 text-red-600"
+    : "bg-amber-50 text-amber-600";
+
   return (
     <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
-      <div
-        className={
-          "rounded-xl p-2 " +
-          (danger
-            ? "bg-red-50 text-red-600"
-            : "bg-amber-50 text-amber-600")
-        }
-      >
+      <div className={"rounded-xl p-2 " + alertClass}>
         <AlertTriangle size={16} />
       </div>
 
@@ -901,6 +879,12 @@ function Task({
   status: string;
   urgent?: boolean;
 }) {
+  const taskClass = urgent
+    ? "bg-red-50 text-red-700"
+    : status === "تم الرد"
+    ? "bg-emerald-50 text-emerald-700"
+    : "bg-amber-50 text-amber-700";
+
   return (
     <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
@@ -922,11 +906,7 @@ function Task({
       <span
         className={
           "w-fit rounded-full px-3 py-1.5 text-xs font-semibold " +
-          (urgent
-            ? "bg-red-50 text-red-700"
-            : status === "تم الرد"
-            ? "bg-emerald-50 text-emerald-700"
-            : "bg-amber-50 text-amber-700")
+          taskClass
         }
       >
         {status}
