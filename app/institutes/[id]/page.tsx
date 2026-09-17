@@ -740,13 +740,16 @@ function MenuItem({
   title: string;
   active?: boolean;
 }) {
+  const menuClass = active
+    ? "bg-white font-semibold text-slate-950"
+    : "text-slate-300 hover:bg-white/10 hover:text-white";
+
   return (
     <div
-      className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
-        active
-          ? "bg-white font-semibold text-slate-950"
-          : "text-slate-300 hover:bg-white/10 hover:text-white"
-      }`}
+      className={
+        "flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm transition " +
+        menuClass
+      }
     >
       <Icon size={18} />
       {title}
@@ -844,11 +847,12 @@ function Alert({
   return (
     <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
       <div
-        className={`rounded-xl p-2 ${
-          danger
+        className={
+          "rounded-xl p-2 " +
+          (danger
             ? "bg-red-50 text-red-600"
-            : "bg-amber-50 text-amber-600"
-        }`}
+            : "bg-amber-50 text-amber-600")
+        }
       >
         <AlertTriangle size={16} />
       </div>
@@ -916,13 +920,14 @@ function Task({
       </div>
 
       <span
-        className={`w-fit rounded-full px-3 py-1.5 text-xs font-semibold ${
-          urgent
+        className={
+          "w-fit rounded-full px-3 py-1.5 text-xs font-semibold " +
+          (urgent
             ? "bg-red-50 text-red-700"
             : status === "تم الرد"
             ? "bg-emerald-50 text-emerald-700"
-            : "bg-amber-50 text-amber-700"
-        }`}
+            : "bg-amber-50 text-amber-700")
+        }
       >
         {status}
       </span>
@@ -947,7 +952,7 @@ function AttendanceBox({
       : "bg-amber-50 text-amber-700";
 
   return (
-    <div className={`rounded-2xl p-4 text-center ${style}`}>
+    <div className={"rounded-2xl p-4 text-center " + style}>
       <div className="text-2xl font-bold">
         {value}
       </div>
