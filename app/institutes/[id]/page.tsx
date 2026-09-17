@@ -28,7 +28,6 @@ import {
   RefreshCw,
   MessageSquareWarning,
 } from "lucide-react";
-
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase/client";
 
@@ -47,7 +46,6 @@ type Institute = {
 export default function InstituteDashboard() {
   const params = useParams();
   const router = useRouter();
-
   const instituteId = params.id as string;
 
   const [institute, setInstitute] = useState<Institute | null>(null);
