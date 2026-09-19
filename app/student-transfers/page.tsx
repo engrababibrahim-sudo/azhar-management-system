@@ -9,7 +9,7 @@ import {
   Search,
   UserRound,
 } from "lucide-react";
-import AppShell from "../../components/AppShell";
+import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
 
 type Profile = {
@@ -77,7 +77,9 @@ export default function StudentTransfersPage() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
 
   const [students, setStudents] = useState<Student[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(
+    null
+  );
 
   const [selectedStudentInfo, setSelectedStudentInfo] =
     useState<StudentClassInfo>({
@@ -318,6 +320,7 @@ export default function StudentTransfersPage() {
     setToGradeId("");
     setToClassId("");
     setClasses([]);
+    setError("");
 
     if (!value) return;
 
@@ -331,6 +334,7 @@ export default function StudentTransfersPage() {
   async function handleGradeChange(value: string) {
     setToGradeId(value);
     setToClassId("");
+    setError("");
 
     if (!toInstituteId || !value) {
       setClasses([]);
@@ -364,8 +368,6 @@ export default function StudentTransfersPage() {
     setTransferDate(new Date().toISOString().slice(0, 10));
     setReason("");
 
-    setMessage("");
-    setError("");
     setClasses([]);
   }
 
@@ -434,16 +436,12 @@ export default function StudentTransfersPage() {
         throw new Error("لم يتم تنفيذ عملية النقل");
       }
 
-      setMessage(
-        "تم نقل الطالب بنجاح وحفظ سجل النقل."
-      );
-
       resetTransferForm();
+
+      setMessage("تم نقل الطالب بنجاح وحفظ سجل النقل.");
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "تعذر تنفيذ عملية النقل"
+        err instanceof Error ? err.message : "تعذر تنفيذ عملية النقل"
       );
     } finally {
       setTransferring(false);
@@ -489,9 +487,7 @@ export default function StudentTransfersPage() {
       <AppShell>
         <div className="mx-auto max-w-4xl p-4 md:p-8">
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
-            <h1 className="text-xl font-bold">
-              نقل الطلاب
-            </h1>
+            <h1 className="text-xl font-bold">نقل الطلاب</h1>
 
             <p className="mt-2">{error}</p>
           </div>
@@ -503,11 +499,9 @@ export default function StudentTransfersPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
-
         {/* Header */}
         <div className="rounded-3xl bg-gradient-to-l from-slate-900 to-blue-900 p-6 text-white shadow-lg md:p-8">
           <div className="flex items-start gap-4">
-
             <div className="rounded-2xl bg-white/10 p-3">
               <ArrowLeftRight size={28} />
             </div>
@@ -522,7 +516,6 @@ export default function StudentTransfersPage() {
                 الاحتفاظ ببياناته وتسجيل تاريخ عملية النقل.
               </p>
             </div>
-
           </div>
         </div>
 
@@ -531,23 +524,18 @@ export default function StudentTransfersPage() {
           <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
             <CheckCircle2 size={22} />
 
-            <span className="font-semibold">
-              {message}
-            </span>
+            <span className="font-semibold">{message}</span>
           </div>
         )}
 
         {error && (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
-            <span className="font-semibold">
-              {error}
-            </span>
+            <span className="font-semibold">{error}</span>
           </div>
         )}
 
         {/* Search */}
         <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 md:p-7">
-
           <div className="mb-5">
             <h2 className="text-lg font-bold text-slate-900">
               1. البحث عن الطالب
@@ -559,9 +547,7 @@ export default function StudentTransfersPage() {
           </div>
 
           <div className="flex flex-col gap-3 md:flex-row">
-
             <div className="relative flex-1">
-
               <Search
                 size={20}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
@@ -580,16 +566,12 @@ export default function StudentTransfersPage() {
                 placeholder="اكتبي اسم الطالب أو كود الطالب"
                 className="w-full rounded-2xl border border-slate-300 bg-slate-50 py-3.5 pr-12 pl-4 outline-none transition focus:border-blue-500 focus:bg-white"
               />
-
             </div>
 
             <button
               type="button"
               onClick={searchStudents}
-              disabled={
-                searchLoading ||
-                !searchTerm.trim()
-              }
+              disabled={searchLoading || !searchTerm.trim()}
               className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3.5 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {searchLoading ? (
@@ -603,22 +585,17 @@ export default function StudentTransfersPage() {
 
               بحث
             </button>
-
           </div>
 
           {students.length > 0 && (
             <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-
               {students.map((student) => (
                 <button
                   key={student.id}
                   type="button"
-                  onClick={() =>
-                    selectStudent(student)
-                  }
+                  onClick={() => selectStudent(student)}
                   className="flex w-full items-center gap-4 border-b border-slate-100 p-4 text-right transition last:border-b-0 hover:bg-blue-50"
                 >
-
                   <div className="rounded-xl bg-blue-100 p-2.5 text-blue-700">
                     <UserRound size={20} />
                   </div>
@@ -632,20 +609,16 @@ export default function StudentTransfersPage() {
                       الكود: {student.student_code}
                     </div>
                   </div>
-
                 </button>
               ))}
-
             </div>
           )}
-
         </section>
 
         {/* Student information */}
         {selectedStudent && (
           <>
             <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 md:p-7">
-
               <div className="mb-5">
                 <h2 className="text-lg font-bold text-slate-900">
                   2. بيانات الطالب الحالية
@@ -653,7 +626,6 @@ export default function StudentTransfersPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
                 <Info
                   label="اسم الطالب"
                   value={selectedStudent.full_name}
@@ -708,14 +680,11 @@ export default function StudentTransfersPage() {
                     "غير مسجل"
                   }
                 />
-
               </div>
-
             </section>
 
             {/* Destination */}
             <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-200 md:p-7">
-
               <div className="mb-5">
                 <h2 className="text-lg font-bold text-slate-900">
                   3. بيانات المعهد الجديد
@@ -728,7 +697,6 @@ export default function StudentTransfersPage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-
                 {/* Institute */}
                 <Field label="المعهد الجديد">
                   <select
@@ -756,7 +724,6 @@ export default function StudentTransfersPage() {
                           value={institute.id}
                         >
                           {institute.name}
-
                           {institute.code
                             ? ` — ${institute.code}`
                             : ""}
@@ -770,13 +737,11 @@ export default function StudentTransfersPage() {
                   <select
                     value={toStageId}
                     onChange={(event) => {
-                      setToStageId(
-                        event.target.value
-                      );
-
+                      setToStageId(event.target.value);
                       setToGradeId("");
                       setToClassId("");
                       setClasses([]);
+                      setError("");
                     }}
                     disabled={!toInstituteId}
                     className="input disabled:cursor-not-allowed disabled:bg-slate-100"
@@ -812,16 +777,14 @@ export default function StudentTransfersPage() {
                       اختاري الصف
                     </option>
 
-                    {destinationGrades.map(
-                      (grade) => (
-                        <option
-                          key={grade.id}
-                          value={grade.id}
-                        >
-                          {grade.name}
-                        </option>
-                      )
-                    )}
+                    {destinationGrades.map((grade) => (
+                      <option
+                        key={grade.id}
+                        value={grade.id}
+                      >
+                        {grade.name}
+                      </option>
+                    ))}
                   </select>
                 </Field>
 
@@ -830,9 +793,7 @@ export default function StudentTransfersPage() {
                   <select
                     value={toClassId}
                     onChange={(event) =>
-                      setToClassId(
-                        event.target.value
-                      )
+                      setToClassId(event.target.value)
                     }
                     disabled={!toGradeId}
                     className="input disabled:cursor-not-allowed disabled:bg-slate-100"
@@ -855,11 +816,9 @@ export default function StudentTransfersPage() {
                           value={classItem.id}
                         >
                           {classItem.name}
-
                           {classItem.section
                             ? ` — شعبة ${classItem.section}`
                             : ""}
-
                           {classItem.academic_year
                             ? ` — ${classItem.academic_year}`
                             : ""}
@@ -871,7 +830,6 @@ export default function StudentTransfersPage() {
                 {/* Date */}
                 <Field label="تاريخ النقل">
                   <div className="relative">
-
                     <CalendarDays
                       size={19}
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
@@ -887,7 +845,6 @@ export default function StudentTransfersPage() {
                       }
                       className="input pr-11"
                     />
-
                   </div>
                 </Field>
 
@@ -902,7 +859,6 @@ export default function StudentTransfersPage() {
                     className="input"
                   />
                 </Field>
-
               </div>
 
               {destinationInstitute && (
@@ -916,7 +872,6 @@ export default function StudentTransfersPage() {
 
               {/* Actions */}
               <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-6 sm:flex-row">
-
                 <button
                   type="button"
                   onClick={executeTransfer}
@@ -951,13 +906,10 @@ export default function StudentTransfersPage() {
                 >
                   إلغاء
                 </button>
-
               </div>
-
             </section>
           </>
         )}
-
       </div>
 
       <style jsx>{`
