@@ -53,6 +53,9 @@ export default function ParentPage() {
     setError("");
 
     try {
+      // --------------------------------------------------
+      // 1) Get logged-in user
+      // --------------------------------------------------
       const {
         data: { user },
         error: userError,
@@ -64,6 +67,9 @@ export default function ParentPage() {
         return;
       }
 
+      // --------------------------------------------------
+      // 2) Load parent profile
+      // --------------------------------------------------
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("id, full_name, phone, email, role")
@@ -71,6 +77,8 @@ export default function ParentPage() {
         .single();
 
       if (profileError || !profileData) {
+        console.error("Parent profile error:", profileError);
+
         setError("لم يتم العثور على بيانات ولي الأمر");
         setLoading(false);
         return;
@@ -84,41 +92,73 @@ export default function ParentPage() {
 
       setProfile(profileData);
 
-      const { data: studentsData, error: studentsError } = await supabase
-        .from("students")
-        .select(
-          "id, full_name, student_code, gender, date_of_birth, institute_id, class_id, is_active"
-        )
-        .eq("parent_id", user.id)
-        .order("full_name");
+      // --------------------------------------------------
+      // 3) Load students linked to this parent
+      // --------------------------------------------------
+      const { data: studentsData, error: studentsError } =
+        await supabase
+          .from("students")
+          .select(
+            "id, full_name, student_code, gender, date_of_birth, institute_id, class_id, is_active"
+          )
+          .eq("parent_id", user.id)
+          .order("full_name");
 
       if (studentsError) {
         console.error("Students error:", studentsError);
+
         setError("تعذر تحميل بيانات الأبناء");
         setLoading(false);
         return;
       }
 
       const loadedStudents = studentsData || [];
+
       setStudents(loadedStudents);
 
+      // --------------------------------------------------
+      // 4) Load institutes connected to the students
+      // --------------------------------------------------
       if (loadedStudents.length > 0) {
         const instituteIds = [
-          ...new Set(loadedStudents.map((student) => student.institute_id)),
+          ...new Set(
+            loadedStudents
+              .map((student) => student.institute_id)
+              .filter(Boolean)
+          ),
         ];
 
-        const { data: institutesData } = await supabase
-          .from("institutes")
-          .select("id, name, code")
-          .in("id", instituteIds);
+        if (instituteIds.length > 0) {
+          const {
+            data: institutesData,
+            error: institutesError,
+          } = await supabase
+            .from("institutes")
+            .select("id, name, code")
+            .in("id", instituteIds);
 
-        const instituteMap: Record<string, Institute> = {};
+          if (institutesError) {
+            console.error(
+              "Institutes load error:",
+              institutesError
+            );
 
-        (institutesData || []).forEach((institute) => {
-          instituteMap[institute.id] = institute;
-        });
+            setError(
+              "تم تحميل بيانات الأبناء، ولكن تعذر تحميل بيانات المعهد. " +
+                institutesError.message
+            );
 
-        setInstitutes(instituteMap);
+            setInstitutes({});
+          } else {
+            const instituteMap: Record<string, Institute> = {};
+
+            (institutesData || []).forEach((institute) => {
+              instituteMap[institute.id] = institute;
+            });
+
+            setInstitutes(instituteMap);
+          }
+        }
       }
     } catch (err) {
       console.error("Parent dashboard error:", err);
@@ -128,6 +168,9 @@ export default function ParentPage() {
     }
   }
 
+  // --------------------------------------------------
+  // Loading
+  // --------------------------------------------------
   if (loading) {
     return (
       <main
@@ -142,6 +185,9 @@ export default function ParentPage() {
     );
   }
 
+  // --------------------------------------------------
+  // Dashboard
+  // --------------------------------------------------
   return (
     <main dir="rtl" className="min-h-screen bg-slate-100">
       {/* Header */}
@@ -166,6 +212,7 @@ export default function ParentPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Error */}
         {error && (
           <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
             {error}
@@ -174,10 +221,14 @@ export default function ParentPage() {
 
         {/* Statistics */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+          {/* Linked children */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">الأبناء المرتبطون</p>
+                <p className="text-sm text-slate-500">
+                  الأبناء المرتبطون
+                </p>
+
                 <p className="text-3xl font-bold text-slate-800 mt-2">
                   {students.length}
                 </p>
@@ -189,12 +240,20 @@ export default function ParentPage() {
             </div>
           </div>
 
+          {/* Active children */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">الأبناء النشطون</p>
+                <p className="text-sm text-slate-500">
+                  الأبناء النشطون
+                </p>
+
                 <p className="text-3xl font-bold text-slate-800 mt-2">
-                  {students.filter((student) => student.is_active).length}
+                  {
+                    students.filter(
+                      (student) => student.is_active
+                    ).length
+                  }
                 </p>
               </div>
 
@@ -204,10 +263,14 @@ export default function ParentPage() {
             </div>
           </div>
 
+          {/* Attendance */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">الحضور والغياب</p>
+                <p className="text-sm text-slate-500">
+                  الحضور والغياب
+                </p>
+
                 <p className="text-sm font-semibold text-slate-700 mt-2">
                   متابعة الأبناء
                 </p>
@@ -219,10 +282,14 @@ export default function ParentPage() {
             </div>
           </div>
 
+          {/* Complaints */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">الشكاوى</p>
+                <p className="text-sm text-slate-500">
+                  الشكاوى
+                </p>
+
                 <p className="text-sm font-semibold text-slate-700 mt-2">
                   تقديم ومتابعة الشكاوى
                 </p>
@@ -264,14 +331,15 @@ export default function ParentPage() {
               </h3>
 
               <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-                عند قيام إدارة المعهد بربط أحد الأبناء بهذا الحساب،
-                ستظهر بياناته هنا تلقائيًا.
+                عند قيام إدارة المعهد بربط أحد الأبناء بهذا
+                الحساب، ستظهر بياناته هنا تلقائيًا.
               </p>
             </div>
           ) : (
             <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-5">
               {students.map((student) => {
-                const institute = institutes[student.institute_id];
+                const institute =
+                  institutes[student.institute_id];
 
                 return (
                   <div
@@ -298,27 +366,40 @@ export default function ParentPage() {
                             : "bg-slate-100 text-slate-500"
                         }`}
                       >
-                        {student.is_active ? "نشط" : "غير نشط"}
+                        {student.is_active
+                          ? "نشط"
+                          : "غير نشط"}
                       </span>
                     </div>
 
                     <div className="mt-5 space-y-3">
-                      <div className="flex items-center gap-3 text-sm">
-                        <BookOpen size={18} className="text-slate-400" />
+                      {/* Institute */}
+                      <div className="flex items-start gap-3 text-sm">
+                        <BookOpen
+                          size={18}
+                          className="text-slate-400 mt-0.5 shrink-0"
+                        />
+
                         <span className="text-slate-600">
                           المعهد:
                         </span>
+
                         <span className="font-semibold text-slate-800">
                           {institute?.name || "غير محدد"}
                         </span>
                       </div>
 
+                      {/* Institute code */}
                       {institute?.code && (
                         <div className="text-sm text-slate-500">
-                          كود المعهد: {institute.code}
+                          كود المعهد:{" "}
+                          <span className="font-semibold text-slate-700">
+                            {institute.code}
+                          </span>
                         </div>
                       )}
 
+                      {/* Gender */}
                       {student.gender && (
                         <div className="text-sm text-slate-600">
                           النوع:{" "}
@@ -328,6 +409,7 @@ export default function ParentPage() {
                         </div>
                       )}
 
+                      {/* Date of birth */}
                       {student.date_of_birth && (
                         <div className="text-sm text-slate-600">
                           تاريخ الميلاد:{" "}
@@ -338,6 +420,7 @@ export default function ParentPage() {
                       )}
                     </div>
 
+                    {/* Actions */}
                     <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 gap-3">
                       <button
                         type="button"
