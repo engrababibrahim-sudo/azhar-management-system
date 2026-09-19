@@ -21,12 +21,6 @@ type Profile = {
   directorate_id: string | null;
 };
 
-type ParentProfile = {
-  id: string;
-  full_name: string;
-  phone: string | null;
-  email: string | null;
-};
 
 type Institute = {
   id: string;
@@ -60,7 +54,11 @@ export default function StudentsPage() {
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
-  const [parents, setParents] = useState<ParentProfile[]>([]);
+
+  // الربط التلقائي لولي الأمر عن طريق رقم الهاتف
+  const [parentLookupLoading, setParentLookupLoading] = useState(false);
+  const [parentLookupMessage, setParentLookupMessage] = useState("");
+  const [parentLookupType, setParentLookupType] = useState<"success" | "warning" | "">("");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -158,9 +156,6 @@ export default function StudentsPage() {
         // 4 - تحميل الفصول والطلاب
         await loadClassesAndStudents(profileData.institute_id);
 
-        // 5 - تحميل حسابات أولياء الأمور
-        await loadParents();
-
         return;
       }
 
@@ -183,29 +178,6 @@ export default function StudentsPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  // ==========================================
-  // تحميل حسابات أولياء الأمور
-  // ==========================================
-
-  async function loadParents() {
-    const { data, error: parentsError } = await supabase
-      .from("profiles")
-      .select("id, full_name, phone, email")
-      .eq("role", "parent")
-      .order("full_name");
-
-    if (parentsError) {
-      console.error("PARENTS LOAD ERROR:", parentsError);
-
-      throw new Error(
-        "تعذر تحميل حسابات أولياء الأمور: " +
-          parentsError.message
-      );
-    }
-
-    setParents(data || []);
   }
 
   // ==========================================
@@ -314,41 +286,69 @@ export default function StudentsPage() {
   }
 
   // ==========================================
-  // اسم ولي الأمر المرتبط
+  // البحث التلقائي عن حساب ولي الأمر
   // ==========================================
 
-  function getParentName(parentId: string | null) {
-    if (!parentId) return null;
+  async function lookupParentByPhone(value: string) {
+    const normalizedPhone = value.trim();
 
-    const parent = parents.find(
-      (item) => item.id === parentId
-    );
+    setParentLookupMessage("");
+    setParentLookupType("");
+    setParentId("");
 
-    return parent?.full_name || null;
-  }
-
-  // ==========================================
-  // اختيار ولي الأمر
-  // ==========================================
-
-  function handleParentChange(value: string) {
-    setParentId(value);
-
-    if (!value) {
+    if (!normalizedPhone) {
       return;
     }
 
-    const selectedParent = parents.find(
-      (parent) => parent.id === value
-    );
-
-    if (!selectedParent) {
+    if (normalizedPhone.length < 8) {
+      setParentLookupMessage(
+        "أدخل رقم هاتف ولي الأمر بشكل كامل للبحث عن الحساب."
+      );
+      setParentLookupType("warning");
       return;
     }
 
-    // تعبئة بيانات ولي الأمر تلقائيًا
-    setGuardianName(selectedParent.full_name || "");
-    setGuardianPhone(selectedParent.phone || "");
+    setParentLookupLoading(true);
+
+    try {
+      const { data, error: parentError } = await supabase
+        .from("profiles")
+        .select("id, full_name, phone, email")
+        .eq("role", "parent")
+        .eq("phone", normalizedPhone)
+        .maybeSingle();
+
+      if (parentError) {
+        console.error("PARENT LOOKUP ERROR:", parentError);
+        throw new Error(
+          "تعذر البحث عن حساب ولي الأمر: " + parentError.message
+        );
+      }
+
+      if (!data) {
+        setParentLookupMessage(
+          "لم يتم العثور على حساب ولي أمر بهذا الرقم. سيتم حفظ الطالب بدون ربط حاليًا."
+        );
+        setParentLookupType("warning");
+        return;
+      }
+
+      setParentId(data.id);
+      setGuardianName(data.full_name || "");
+      setGuardianPhone(data.phone || normalizedPhone);
+
+      setParentLookupMessage(
+        `تم العثور على حساب ولي الأمر "${data.full_name || "ولي الأمر"}" وربط الطالب به تلقائيًا.`
+      );
+      setParentLookupType("success");
+    } catch (err: any) {
+      setParentLookupMessage(
+        err.message || "حدث خطأ أثناء البحث عن حساب ولي الأمر."
+      );
+      setParentLookupType("warning");
+    } finally {
+      setParentLookupLoading(false);
+    }
   }
 
   // ==========================================
@@ -364,6 +364,9 @@ export default function StudentsPage() {
     setGuardianPhone("");
     setClassId("");
     setParentId("");
+    setParentLookupLoading(false);
+    setParentLookupMessage("");
+    setParentLookupType("");
   }
 
   // ==========================================
@@ -391,6 +394,31 @@ export default function StudentsPage() {
     setSaving(true);
 
     try {
+      let resolvedParentId = parentId;
+
+      if (guardianPhone.trim() && !resolvedParentId) {
+        const normalizedPhone = guardianPhone.trim();
+
+        const { data: parentData, error: parentError } = await supabase
+          .from("profiles")
+          .select("id, full_name, phone, email")
+          .eq("role", "parent")
+          .eq("phone", normalizedPhone)
+          .maybeSingle();
+
+        if (parentError) {
+          throw new Error(
+            "تعذر التحقق من حساب ولي الأمر: " + parentError.message
+          );
+        }
+
+        if (parentData) {
+          resolvedParentId = parentData.id;
+          setParentId(parentData.id);
+          setGuardianName(parentData.full_name || "");
+        }
+      }
+
       const { data, error: insertError } =
         await supabase
           .from("students")
@@ -405,7 +433,7 @@ export default function StudentsPage() {
               guardianName.trim() || null,
             guardian_phone:
               guardianPhone.trim() || null,
-            parent_id: parentId || null,
+            parent_id: resolvedParentId || null,
             is_active: true,
           })
           .select()
@@ -426,9 +454,9 @@ export default function StudentsPage() {
       }
 
       setSuccess(
-        parentId
-          ? "تم حفظ الطالب وربطه بحساب ولي الأمر بنجاح."
-          : "تم حفظ الطالب بنجاح."
+        resolvedParentId
+          ? "تم حفظ الطالب وربطه بحساب ولي الأمر تلقائيًا بنجاح."
+          : "تم حفظ الطالب بنجاح. لم يتم العثور على حساب ولي أمر بهذا الرقم."
       );
 
       resetForm();
@@ -459,8 +487,6 @@ export default function StudentsPage() {
       await loadClassesAndStudents(
         profile.institute_id
       );
-
-      await loadParents();
 
       setSuccess("تم تحديث البيانات.");
     } catch (err: any) {
@@ -777,10 +803,7 @@ export default function StudentsPage() {
                   {filteredStudents.map(
                     (student) => {
 
-                      const linkedParent =
-                        getParentName(
-                          student.parent_id
-                        );
+                      const linkedParent = student.parent_id;
 
                       return (
                         <tr
@@ -822,7 +845,7 @@ export default function StudentsPage() {
 
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
                                 <UserRound className="w-3.5 h-3.5" />
-                                مرتبط
+                                مرتبط تلقائيًا
                               </span>
 
                             ) : (
@@ -1034,62 +1057,59 @@ export default function StudentsPage() {
 
                 </div>
 
-                {/* ولي الأمر المرتبط */}
-
+                {/* الربط التلقائي لولي الأمر */}
                 <div className="md:col-span-2">
-
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-
-                    حساب ولي الأمر
-
+                    ربط ولي الأمر تلقائيًا
                   </label>
 
-                  <select
-                    value={parentId}
-                    onChange={(e) =>
-                      handleParentChange(
-                        e.target.value
-                      )
-                    }
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                  >
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <p className="text-sm text-slate-600 leading-6">
+                      أدخل رقم هاتف ولي الأمر. سيبحث النظام تلقائيًا عن حساب
+                      ولي الأمر بهذا الرقم، وإذا وُجد سيتم ربط الطالب به مباشرة.
+                    </p>
 
-                    <option value="">
-                      بدون ربط حاليًا
-                    </option>
+                    <div className="mt-3 flex flex-col md:flex-row gap-3">
+                      <input
+                        value={guardianPhone}
+                        onChange={(e) => {
+                          setGuardianPhone(e.target.value);
+                          setParentId("");
+                          setParentLookupMessage("");
+                          setParentLookupType("");
+                        }}
+                        onBlur={() => lookupParentByPhone(guardianPhone)}
+                        placeholder="رقم هاتف ولي الأمر"
+                        className="flex-1 border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                        inputMode="tel"
+                      />
 
-                    {parents.map((parent) => (
-
-                      <option
-                        key={parent.id}
-                        value={parent.id}
+                      <button
+                        type="button"
+                        onClick={() => lookupParentByPhone(guardianPhone)}
+                        disabled={
+                          parentLookupLoading || !guardianPhone.trim()
+                        }
+                        className="px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold"
                       >
-                        {parent.full_name}
-                        {parent.email
-                          ? ` — ${parent.email}`
-                          : ""}
-                      </option>
+                        {parentLookupLoading
+                          ? "جاري البحث..."
+                          : "بحث تلقائي"}
+                      </button>
+                    </div>
 
-                    ))}
-
-                  </select>
-
-                  {parents.length === 0 ? (
-
-                    <p className="text-xs text-amber-600 mt-2">
-                      لا توجد حسابات أولياء أمور متاحة حاليًا.
-                      يمكن إضافة الحساب لاحقًا.
-                    </p>
-
-                  ) : (
-
-                    <p className="text-xs text-slate-400 mt-2">
-                      عند اختيار ولي الأمر سيتم ربط الطالب
-                      بحسابه مباشرة.
-                    </p>
-
-                  )}
-
+                    {parentLookupMessage && (
+                      <p
+                        className={`mt-3 text-sm font-medium ${
+                          parentLookupType === "success"
+                            ? "text-green-700"
+                            : "text-amber-700"
+                        }`}
+                      >
+                        {parentLookupMessage}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* هاتف الطالب */}
@@ -1125,25 +1145,6 @@ export default function StudentsPage() {
                       setGuardianName(e.target.value)
                     }
                     placeholder="اسم ولي الأمر"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-
-                </div>
-
-                {/* هاتف ولي الأمر */}
-
-                <div className="md:col-span-2">
-
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    هاتف ولي الأمر
-                  </label>
-
-                  <input
-                    value={guardianPhone}
-                    onChange={(e) =>
-                      setGuardianPhone(e.target.value)
-                    }
-                    placeholder="رقم هاتف ولي الأمر"
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
 
