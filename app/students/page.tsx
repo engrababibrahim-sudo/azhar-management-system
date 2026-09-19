@@ -10,6 +10,7 @@ import {
   Loader2,
   RefreshCw,
   UserRound,
+  Pencil,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase/client";
 
@@ -70,6 +71,7 @@ export default function StudentsPage() {
   const [selectedClass, setSelectedClass] = useState("all");
 
   const [showForm, setShowForm] = useState(false);
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
 
   // بيانات الطالب الجديد
   const [studentCode, setStudentCode] = useState("");
@@ -355,6 +357,28 @@ export default function StudentsPage() {
   // تنظيف النموذج
   // ==========================================
 
+  function openEditStudent(student: Student) {
+    setError("");
+    setSuccess("");
+    setEditingStudentId(student.id);
+    setStudentCode(student.student_code || "");
+    setStudentName(student.full_name || "");
+    setGender(student.gender || "");
+    setPhone(student.phone || "");
+    setGuardianName(student.guardian_name || "");
+    setGuardianPhone(student.guardian_phone || "");
+    setClassId(student.class_id || "");
+    setParentId(student.parent_id || "");
+    setParentLookupLoading(false);
+    setParentLookupMessage(
+      student.parent_id
+        ? "هذا الطالب مرتبط بالفعل بحساب ولي الأمر."
+        : ""
+    );
+    setParentLookupType(student.parent_id ? "success" : "");
+    setShowForm(true);
+  }
+
   function resetForm() {
     setStudentCode("");
     setStudentName("");
@@ -367,10 +391,11 @@ export default function StudentsPage() {
     setParentLookupLoading(false);
     setParentLookupMessage("");
     setParentLookupType("");
+    setEditingStudentId(null);
   }
 
   // ==========================================
-  // إضافة طالب
+  // إضافة / تعديل طالب
   // ==========================================
 
   async function handleAddStudent(
@@ -419,45 +444,73 @@ export default function StudentsPage() {
         }
       }
 
-      const { data, error: insertError } =
-        await supabase
+      const studentPayload = {
+        class_id: classId || null,
+        student_code: studentCode.trim() || null,
+        full_name: studentName.trim(),
+        gender: gender || null,
+        phone: phone.trim() || null,
+        guardian_name: guardianName.trim() || null,
+        guardian_phone: guardianPhone.trim() || null,
+        parent_id: resolvedParentId || null,
+      };
+
+      if (editingStudentId) {
+        const { data, error: updateError } = await supabase
+          .from("students")
+          .update(studentPayload)
+          .eq("id", editingStudentId)
+          .eq("institute_id", profile.institute_id)
+          .select()
+          .single();
+
+        if (updateError) {
+          throw new Error(
+            "تعذر تحديث بيانات الطالب: " + updateError.message
+          );
+        }
+
+        if (data) {
+          setStudents((prev) =>
+            prev.map((student) =>
+              student.id === editingStudentId
+                ? (data as Student)
+                : student
+            )
+          );
+        }
+
+        setSuccess("تم تحديث بيانات الطالب بنجاح.");
+      } else {
+        const { data, error: insertError } = await supabase
           .from("students")
           .insert({
             institute_id: profile.institute_id,
-            class_id: classId || null,
-            student_code: studentCode.trim() || null,
-            full_name: studentName.trim(),
-            gender: gender || null,
-            phone: phone.trim() || null,
-            guardian_name:
-              guardianName.trim() || null,
-            guardian_phone:
-              guardianPhone.trim() || null,
-            parent_id: resolvedParentId || null,
+            ...studentPayload,
             is_active: true,
           })
           .select()
           .single();
 
-      if (insertError) {
-        throw new Error(
-          "تعذر حفظ الطالب: " +
-            insertError.message
+        if (insertError) {
+          throw new Error(
+            "تعذر حفظ الطالب: " + insertError.message
+          );
+        }
+
+        if (data) {
+          setStudents((prev) => [
+            ...prev,
+            data as Student,
+          ]);
+        }
+
+        setSuccess(
+          resolvedParentId
+            ? "تم حفظ الطالب وربطه بحساب ولي الأمر تلقائيًا بنجاح."
+            : "تم حفظ الطالب بنجاح. لم يتم العثور على حساب ولي أمر بهذا الرقم."
         );
       }
-
-      if (data) {
-        setStudents((prev) => [
-          ...prev,
-          data as Student,
-        ]);
-      }
-
-      setSuccess(
-        resolvedParentId
-          ? "تم حفظ الطالب وربطه بحساب ولي الأمر تلقائيًا بنجاح."
-          : "تم حفظ الطالب بنجاح. لم يتم العثور على حساب ولي أمر بهذا الرقم."
-      );
 
       resetForm();
       setShowForm(false);
@@ -794,6 +847,10 @@ export default function StudentsPage() {
                       الحالة
                     </th>
 
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                      الإجراءات
+                    </th>
+
                   </tr>
 
                 </thead>
@@ -882,6 +939,17 @@ export default function StudentsPage() {
 
                           </td>
 
+                          <td className="px-5 py-4">
+                            <button
+                              type="button"
+                              onClick={() => openEditStudent(student)}
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition"
+                            >
+                              <Pencil className="w-4 h-4" />
+                              تعديل
+                            </button>
+                          </td>
+
                         </tr>
                       );
                     }
@@ -914,7 +982,7 @@ export default function StudentsPage() {
               <div>
 
                 <h2 className="text-xl font-bold text-slate-800">
-                  إضافة طالب جديد
+                  {editingStudentId ? "تعديل بيانات الطالب" : "إضافة طالب جديد"}
                 </h2>
 
                 <p className="text-sm text-slate-500 mt-1">
@@ -1180,6 +1248,8 @@ export default function StudentsPage() {
 
                   {saving
                     ? "جاري الحفظ..."
+                    : editingStudentId
+                    ? "حفظ التعديلات"
                     : "حفظ الطالب"}
 
                 </button>
