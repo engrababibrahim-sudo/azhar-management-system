@@ -2,2037 +2,1437 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-AlertCircle,
-ArrowDown,
-Bell,
-Check,
-ChevronDown,
-ChevronUp,
-Clock3,
-Eye,
-FileText,
-Filter,
-Loader2,
-Plus,
-RefreshCw,
-Search,
-Send,
-Trash2,
-Users,
-X,
-ArrowUp,
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  Bell,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  Eye,
+  FileText,
+  Filter,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Send,
+  Trash2,
+  Users,
+  X,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
 
 type Institute = {
-id: string;
-name: string;
-code?: string | null;
-directorate_id?: string | null;
+  id: string;
+  name: string;
+  code?: string | null;
+  directorate_id?: string | null;
 };
 
 type Profile = {
-id: string;
-role: string;
-full_name?: string | null;
-institute_id?: string | null;
-directorate_id?: string | null;
+  id: string;
+  role: string;
+  full_name?: string | null;
+  institute_id?: string | null;
+  directorate_id?: string | null;
 };
 
 type TaskTarget = {
-id: string;
-task_id: string;
-institute_id: string;
-status:
-| "pending"
-| "in_progress"
-| "submitted"
-| "completed"
-| "late";
-response?: string | null;
-responded_at?: string | null;
-created_at?: string | null;
-updated_at?: string | null;
-institute_name?: string;
+  id: string;
+  task_id: string;
+  institute_id: string;
+  status: "pending" | "in_progress" | "submitted" | "completed" | "late";
+  response?: string | null;
+  responded_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  institute_name?: string;
 };
 
 type Task = {
-id: string;
-assignment_group_id?: string | null;
-directorate_id?: string | null;
-institute_id?: string | null;
-title: string;
-description?: string | null;
-priority: "low" | "medium" | "high" | "urgent";
-status: string;
-assigned_to?: string | null;
-due_date?: string | null;
-response?: string | null;
-created_by?: string | null;
-created_at?: string | null;
-updated_at?: string | null;
+  id: string;
+  assignment_group_id?: string | null;
+  directorate_id?: string | null;
+  institute_id?: string | null;
+  title: string;
+  description?: string | null;
+  priority: "low" | "medium" | "high" | "urgent";
+  status: string;
+  assigned_to?: string | null;
+  due_date?: string | null;
+  response?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 type TaskView = Task & {
-targets: TaskTarget[];
+  targets: TaskTarget[];
 };
 
 const priorityOptions = [
-{ value: "low", label: "منخفضة" },
-{ value: "medium", label: "متوسطة" },
-{ value: "high", label: "عالية" },
-{ value: "urgent", label: "عاجلة" },
+  { value: "low", label: "منخفضة" },
+  { value: "medium", label: "متوسطة" },
+  { value: "high", label: "عالية" },
+  { value: "urgent", label: "عاجلة" },
 ] as const;
 
 const statusOptions = [
-{ value: "pending", label: "جديد" },
-{ value: "in_progress", label: "قيد التنفيذ" },
-{ value: "submitted", label: "تم التسليم" },
-{ value: "completed", label: "مكتمل" },
+  { value: "pending", label: "جديد" },
+  { value: "in_progress", label: "قيد التنفيذ" },
+  { value: "submitted", label: "تم التسليم" },
+  { value: "completed", label: "مكتمل" },
 ] as const;
 
 const HIDDEN_STORAGE_KEY = "azhar_institute_tasks_hidden_v2";
 
 function getPriorityLabel(priority?: string | null) {
-return (
-priorityOptions.find((item) => item.value === priority)?.label ??
-"متوسطة"
-);
+  return priorityOptions.find((item) => item.value === priority)?.label ?? "متوسطة";
 }
 
 function getStatusLabel(status?: string | null) {
-return (
-statusOptions.find((item) => item.value === status)?.label ??
-"جديد"
-);
+  return statusOptions.find((item) => item.value === status)?.label ?? "جديد";
 }
 
 function getPriorityClass(priority?: string | null) {
-switch (priority) {
-case "urgent":
-return "bg-red-100 text-red-700 border-red-200";
-case "high":
-return "bg-orange-100 text-orange-700 border-orange-200";
-case "low":
-return "bg-slate-100 text-slate-600 border-slate-200";
-default:
-return "bg-blue-100 text-blue-700 border-blue-200";
-}
+  switch (priority) {
+    case "urgent":
+      return "bg-red-100 text-red-700 border-red-200";
+    case "high":
+      return "bg-orange-100 text-orange-700 border-orange-200";
+    case "low":
+      return "bg-slate-100 text-slate-600 border-slate-200";
+    default:
+      return "bg-blue-100 text-blue-700 border-blue-200";
+  }
 }
 
 function getStatusClass(status?: string | null) {
-switch (status) {
-case "completed":
-return "bg-emerald-100 text-emerald-700 border-emerald-200";
-case "submitted":
-return "bg-violet-100 text-violet-700 border-violet-200";
-case "in_progress":
-return "bg-amber-100 text-amber-700 border-amber-200";
-case "late":
-return "bg-red-100 text-red-700 border-red-200";
-default:
-return "bg-sky-100 text-sky-700 border-sky-200";
-}
+  switch (status) {
+    case "completed":
+      return "bg-emerald-100 text-emerald-700 border-emerald-200";
+    case "submitted":
+      return "bg-violet-100 text-violet-700 border-violet-200";
+    case "in_progress":
+      return "bg-amber-100 text-amber-700 border-amber-200";
+    case "late":
+      return "bg-red-100 text-red-700 border-red-200";
+    default:
+      return "bg-sky-100 text-sky-700 border-sky-200";
+  }
 }
 
 function getOverallTaskStatus(targets: TaskTarget[]) {
-if (!targets.length) return "pending";
+  if (!targets.length) return "pending";
 
-if (targets.every((target) => target.status === "completed")) {
-return "completed";
-}
+  if (targets.every((target) => target.status === "completed")) {
+    return "completed";
+  }
 
-if (targets.some((target) => target.status === "submitted")) {
-return "submitted";
-}
+  if (targets.some((target) => target.status === "submitted")) {
+    return "submitted";
+  }
 
-if (targets.some((target) => target.status === "in_progress")) {
-return "in_progress";
-}
+  if (targets.some((target) => target.status === "in_progress")) {
+    return "in_progress";
+  }
 
-return "pending";
+  return "pending";
 }
 
 function getTargetCounts(targets: TaskTarget[]) {
-return {
-pending: targets.filter((target) => target.status === "pending").length,
-inProgress: targets.filter(
-(target) => target.status === "in_progress"
-).length,
-submitted: targets.filter(
-(target) => target.status === "submitted"
-).length,
-completed: targets.filter(
-(target) => target.status === "completed"
-).length,
-late: targets.filter((target) => target.status === "late").length,
-};
+  return {
+    pending: targets.filter((target) => target.status === "pending").length,
+    inProgress: targets.filter((target) => target.status === "in_progress").length,
+    submitted: targets.filter((target) => target.status === "submitted").length,
+    completed: targets.filter((target) => target.status === "completed").length,
+    late: targets.filter((target) => target.status === "late").length,
+  };
 }
 
 function isTargetOverdue(target: TaskTarget, dueDate?: string | null) {
-if (!dueDate || target.status === "completed") return false;
+  if (!dueDate || target.status === "completed") return false;
 
-const due = new Date(`${dueDate}T23:59:59`);
-return due.getTime() < Date.now();
+  const due = new Date(`${dueDate}T23:59:59`);
+  return due.getTime() < Date.now();
 }
 
 function formatDate(date?: string | null) {
-if (!date) return "غير محدد";
+  if (!date) return "غير محدد";
 
-const value = new Date(date);
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return "غير محدد";
 
-if (Number.isNaN(value.getTime())) return "غير محدد";
-
-return value.toLocaleDateString("ar-EG", {
-year: "numeric",
-month: "long",
-day: "numeric",
-});
+  return value.toLocaleDateString("ar-EG", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
 function formatCreatedDate(date?: string | null) {
-if (!date) return "غير محدد";
+  if (!date) return "غير محدد";
 
-const value = new Date(date);
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return "غير محدد";
 
-if (Number.isNaN(value.getTime())) return "غير محدد";
-
-return value.toLocaleDateString("ar-EG", {
-year: "numeric",
-month: "short",
-day: "numeric",
-});
+  return value.toLocaleDateString("ar-EG", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function createGroupId() {
-if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-return crypto.randomUUID();
-}
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
 
-return `group-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `group-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export default function InstituteTasksPage() {
-const [profile, setProfile] = useState<Profile | null>(null);
-const [institutes, setInstitutes] = useState<Institute[]>([]);
-const [tasks, setTasks] = useState<TaskView[]>([]);
-
-const [loading, setLoading] = useState(true);
-const [saving, setSaving] = useState(false);
-const [refreshing, setRefreshing] = useState(false);
-
-const [showForm, setShowForm] = useState(false);
-const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-const [showArchivedTasks, setShowArchivedTasks] = useState(false);
-
-const [updatingTargetId, setUpdatingTargetId] = useState<string | null>(
-null
-);
-const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
-const [deletingAll, setDeletingAll] = useState(false);
-
-const [hiddenTaskIds, setHiddenTaskIds] = useState<string[]>([]);
-
-const [searchTerm, setSearchTerm] = useState("");
-const [statusFilter, setStatusFilter] = useState("all");
-const [priorityFilter, setPriorityFilter] = useState("all");
-const [instituteFilter, setInstituteFilter] = useState("all");
-
-const [targetMode, setTargetMode] = useState<
-"all" | "selected" | "single"
-
-> ("single");
-
-const [selectedInstitutes, setSelectedInstitutes] = useState<string[]>([]);
-
-const [form, setForm] = useState({
-institute_id: "",
-title: "",
-description: "",
-priority: "medium" as "low" | "medium" | "high" | "urgent",
-due_date: "",
-});
-
-const isDirector =
-profile?.role === "director" || profile?.role === "super_admin";
-
-const isInstituteUser =
-profile?.role === "sheikh" ||
-profile?.role === "deputy" ||
-profile?.role === "employee";
-
-const visibleTasks = useMemo(() => {
-if (showArchivedTasks) return tasks;
-
-
-const hidden = new Set(hiddenTaskIds);
-
-return tasks.filter((task) => !hidden.has(task.id));
-
-
-}, [tasks, hiddenTaskIds, showArchivedTasks]);
-
-const filteredTasks = useMemo(() => {
-const query = searchTerm.trim().toLowerCase();
-
-
-return visibleTasks.filter((task) => {
-  const overallStatus = getOverallTaskStatus(task.targets);
-
-  const matchesSearch =
-    !query ||
-    task.title.toLowerCase().includes(query) ||
-    (task.description ?? "").toLowerCase().includes(query) ||
-    task.targets.some((target) =>
-      (target.institute_name ?? "").toLowerCase().includes(query)
-    );
-
-  const matchesStatus =
-    statusFilter === "all" || overallStatus === statusFilter;
-
-  const matchesPriority =
-    priorityFilter === "all" || task.priority === priorityFilter;
-
-  const matchesInstitute =
-    instituteFilter === "all" ||
-    task.targets.some(
-      (target) => target.institute_id === instituteFilter
-    );
-
-  return (
-    matchesSearch &&
-    matchesStatus &&
-    matchesPriority &&
-    matchesInstitute
-  );
-});
-
-
-}, [
-visibleTasks,
-searchTerm,
-statusFilter,
-priorityFilter,
-instituteFilter,
-]);
-
-const statistics = useMemo(() => {
-const total = visibleTasks.length;
-
-
-const pending = visibleTasks.filter(
-  (task) => getOverallTaskStatus(task.targets) === "pending"
-).length;
-
-const inProgress = visibleTasks.filter(
-  (task) => getOverallTaskStatus(task.targets) === "in_progress"
-).length;
-
-const submitted = visibleTasks.filter(
-  (task) => getOverallTaskStatus(task.targets) === "submitted"
-).length;
-
-const completed = visibleTasks.filter(
-  (task) => getOverallTaskStatus(task.targets) === "completed"
-).length;
-
-const urgent = visibleTasks.filter(
-  (task) =>
-    task.priority === "urgent" &&
-    getOverallTaskStatus(task.targets) !== "completed"
-).length;
-
-const overdue = visibleTasks.filter(
-  (task) =>
-    task.targets.some((target) =>
-      isTargetOverdue(target, task.due_date)
-    ) &&
-    getOverallTaskStatus(task.targets) !== "completed"
-).length;
-
-return {
-  total,
-  pending,
-  inProgress,
-  submitted,
-  urgent,
-  overdue,
-  completed,
-};
-
-
-}, [visibleTasks]);
-
-function getStoredHiddenIds() {
-if (typeof window === "undefined") return [];
-
-
-try {
-  const raw = localStorage.getItem(HIDDEN_STORAGE_KEY);
-
-  if (!raw) return [];
-
-  const parsed = JSON.parse(raw);
-
-  return Array.isArray(parsed)
-    ? parsed.filter((id) => typeof id === "string")
-    : [];
-} catch {
-  return [];
-}
-
-
-}
-
-function saveHiddenIds(ids: string[]) {
-if (typeof window === "undefined") return;
-
-
-const unique = Array.from(new Set(ids));
-
-localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(unique));
-
-setHiddenTaskIds(unique);
-
-
-}
-
-async function loadData(showSpinner = true) {
-if (showSpinner) {
-setLoading(true);
-}
-
-
-try {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError) throw authError;
-
-  if (!user) {
-    setProfile(null);
-    setTasks([]);
-    return;
-  }
-
-  const { data: profileData, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, role, full_name, institute_id, directorate_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (profileError) throw profileError;
-
-  if (!profileData) {
-    setProfile(null);
-    setTasks([]);
-    return;
-  }
-
-  const currentProfile = profileData as Profile;
-
-  setProfile(currentProfile);
-
-  const director =
-    currentProfile.role === "director" ||
-    currentProfile.role === "super_admin";
-
-  let instituteQuery = supabase
-    .from("institutes")
-    .select("id, name, code, directorate_id")
-    .order("name");
-
-  if (director) {
-    if (currentProfile.directorate_id) {
-      instituteQuery = instituteQuery.eq(
-        "directorate_id",
-        currentProfile.directorate_id
-      );
-    }
-  } else if (currentProfile.institute_id) {
-    instituteQuery = instituteQuery.eq(
-      "id",
-      currentProfile.institute_id
-    );
-  } else {
-    instituteQuery = instituteQuery.eq(
-      "id",
-      "00000000-0000-0000-0000-000000000000"
-    );
-  }
-
-  const {
-    data: instituteData,
-    error: instituteError,
-  } = await instituteQuery;
-
-  if (instituteError) throw instituteError;
-
-  const instituteList = (instituteData ?? []) as Institute[];
-
-  setInstitutes(instituteList);
-
-  const instituteIds = instituteList.map(
-    (institute) => institute.id
-  );
-
-  let targetQuery = supabase
-    .from("institute_task_targets")
-    .select(
-      "id, task_id, institute_id, status, response, responded_at, created_at, updated_at"
-    )
-    .order("created_at", { ascending: true });
-
-  if (!director) {
-    if (!currentProfile.institute_id) {
-      setTasks([]);
-      return;
-    }
-
-    targetQuery = targetQuery.eq(
-      "institute_id",
-      currentProfile.institute_id
-    );
-  } else if (instituteIds.length) {
-    targetQuery = targetQuery.in(
-      "institute_id",
-      instituteIds
-    );
-  }
-
-  const {
-    data: targetData,
-    error: targetError,
-  } = await targetQuery;
-
-  if (targetError) throw targetError;
-
-  const rawTargets = (targetData ?? []) as TaskTarget[];
-
-  const taskIds = Array.from(
-    new Set(rawTargets.map((target) => target.task_id))
-  );
-
-  let taskData: Task[] = [];
-
-  if (director) {
-    let taskQuery = supabase
-      .from("institute_tasks")
-      .select(
-        "id, assignment_group_id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
-      )
-      .order("created_at", { ascending: false });
-
-    if (currentProfile.directorate_id) {
-      taskQuery = taskQuery.eq(
-        "directorate_id",
-        currentProfile.directorate_id
-      );
-    }
-
-    const {
-      data,
-      error,
-    } = await taskQuery;
-
-    if (error) throw error;
-
-    taskData = (data ?? []) as Task[];
-  } else if (taskIds.length) {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from("institute_tasks")
-      .select(
-        "id, assignment_group_id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
-      )
-      .in("id", taskIds)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    taskData = (data ?? []) as Task[];
-  }
-
-  const missingTargetTaskIds = taskData
-    .filter(
-      (task) =>
-        !rawTargets.some(
-          (target) => target.task_id === task.id
-        )
-    )
-    .map((task) => task.id);
-
-  let extraTargets: TaskTarget[] = [];
-
-  if (director && missingTargetTaskIds.length) {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from("institute_task_targets")
-      .select(
-        "id, task_id, institute_id, status, response, responded_at, created_at, updated_at"
-      )
-      .in("task_id", missingTargetTaskIds)
-      .order("created_at", { ascending: true });
-
-    if (error) throw error;
-
-    extraTargets = (data ?? []) as TaskTarget[];
-  }
-
-  const allTargets = [
-    ...rawTargets,
-    ...extraTargets,
-  ];
-
-  const instituteMap = new Map(
-    instituteList.map((institute) => [
-      institute.id,
-      institute.name,
-    ])
-  );
-
-  const targetsWithNames = allTargets.map(
-    (target) => ({
-      ...target,
-      institute_name:
-        instituteMap.get(target.institute_id) ??
-        "معهد غير معروف",
-    })
-  );
-
-  const grouped = new Map<string, TaskView>();
-
-  for (const task of taskData) {
-    const groupKey =
-      task.assignment_group_id || task.id;
-
-    const taskTargets =
-      targetsWithNames.filter(
-        (target) =>
-          target.task_id === task.id
-      );
-
-    const existing =
-      grouped.get(groupKey);
-
-    if (existing) {
-      existing.targets = [
-        ...existing.targets,
-        ...taskTargets.filter(
-          (newTarget) =>
-            !existing.targets.some(
-              (oldTarget) =>
-                oldTarget.id ===
-                newTarget.id
-            )
-        ),
-      ];
-    } else {
-      grouped.set(groupKey, {
-        ...task,
-        targets: taskTargets,
-      });
-    }
-  }
-
-  for (const task of taskData) {
-    const groupKey =
-      task.assignment_group_id || task.id;
-
-    const group =
-      grouped.get(groupKey);
-
-    if (
-      group &&
-      group.targets.length === 0 &&
-      task.institute_id
-    ) {
-      group.targets = [
-        {
-          id: `legacy-${task.id}`,
-          task_id: task.id,
-          institute_id:
-            task.institute_id,
-          status:
-            task.status === "completed"
-              ? "completed"
-              : task.status === "submitted"
-                ? "submitted"
-                : task.status === "in_progress"
-                  ? "in_progress"
-                  : "pending",
-          response: task.response,
-          institute_name:
-            instituteMap.get(
-              task.institute_id
-            ) ?? "معهد غير معروف",
-        },
-      ];
-    }
-  }
-
-  const groupedTasks =
-    Array.from(grouped.values());
-
-  setTasks(groupedTasks);
-
-  const currentHidden =
-    getStoredHiddenIds();
-
-  const currentTaskIds =
-    groupedTasks.map(
-      (task) => task.id
-    );
-
-  if (typeof window !== "undefined") {
-    const keyExists =
-      localStorage.getItem(
-        HIDDEN_STORAGE_KEY
-      ) !== null;
-
-    if (!keyExists) {
-      saveHiddenIds([]);
-    } else {
-      const cleaned =
-        currentHidden.filter(
-          (id) =>
-            currentTaskIds.includes(
-              id
-            )
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [tasks, setTasks] = useState<TaskView[]>([]);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [showForm, setShowForm] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [showArchivedTasks, setShowArchivedTasks] = useState(false);
+
+  const [updatingTargetId, setUpdatingTargetId] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
+
+  const [hiddenTaskIds, setHiddenTaskIds] = useState<string[]>([]);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [instituteFilter, setInstituteFilter] = useState("all");
+
+  const [targetMode, setTargetMode] = useState<"all" | "selected" | "single">("single");
+  const [selectedInstitutes, setSelectedInstitutes] = useState<string[]>([]);
+
+  const [form, setForm] = useState({
+    institute_id: "",
+    title: "",
+    description: "",
+    priority: "medium" as "low" | "medium" | "high" | "urgent",
+    due_date: "",
+  });
+
+  const isDirector =
+    profile?.role === "director" || profile?.role === "super_admin";
+
+  const isInstituteUser =
+    profile?.role === "sheikh" ||
+    profile?.role === "deputy" ||
+    profile?.role === "employee";
+
+  const visibleTasks = useMemo(() => {
+    if (showArchivedTasks) return tasks;
+
+    const hidden = new Set(hiddenTaskIds);
+    return tasks.filter((task) => !hidden.has(task.id));
+  }, [tasks, hiddenTaskIds, showArchivedTasks]);
+
+  const filteredTasks = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    return visibleTasks.filter((task) => {
+      const overallStatus = getOverallTaskStatus(task.targets);
+
+      const matchesSearch =
+        !query ||
+        task.title.toLowerCase().includes(query) ||
+        (task.description ?? "").toLowerCase().includes(query) ||
+        task.targets.some((target) =>
+          (target.institute_name ?? "").toLowerCase().includes(query)
         );
 
-      saveHiddenIds(cleaned);
+      const matchesStatus =
+        statusFilter === "all" || overallStatus === statusFilter;
+
+      const matchesPriority =
+        priorityFilter === "all" || task.priority === priorityFilter;
+
+      const matchesInstitute =
+        instituteFilter === "all" ||
+        task.targets.some((target) => target.institute_id === instituteFilter);
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesInstitute
+      );
+    });
+  }, [
+    visibleTasks,
+    searchTerm,
+    statusFilter,
+    priorityFilter,
+    instituteFilter,
+  ]);
+
+  const statistics = useMemo(() => {
+    const total = visibleTasks.length;
+
+    const pending = visibleTasks.filter(
+      (task) => getOverallTaskStatus(task.targets) === "pending"
+    ).length;
+
+    const inProgress = visibleTasks.filter(
+      (task) => getOverallTaskStatus(task.targets) === "in_progress"
+    ).length;
+
+    const submitted = visibleTasks.filter(
+      (task) => getOverallTaskStatus(task.targets) === "submitted"
+    ).length;
+
+    const completed = visibleTasks.filter(
+      (task) => getOverallTaskStatus(task.targets) === "completed"
+    ).length;
+
+    const urgent = visibleTasks.filter(
+      (task) =>
+        task.priority === "urgent" &&
+        getOverallTaskStatus(task.targets) !== "completed"
+    ).length;
+
+    const overdue = visibleTasks.filter(
+      (task) =>
+        task.targets.some((target) =>
+          isTargetOverdue(target, task.due_date)
+        ) &&
+        getOverallTaskStatus(task.targets) !== "completed"
+    ).length;
+
+    return {
+      total,
+      pending,
+      inProgress,
+      submitted,
+      urgent,
+      overdue,
+      completed,
+    };
+  }, [visibleTasks]);
+
+  function getStoredHiddenIds() {
+    if (typeof window === "undefined") return [];
+
+    try {
+      const raw = localStorage.getItem(HIDDEN_STORAGE_KEY);
+      if (!raw) return [];
+
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : [];
+    } catch {
+      return [];
     }
   }
-} catch (error: any) {
-  console.error(
-    "loadData error:",
-    error
-  );
 
-  alert(
-    error?.message ??
-      "حدث خطأ أثناء تحميل التكليفات"
-  );
-} finally {
-  setLoading(false);
-  setRefreshing(false);
-}
+  function saveHiddenIds(ids: string[]) {
+    if (typeof window === "undefined") return;
 
-
-}
-
-useEffect(() => {
-loadData();
-}, []);
-
-function resetForm() {
-setForm({
-institute_id: "",
-title: "",
-description: "",
-priority: "medium",
-due_date: "",
-});
-
-
-setSelectedInstitutes([]);
-setTargetMode("single");
-
-
-}
-
-function toggleInstituteSelection(id: string) {
-setSelectedInstitutes(
-(current) =>
-current.includes(id)
-? current.filter((item) => item !== id)
-: [...current, id]
-);
-}
-
-function getSelectedTargetInstitutes() {
-if (targetMode === "all") {
-return institutes.map(
-(institute) => institute.id
-);
-}
-
-
-if (targetMode === "selected") {
-  return selectedInstitutes;
-}
-
-return form.institute_id
-  ? [form.institute_id]
-  : [];
-
-
-}
-
-async function createTask() {
-if (!profile) {
-alert(
-"لم يتم العثور على بيانات المستخدم"
-);
-return;
-}
-
-
-if (!isDirector) {
-  alert(
-    "إنشاء التكليفات متاح لمدير الإدارة فقط"
-  );
-  return;
-}
-
-if (!form.title.trim()) {
-  alert("اكتب عنوان التكليف");
-  return;
-}
-
-const targetInstitutes =
-  getSelectedTargetInstitutes();
-
-if (!targetInstitutes.length) {
-  alert(
-    "اختر معهدًا واحدًا على الأقل"
-  );
-  return;
-}
-
-setSaving(true);
-
-try {
-  const assignmentGroupId =
-    createGroupId();
-
-  const {
-    data: createdTask,
-    error: taskError,
-  } = await supabase
-    .from("institute_tasks")
-    .insert({
-      assignment_group_id:
-        assignmentGroupId,
-      directorate_id:
-        profile.directorate_id,
-      institute_id: null,
-      title:
-        form.title.trim(),
-      description:
-        form.description.trim() ||
-        null,
-      priority:
-        form.priority,
-      status: "pending",
-      due_date:
-        form.due_date || null,
-      created_by: profile.id,
-    })
-    .select(
-      "id, assignment_group_id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
-    )
-    .single();
-
-  if (taskError)
-    throw taskError;
-
-  if (!createdTask) {
-    throw new Error(
-      "تعذر إنشاء التكليف"
-    );
+    const unique = Array.from(new Set(ids));
+    localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(unique));
+    setHiddenTaskIds(unique);
   }
 
-  const targetRows =
-    targetInstitutes.map(
-      (instituteId) => ({
-        task_id:
-          createdTask.id,
-        institute_id:
-          instituteId,
-        status:
-          "pending",
-      })
-    );
+  async function loadData(showSpinner = true) {
+    if (showSpinner) setLoading(true);
 
-  const {
-    error: targetError,
-  } = await supabase
-    .from(
-      "institute_task_targets"
-    )
-    .insert(
-      targetRows
-    );
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-  if (targetError) {
-    await supabase
-      .from(
-        "institute_tasks"
-      )
-      .delete()
-      .eq(
-        "id",
-        createdTask.id
+      if (authError) throw authError;
+      if (!user) {
+        setProfile(null);
+        setTasks([]);
+        return;
+      }
+
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, role, full_name, institute_id, directorate_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+      if (!profileData) {
+        setProfile(null);
+        setTasks([]);
+        return;
+      }
+
+      const currentProfile = profileData as Profile;
+      setProfile(currentProfile);
+
+      const director =
+        currentProfile.role === "director" ||
+        currentProfile.role === "super_admin";
+
+      let instituteQuery = supabase
+        .from("institutes")
+        .select("id, name, code, directorate_id")
+        .order("name");
+
+      if (director) {
+        if (currentProfile.directorate_id) {
+          instituteQuery = instituteQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
+          );
+        }
+      } else if (currentProfile.institute_id) {
+        instituteQuery = instituteQuery.eq("id", currentProfile.institute_id);
+      } else {
+        instituteQuery = instituteQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+      }
+
+      const { data: instituteData, error: instituteError } =
+        await instituteQuery;
+
+      if (instituteError) throw instituteError;
+
+      const instituteList = (instituteData ?? []) as Institute[];
+      setInstitutes(instituteList);
+
+      const instituteIds = instituteList.map((institute) => institute.id);
+
+      let targetQuery = supabase
+        .from("institute_task_targets")
+        .select(
+          "id, task_id, institute_id, status, response, responded_at, created_at, updated_at"
+        )
+        .order("created_at", { ascending: true });
+
+      if (!director) {
+        if (!currentProfile.institute_id) {
+          setTasks([]);
+          return;
+        }
+
+        targetQuery = targetQuery.eq(
+          "institute_id",
+          currentProfile.institute_id
+        );
+      } else if (instituteIds.length) {
+        targetQuery = targetQuery.in("institute_id", instituteIds);
+      }
+
+      const { data: targetData, error: targetError } = await targetQuery;
+
+      if (targetError) throw targetError;
+
+      const rawTargets = (targetData ?? []) as TaskTarget[];
+
+      const taskIds = Array.from(
+        new Set(rawTargets.map((target) => target.task_id))
       );
 
-    throw targetError;
-  }
+      let taskData: Task[] = [];
 
-  alert(
-    `تم إنشاء التكليف بنجاح وإرساله إلى ${targetInstitutes.length} معهد`
-  );
+      if (director) {
+        let taskQuery = supabase
+          .from("institute_tasks")
+          .select(
+            "id, assignment_group_id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
+          )
+          .order("created_at", { ascending: false });
 
-  resetForm();
-  setShowForm(false);
-
-  await loadData(false);
-} catch (error: any) {
-  console.error(
-    "createTask error:",
-    error
-  );
-
-  alert(
-    error?.message ??
-      "حدث خطأ أثناء إنشاء التكليف"
-  );
-} finally {
-  setSaving(false);
-}
-
-
-}
-
-function hideTask(taskId: string) {
-saveHiddenIds([
-...hiddenTaskIds,
-taskId,
-]);
-
-
-setExpandedTaskId(
-  (current) =>
-    current === taskId
-      ? null
-      : current
-);
-
-
-}
-
-function restoreTask(taskId: string) {
-saveHiddenIds(
-hiddenTaskIds.filter(
-(id) => id !== taskId
-)
-);
-}
-
-async function deleteTask(task: TaskView) {
-if (!isDirector) return;
-
-
-const confirmed =
-  window.confirm(
-    "هل أنت متأكد من حذف هذا التكليف نهائيًا؟ سيتم حذف التكليف بالكامل وجميع حالات المتابعة المرتبطة به من قاعدة البيانات."
-  );
-
-if (!confirmed) return;
-
-setDeletingTaskId(
-  task.id
-);
-
-try {
-  let deleteQuery =
-    supabase
-      .from(
-        "institute_tasks"
-      )
-      .delete();
-
-  if (
-    task.assignment_group_id
-  ) {
-    deleteQuery =
-      deleteQuery.eq(
-        "assignment_group_id",
-        task.assignment_group_id
-      );
-  } else {
-    deleteQuery =
-      deleteQuery.eq(
-        "id",
-        task.id
-      );
-  }
-
-  const {
-    error,
-  } = await deleteQuery;
-
-  if (error) {
-    throw error;
-  }
-
-  const deletedIds =
-    tasks
-      .filter((item) => {
-        if (
-          task.assignment_group_id
-        ) {
-          return (
-            item.assignment_group_id ===
-            task.assignment_group_id
+        if (currentProfile.directorate_id) {
+          taskQuery = taskQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
           );
         }
 
-        return (
-          item.id === task.id
-        );
-      })
-      .map(
-        (item) => item.id
+        const { data, error } = await taskQuery;
+        if (error) throw error;
+
+        taskData = (data ?? []) as Task[];
+      } else if (taskIds.length) {
+        const { data, error } = await supabase
+          .from("institute_tasks")
+          .select(
+            "id, assignment_group_id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
+          )
+          .in("id", taskIds)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        taskData = (data ?? []) as Task[];
+      }
+
+      const missingTargetTaskIds = taskData
+        .filter((task) => !rawTargets.some((target) => target.task_id === task.id))
+        .map((task) => task.id);
+
+      let extraTargets: TaskTarget[] = [];
+
+      if (director && missingTargetTaskIds.length) {
+        const { data, error } = await supabase
+          .from("institute_task_targets")
+          .select(
+            "id, task_id, institute_id, status, response, responded_at, created_at, updated_at"
+          )
+          .in("task_id", missingTargetTaskIds)
+          .order("created_at", { ascending: true });
+
+        if (error) throw error;
+
+        extraTargets = (data ?? []) as TaskTarget[];
+      }
+
+      const allTargets = [...rawTargets, ...extraTargets];
+
+      const instituteMap = new Map(
+        instituteList.map((institute) => [institute.id, institute.name])
       );
 
-  setTasks(
-    (current) =>
-      current.filter(
-        (item) => {
-          if (
-            task.assignment_group_id
-          ) {
+      const targetsWithNames = allTargets.map((target) => ({
+        ...target,
+        institute_name:
+          instituteMap.get(target.institute_id) ?? "معهد غير معروف",
+      }));
+
+      const grouped = new Map<string, TaskView>();
+
+      for (const task of taskData) {
+        const groupKey = task.assignment_group_id || task.id;
+        const taskTargets = targetsWithNames.filter(
+          (target) => target.task_id === task.id
+        );
+
+        const existing = grouped.get(groupKey);
+
+        if (existing) {
+          existing.targets = [
+            ...existing.targets,
+            ...taskTargets.filter(
+              (newTarget) =>
+                !existing.targets.some(
+                  (oldTarget) => oldTarget.id === newTarget.id
+                )
+            ),
+          ];
+        } else {
+          grouped.set(groupKey, {
+            ...task,
+            targets: taskTargets,
+          });
+        }
+      }
+
+      for (const task of taskData) {
+        const groupKey = task.assignment_group_id || task.id;
+        const group = grouped.get(groupKey);
+
+        if (group && group.targets.length === 0 && task.institute_id) {
+          group.targets = [
+            {
+              id: `legacy-${task.id}`,
+              task_id: task.id,
+              institute_id: task.institute_id,
+              status:
+                task.status === "completed"
+                  ? "completed"
+                  : task.status === "submitted"
+                    ? "submitted"
+                    : task.status === "in_progress"
+                      ? "in_progress"
+                      : "pending",
+              response: task.response,
+              institute_name:
+                instituteMap.get(task.institute_id) ?? "معهد غير معروف",
+            },
+          ];
+        }
+      }
+
+      setTasks(Array.from(grouped.values()));
+
+      const currentHidden = getStoredHiddenIds();
+      const currentTaskIds = Array.from(grouped.values()).map((task) => task.id);
+
+      if (typeof window !== "undefined") {
+        const keyExists = localStorage.getItem(HIDDEN_STORAGE_KEY) !== null;
+
+        if (!keyExists) {
+          saveHiddenIds(currentTaskIds);
+          setShowArchivedTasks(false);
+        } else {
+          const cleaned = currentHidden.filter((id) =>
+            currentTaskIds.includes(id)
+          );
+          saveHiddenIds(cleaned);
+        }
+      }
+    } catch (error: any) {
+      console.error("loadData error:", error);
+      alert(error?.message ?? "حدث خطأ أثناء تحميل التكليفات");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  function resetForm() {
+    setForm({
+      institute_id: "",
+      title: "",
+      description: "",
+      priority: "medium",
+      due_date: "",
+    });
+    setSelectedInstitutes([]);
+    setTargetMode("single");
+  }
+
+  function toggleInstituteSelection(id: string) {
+    setSelectedInstitutes((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
+    );
+  }
+
+  function getSelectedTargetInstitutes() {
+    if (targetMode === "all") {
+      return institutes.map((institute) => institute.id);
+    }
+
+    if (targetMode === "selected") {
+      return selectedInstitutes;
+    }
+
+    return form.institute_id ? [form.institute_id] : [];
+  }
+
+  async function createTask() {
+    if (!profile) {
+      alert("لم يتم العثور على بيانات المستخدم");
+      return;
+    }
+
+    if (!isDirector) {
+      alert("إنشاء التكليفات متاح لمدير الإدارة فقط");
+      return;
+    }
+
+    if (!form.title.trim()) {
+      alert("اكتب عنوان التكليف");
+      return;
+    }
+
+    const targetInstitutes = getSelectedTargetInstitutes();
+
+    if (!targetInstitutes.length) {
+      alert("اختر معهدًا واحدًا على الأقل");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const assignmentGroupId = createGroupId();
+
+      const { data: createdTask, error: taskError } = await supabase
+        .from("institute_tasks")
+        .insert({
+          assignment_group_id: assignmentGroupId,
+          directorate_id: profile.directorate_id,
+          institute_id: null,
+          title: form.title.trim(),
+          description: form.description.trim() || null,
+          priority: form.priority,
+          status: "pending",
+          due_date: form.due_date || null,
+          created_by: profile.id,
+        })
+        .select(
+          "id, assignment_group_id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
+        )
+        .single();
+
+      if (taskError) throw taskError;
+      if (!createdTask) throw new Error("تعذر إنشاء التكليف");
+
+      const targetRows = targetInstitutes.map((instituteId) => ({
+        task_id: createdTask.id,
+        institute_id: instituteId,
+        status: "pending",
+      }));
+
+      const { error: targetError } = await supabase
+        .from("institute_task_targets")
+        .insert(targetRows);
+
+      if (targetError) {
+        await supabase.from("institute_tasks").delete().eq("id", createdTask.id);
+        throw targetError;
+      }
+
+      alert(
+        `تم إنشاء تكليف واحد بنجاح وإرساله إلى ${targetInstitutes.length} معهد`
+      );
+
+      resetForm();
+      setShowForm(false);
+      await loadData(false);
+    } catch (error: any) {
+      console.error("createTask error:", error);
+      alert(error?.message ?? "حدث خطأ أثناء إنشاء التكليف");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function hideTask(taskId: string) {
+    const next = [...hiddenTaskIds, taskId];
+    saveHiddenIds(next);
+    setExpandedTaskId((current) => (current === taskId ? null : current));
+  }
+
+  function restoreTask(taskId: string) {
+    saveHiddenIds(hiddenTaskIds.filter((id) => id !== taskId));
+  }
+
+  async function deleteTask(task: TaskView) {
+    if (!isDirector) return;
+
+    const confirmed = window.confirm(
+      "هل أنت متأكد من حذف هذا التكليف نهائيًا؟ سيتم حذف التكليف بالكامل وجميع سجلات المتابعة المرتبطة به من قاعدة البيانات."
+    );
+
+    if (!confirmed) return;
+
+    setDeletingTaskId(task.id);
+
+    try {
+      let deleteQuery = supabase
+        .from("institute_tasks")
+        .delete()
+        .select("id");
+
+      if (task.assignment_group_id) {
+        deleteQuery = deleteQuery.eq(
+          "assignment_group_id",
+          task.assignment_group_id
+        );
+      } else {
+        deleteQuery = deleteQuery.eq("id", task.id);
+      }
+
+      const { data: deletedRows, error } = await deleteQuery;
+
+      if (error) {
+        throw error;
+      }
+
+      if (!deletedRows || deletedRows.length === 0) {
+        throw new Error(
+          "لم يتم حذف التكليف من قاعدة البيانات. غالبًا توجد مشكلة في صلاحية DELETE الخاصة بمدير الإدارة (RLS)."
+        );
+      }
+
+      const deletedIds = tasks
+        .filter((item) => {
+          if (task.assignment_group_id) {
+            return (
+              item.assignment_group_id ===
+              task.assignment_group_id
+            );
+          }
+
+          return item.id === task.id;
+        })
+        .map((item) => item.id);
+
+      setTasks((current) =>
+        current.filter((item) => {
+          if (task.assignment_group_id) {
             return (
               item.assignment_group_id !==
               task.assignment_group_id
             );
           }
 
-          return (
-            item.id !==
-            task.id
-          );
-        }
-      )
-  );
+          return item.id !== task.id;
+        })
+      );
 
-  saveHiddenIds(
-    hiddenTaskIds.filter(
-      (id) =>
-        !deletedIds.includes(
-          id
+      saveHiddenIds(
+        hiddenTaskIds.filter(
+          (id) => !deletedIds.includes(id)
         )
-    )
-  );
+      );
 
-  setExpandedTaskId(null);
+      setExpandedTaskId(null);
 
-  alert(
-    "تم حذف التكليف بالكامل بنجاح."
-  );
-} catch (error: any) {
-  console.error(
-    "deleteTask error:",
-    error
-  );
+      alert("تم حذف التكليف نهائيًا من قاعدة البيانات بنجاح.");
+    } catch (error: any) {
+      console.error("deleteTask error:", error);
 
-  alert(
-    error?.message ??
-      "تعذر حذف التكليف."
-  );
-} finally {
-  setDeletingTaskId(
-    null
-  );
-}
-
-
-}
-
-async function deleteAllTasks() {
-if (
-!isDirector ||
-!visibleTasks.length
-) {
-return;
-}
-
-
-const confirmed =
-  window.confirm(
-    "سيتم إخفاء التكليفات الحالية من الصفحة فقط، ولن يتم حذف أي بيانات من قاعدة البيانات. هل تريد المتابعة؟"
-  );
-
-if (!confirmed)
-  return;
-
-setDeletingAll(true);
-
-try {
-  const ids =
-    visibleTasks.map(
-      (task) => task.id
-    );
-
-  saveHiddenIds([
-    ...hiddenTaskIds,
-    ...ids,
-  ]);
-
-  setExpandedTaskId(null);
-
-  alert(
-    "تم تنظيف عرض الصفحة فقط. بيانات التكليفات ما زالت محفوظة في قاعدة البيانات."
-  );
-} finally {
-  setDeletingAll(false);
-}
-
-
-}
-
-async function updateTargetStatus(
-task: TaskView,
-target: TaskTarget,
-status: TaskTarget["status"]
-) {
-if (
-target.id.startsWith(
-"legacy-"
-)
-) {
-alert(
-"هذا تكليف قديم لا يحتوي على سجل متابعة للمعهد."
-);
-return;
-}
-
-
-if (
-  !isDirector &&
-  !isInstituteUser
-) {
-  return;
-}
-
-if (
-  isInstituteUser &&
-  profile?.institute_id !==
-    target.institute_id
-) {
-  return;
-}
-
-if (
-  isDirector &&
-  status !== "completed"
-) {
-  return;
-}
-
-setUpdatingTargetId(
-  target.id
-);
-
-try {
-  const updatePayload: Record<
-    string,
-    any
-  > = {
-    status,
-    updated_at:
-      new Date().toISOString(),
-  };
-
-  if (
-    status === "submitted"
-  ) {
-    updatePayload.responded_at =
-      new Date().toISOString();
+      alert(
+        error?.message ??
+          "تعذر حذف التكليف من قاعدة البيانات."
+      );
+    } finally {
+      setDeletingTaskId(null);
+    }
   }
 
-  if (
-    status === "completed"
-  ) {
-    updatePayload.responded_at =
-      target.responded_at ??
-      new Date().toISOString();
-  }
+  async function deleteAllTasks() {
+    if (!isDirector || !visibleTasks.length) return;
 
-  const {
-    error: targetError,
-  } = await supabase
-    .from(
-      "institute_task_targets"
-    )
-    .update(
-      updatePayload
-    )
-    .eq(
-      "id",
-      target.id
+    const confirmed = window.confirm(
+      "سيتم إخفاء التكليفات الحالية من الصفحة فقط، ولن يتم حذف أي بيانات من قاعدة البيانات. هل تريد المتابعة؟"
     );
 
-  if (targetError)
-    throw targetError;
+    if (!confirmed) return;
 
-  const updatedTargets =
-    task.targets.map(
-      (item) =>
+    setDeletingAll(true);
+
+    try {
+      const ids = visibleTasks.map((task) => task.id);
+      saveHiddenIds([...hiddenTaskIds, ...ids]);
+      setExpandedTaskId(null);
+      alert("تم تنظيف عرض الصفحة فقط. بيانات التكليفات ما زالت محفوظة في قاعدة البيانات.");
+    } finally {
+      setDeletingAll(false);
+    }
+  }
+
+  async function updateTargetStatus(
+    task: TaskView,
+    target: TaskTarget,
+    status: TaskTarget["status"]
+  ) {
+    if (target.id.startsWith("legacy-")) {
+      alert("هذا تكليف قديم لا يحتوي على سجل متابعة للمعهد.");
+      return;
+    }
+
+    if (!isDirector && !isInstituteUser) return;
+
+    if (
+      isInstituteUser &&
+      profile?.institute_id !== target.institute_id
+    ) {
+      return;
+    }
+
+    if (isDirector && status !== "completed") {
+      return;
+    }
+
+    setUpdatingTargetId(target.id);
+
+    try {
+      const updatePayload: Record<string, any> = {
+        status,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (status === "submitted") {
+        updatePayload.responded_at = new Date().toISOString();
+      }
+
+      if (status === "completed") {
+        updatePayload.responded_at =
+          target.responded_at ?? new Date().toISOString();
+      }
+
+      const { error: targetError } = await supabase
+        .from("institute_task_targets")
+        .update(updatePayload)
+        .eq("id", target.id);
+
+      if (targetError) throw targetError;
+
+      const updatedTargets = task.targets.map((item) =>
         item.id === target.id
           ? {
               ...item,
               status,
               responded_at:
-                updatePayload.responded_at ??
-                item.responded_at,
-              updated_at:
-                updatePayload.updated_at,
+                updatePayload.responded_at ?? item.responded_at,
+              updated_at: updatePayload.updated_at,
             }
           : item
-    );
+      );
 
-  const overallStatus =
-    getOverallTaskStatus(
-      updatedTargets
-    );
+      const overallStatus = getOverallTaskStatus(updatedTargets);
 
-  const {
-    error: taskError,
-  } = await supabase
-    .from(
-      "institute_tasks"
-    )
-    .update({
-      status:
-        overallStatus,
-      updated_at:
-        new Date().toISOString(),
-    })
-    .eq(
-      "id",
-      task.id
-    );
+      const { error: taskError } = await supabase
+        .from("institute_tasks")
+        .update({
+          status: overallStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", task.id);
 
-  if (taskError)
-    throw taskError;
+      if (taskError) throw taskError;
 
-  setTasks(
-    (current) =>
-      current.map(
-        (item) =>
-          item.id ===
-          task.id
+      setTasks((current) =>
+        current.map((item) =>
+          item.id === task.id
             ? {
                 ...item,
-                status:
-                  overallStatus,
-                targets:
-                  updatedTargets,
+                status: overallStatus,
+                targets: updatedTargets,
               }
             : item
-      )
-  );
-} catch (error: any) {
-  console.error(
-    "updateTargetStatus error:",
-    error
-  );
+        )
+      );
+    } catch (error: any) {
+      console.error("updateTargetStatus error:", error);
+      alert(error?.message ?? "حدث خطأ أثناء تحديث حالة التكليف");
+    } finally {
+      setUpdatingTargetId(null);
+    }
+  }
 
-  alert(
-    error?.message ??
-      "حدث خطأ أثناء تحديث حالة التكليف"
-  );
-} finally {
-  setUpdatingTargetId(
-    null
-  );
-}
+  function renderTargetAction(task: TaskView, target: TaskTarget) {
+    const overdue = isTargetOverdue(target, task.due_date);
+    const busy = updatingTargetId === target.id;
 
-
-}
-
-function renderTargetAction(
-task: TaskView,
-target: TaskTarget
-) {
-const busy =
-updatingTargetId ===
-target.id;
-
-
-if (
-  target.status ===
-  "completed"
-) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
-      <Check size={16} />
-      تم الإنجاز
-    </div>
-  );
-}
-
-if (isDirector) {
-  if (
-    target.status ===
-    "submitted"
-  ) {
-    return (
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() =>
-          updateTargetStatus(
-            task,
-            target,
-            "completed"
-          )
-        }
-        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
-      >
-        {busy ? (
-          <Loader2
-            size={16}
-            className="animate-spin"
-          />
-        ) : (
+    if (target.status === "completed") {
+      return (
+        <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
           <Check size={16} />
-        )}
-        اعتماد وإغلاق
-      </button>
+          تم الإنجاز
+        </div>
+      );
+    }
+
+    if (isDirector) {
+      if (target.status === "submitted") {
+        return (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => updateTargetStatus(task, target, "completed")}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {busy ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Check size={16} />
+            )}
+            اعتماد وإغلاق
+          </button>
+        );
+      }
+
+      if (target.status === "in_progress") {
+        return (
+          <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
+            في انتظار تسليم المعهد
+          </div>
+        );
+      }
+
+      return (
+        <div className="rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700">
+          في انتظار بدء التنفيذ من المعهد
+        </div>
+      );
+    }
+
+    if (profile?.institute_id !== target.institute_id) {
+      return null;
+    }
+
+    if (target.status === "pending" || target.status === "late") {
+      return (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => updateTargetStatus(task, target, "in_progress")}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
+        >
+          {busy ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <ArrowUp size={16} />
+          )}
+          بدء التنفيذ
+        </button>
+      );
+    }
+
+    if (target.status === "in_progress") {
+      return (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => updateTargetStatus(task, target, "submitted")}
+          className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-60"
+        >
+          {busy ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Send size={16} />
+          )}
+          تم التسليم
+        </button>
+      );
+    }
+
+    if (target.status === "submitted") {
+      return (
+        <div className="rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">
+          تم التسليم — في انتظار اعتماد الإدارة
+        </div>
+      );
+    }
+
+    return null;
+  }
+
+  function taskNeedsAttention(task: TaskView) {
+    const overall = getOverallTaskStatus(task.targets);
+
+    if (overall === "completed") return false;
+
+    if (task.priority === "urgent") return true;
+
+    return task.targets.some((target) =>
+      isTargetOverdue(target, task.due_date)
     );
   }
 
-  if (
-    target.status ===
-    "in_progress"
-  ) {
-    return (
-      <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
-        في انتظار تسليم المعهد
-      </div>
-    );
-  }
-
   return (
-    <div className="rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700">
-      في انتظار بدء التنفيذ من المعهد
-    </div>
-  );
-}
+    <AppShell>
+      <div className="min-h-screen bg-slate-100 p-4 md:p-6" dir="rtl">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <div className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-blue-600">
+                  <FileText size={22} />
+                  <span className="text-sm font-semibold">الإدارة والمتابعة</span>
+                </div>
 
-if (
-  profile?.institute_id !==
-  target.institute_id
-) {
-  return null;
-}
+                <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">
+                  التكليفات والمتابعة
+                </h1>
 
-if (
-  target.status ===
-    "pending" ||
-  target.status ===
-    "late"
-) {
-  return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={() =>
-        updateTargetStatus(
-          task,
-          target,
-          "in_progress"
-        )
-      }
-      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
-    >
-      {busy ? (
-        <Loader2
-          size={16}
-          className="animate-spin"
-        />
-      ) : (
-        <ArrowUp size={16} />
-      )}
-      بدء التنفيذ
-    </button>
-  );
-}
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                  متابعة دورة التكليف من إصدار الإدارة إلى تنفيذ المعهد والتسليم والاعتماد، مع
+                  عرض الاستثناءات التي تحتاج تدخل الإدارة.
+                </p>
+              </div>
 
-if (
-  target.status ===
-  "in_progress"
-) {
-  return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={() =>
-        updateTargetStatus(
-          task,
-          target,
-          "submitted"
-        )
-      }
-      className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-60"
-    >
-      {busy ? (
-        <Loader2
-          size={16}
-          className="animate-spin"
-        />
-      ) : (
-        <Send size={16} />
-      )}
-      تم التسليم
-    </button>
-  );
-}
+              {isDirector && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetForm();
+                      setShowForm(true);
+                    }}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                  >
+                    <Plus size={18} />
+                    تكليف جديد
+                  </button>
 
-if (
-  target.status ===
-  "submitted"
-) {
-  return (
-    <div className="rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">
-      تم التسليم — في انتظار اعتماد الإدارة
-    </div>
-  );
-}
+                  <button
+                    type="button"
+                    onClick={() => setShowArchivedTasks((value) => !value)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <Eye size={18} />
+                    {showArchivedTasks ? "إخفاء المحفوظة" : "عرض المحفوظة"}
+                  </button>
 
-return null;
-
-
-}
-
-function taskNeedsAttention(
-task: TaskView
-) {
-const overall =
-getOverallTaskStatus(
-task.targets
-);
-
-
-if (
-  overall === "completed"
-) {
-  return false;
-}
-
-if (
-  task.priority ===
-  "urgent"
-) {
-  return true;
-}
-
-return task.targets.some(
-  (target) =>
-    isTargetOverdue(
-      target,
-      task.due_date
-    )
-);
-
-
-}
-
-return ( <AppShell> <div
-     className="min-h-screen bg-slate-100 p-4 md:p-6"
-     dir="rtl"
-   > <div className="mx-auto max-w-7xl space-y-6"> <div className="rounded-2xl bg-white p-5 shadow-sm md:p-6"> <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"> <div> <div className="mb-2 flex items-center gap-2 text-blue-600"> <FileText size={22} /> <span className="text-sm font-semibold">
-الإدارة والمتابعة </span> </div>
-
-
-            <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">
-              التكليفات والمتابعة
-            </h1>
-
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              متابعة دورة التكليف من إصدار الإدارة إلى تنفيذ المعهد والتسليم والاعتماد.
-            </p>
+                  <button
+                    type="button"
+                    disabled={deletingAll || !visibleTasks.length}
+                    onClick={deleteAllTasks}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                  >
+                    {deletingAll ? (
+                      <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={18} />
+                    )}
+                    تنظيف الصفحة
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          {isDirector && (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  resetForm();
-                  setShowForm(true);
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-              >
-                <Plus size={18} />
-                تكليف جديد
-              </button>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+            {[
+              {
+                label: "إجمالي التكليفات",
+                value: statistics.total,
+                icon: FileText,
+                className: "text-blue-600 bg-blue-50",
+              },
+              {
+                label: "جديدة",
+                value: statistics.pending,
+                icon: Bell,
+                className: "text-sky-600 bg-sky-50",
+              },
+              {
+                label: "قيد التنفيذ",
+                value: statistics.inProgress,
+                icon: Clock3,
+                className: "text-amber-600 bg-amber-50",
+              },
+              {
+                label: "تم التسليم",
+                value: statistics.submitted,
+                icon: Send,
+                className: "text-violet-600 bg-violet-50",
+              },
+              {
+                label: "عاجلة",
+                value: statistics.urgent,
+                icon: AlertCircle,
+                className: "text-red-600 bg-red-50",
+              },
+              {
+                label: "متأخرة",
+                value: statistics.overdue,
+                icon: ArrowDown,
+                className: "text-orange-600 bg-orange-50",
+              },
+              {
+                label: "مكتملة",
+                value: statistics.completed,
+                icon: Check,
+                className: "text-emerald-600 bg-emerald-50",
+              },
+            ].map((item) => {
+              const Icon = item.icon;
 
-              <button
-                type="button"
-                onClick={() =>
-                  setShowArchivedTasks(
-                    (value) => !value
-                  )
-                }
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                <Eye size={18} />
-                {showArchivedTasks
-                  ? "إخفاء المحفوظة"
-                  : "عرض المحفوظة"}
-              </button>
+              return (
+                <div
+                  key={item.label}
+                  className="rounded-2xl bg-white p-4 shadow-sm"
+                >
+                  <div
+                    className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${item.className}`}
+                  >
+                    <Icon size={20} />
+                  </div>
 
-              <button
-                type="button"
-                disabled={
-                  deletingAll ||
-                  !visibleTasks.length
-                }
-                onClick={
-                  deleteAllTasks
-                }
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
-              >
-                {deletingAll ? (
-                  <Loader2
-                    size={18}
-                    className="animate-spin"
-                  />
-                ) : (
-                  <Trash2 size={18} />
-                )}
-                تنظيف الصفحة
-              </button>
+                  <div className="text-2xl font-bold text-slate-900">
+                    {item.value}
+                  </div>
+
+                  <div className="mt-1 text-xs font-medium text-slate-500">
+                    {item.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {showArchivedTasks && isDirector && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
+              تنظيفها من العرض سابقًا. لا يوجد حذف من قاعدة البيانات.
             </div>
           )}
-        </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-        {[
-          {
-            label: "إجمالي التكليفات",
-            value: statistics.total,
-            icon: FileText,
-            className:
-              "text-blue-600 bg-blue-50",
-          },
-          {
-            label: "جديدة",
-            value: statistics.pending,
-            icon: Bell,
-            className:
-              "text-sky-600 bg-sky-50",
-          },
-          {
-            label: "قيد التنفيذ",
-            value: statistics.inProgress,
-            icon: Clock3,
-            className:
-              "text-amber-600 bg-amber-50",
-          },
-          {
-            label: "تم التسليم",
-            value: statistics.submitted,
-            icon: Send,
-            className:
-              "text-violet-600 bg-violet-50",
-          },
-          {
-            label: "عاجلة",
-            value: statistics.urgent,
-            icon: AlertCircle,
-            className:
-              "text-red-600 bg-red-50",
-          },
-          {
-            label: "متأخرة",
-            value: statistics.overdue,
-            icon: ArrowDown,
-            className:
-              "text-orange-600 bg-orange-50",
-          },
-          {
-            label: "مكتملة",
-            value: statistics.completed,
-            icon: Check,
-            className:
-              "text-emerald-600 bg-emerald-50",
-          },
-        ].map((item) => {
-          const Icon =
-            item.icon;
+          <div className="rounded-2xl bg-white p-4 shadow-sm md:p-5">
+            <div className="mb-4 flex items-center gap-2 text-slate-700">
+              <Filter size={18} />
+              <h2 className="font-bold">البحث والتصفية</h2>
+            </div>
 
-          return (
-            <div
-              key={item.label}
-              className="rounded-2xl bg-white p-4 shadow-sm"
-            >
-              <div
-                className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${item.className}`}
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              <div className="relative">
+                <Search
+                  size={18}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="ابحث عن تكليف أو معهد..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-3 pr-10 text-sm outline-none transition focus:border-blue-400 focus:bg-white"
+                />
+              </div>
+
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
               >
-                <Icon size={20} />
-              </div>
+                <option value="all">كل الحالات</option>
+                {statusOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
 
-              <div className="text-2xl font-bold text-slate-900">
-                {item.value}
-              </div>
+              <select
+                value={priorityFilter}
+                onChange={(event) => setPriorityFilter(event.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
+              >
+                <option value="all">كل الأولويات</option>
+                {priorityOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
 
-              <div className="mt-1 text-xs font-medium text-slate-500">
-                {item.label}
-              </div>
+              <select
+                value={instituteFilter}
+                onChange={(event) => setInstituteFilter(event.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
+              >
+                <option value="all">كل المعاهد</option>
+                {institutes.map((institute) => (
+                  <option key={institute.id} value={institute.id}>
+                    {institute.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          );
-        })}
-      </div>
-
-      {showArchivedTasks &&
-        isDirector && (
-          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم تنظيفها من العرض سابقًا.
-          </div>
-        )}
-
-      <div className="rounded-2xl bg-white p-4 shadow-sm md:p-5">
-        <div className="mb-4 flex items-center gap-2 text-slate-700">
-          <Filter size={18} />
-          <h2 className="font-bold">
-            البحث والتصفية
-          </h2>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <div className="relative">
-            <Search
-              size={18}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-
-            <input
-              value={
-                searchTerm
-              }
-              onChange={(
-                event
-              ) =>
-                setSearchTerm(
-                  event.target.value
-                )
-              }
-              placeholder="ابحث عن تكليف أو معهد..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-3 pr-10 text-sm outline-none transition focus:border-blue-400 focus:bg-white"
-            />
           </div>
 
-          <select
-            value={
-              statusFilter
-            }
-            onChange={(
-              event
-            ) =>
-              setStatusFilter(
-                event.target.value
-              )
-            }
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
-          >
-            <option value="all">
-              كل الحالات
-            </option>
-
-            {statusOptions.map(
-              (item) => (
-                <option
-                  key={
-                    item.value
-                  }
-                  value={
-                    item.value
-                  }
-                >
-                  {item.label}
-                </option>
-              )
-            )}
-          </select>
-
-          <select
-            value={
-              priorityFilter
-            }
-            onChange={(
-              event
-            ) =>
-              setPriorityFilter(
-                event.target.value
-              )
-            }
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
-          >
-            <option value="all">
-              كل الأولويات
-            </option>
-
-            {priorityOptions.map(
-              (item) => (
-                <option
-                  key={
-                    item.value
-                  }
-                  value={
-                    item.value
-                  }
-                >
-                  {item.label}
-                </option>
-              )
-            )}
-          </select>
-
-          <select
-            value={
-              instituteFilter
-            }
-            onChange={(
-              event
-            ) =>
-              setInstituteFilter(
-                event.target.value
-              )
-            }
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
-          >
-            <option value="all">
-              كل المعاهد
-            </option>
-
-            {institutes.map(
-              (institute) => (
-                <option
-                  key={
-                    institute.id
-                  }
-                  value={
-                    institute.id
-                  }
-                >
-                  {institute.name}
-                </option>
-              )
-            )}
-          </select>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex min-h-[300px] items-center justify-center rounded-2xl bg-white shadow-sm">
-          <div className="flex items-center gap-3 text-slate-500">
-            <Loader2
-              size={24}
-              className="animate-spin"
-            />
-            جاري تحميل التكليفات...
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-slate-500">
-              عرض{" "}
-              {filteredTasks.length}{" "}
-              من{" "}
-              {visibleTasks.length}{" "}
-              تكليف
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setRefreshing(true);
-                loadData(false);
-              }}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              <RefreshCw
-                size={16}
-                className={
-                  refreshing
-                    ? "animate-spin"
-                    : ""
-                }
-              />
-              تحديث
-            </button>
-          </div>
-
-          {filteredTasks.length ===
-          0 ? (
-            <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
-              <FileText
-                className="mx-auto mb-4 text-slate-300"
-                size={44}
-              />
-
-              <h3 className="text-lg font-bold text-slate-700">
-                لا توجد تكليفات في العرض الحالي
-              </h3>
-
-              <p className="mt-2 text-sm text-slate-500">
-                {isDirector &&
-                !showArchivedTasks
-                  ? "يمكنك إنشاء تكليف جديد أو عرض التكليفات المحفوظة."
-                  : "جرّب تغيير البحث أو الفلاتر."}
-              </p>
+          {loading ? (
+            <div className="flex min-h-[300px] items-center justify-center rounded-2xl bg-white shadow-sm">
+              <div className="flex items-center gap-3 text-slate-500">
+                <Loader2 size={24} className="animate-spin" />
+                جاري تحميل التكليفات...
+              </div>
             </div>
           ) : (
-            filteredTasks.map(
-              (task) => {
-                const overallStatus =
-                  getOverallTaskStatus(
-                    task.targets
-                  );
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-500">
+                  عرض {filteredTasks.length} من {visibleTasks.length} تكليف
+                </div>
 
-                const counts =
-                  getTargetCounts(
-                    task.targets
-                  );
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRefreshing(true);
+                    loadData(false);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  <RefreshCw
+                    size={16}
+                    className={refreshing ? "animate-spin" : ""}
+                  />
+                  تحديث
+                </button>
+              </div>
 
-                const expanded =
-                  expandedTaskId ===
-                  task.id;
+              {filteredTasks.length === 0 ? (
+                <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
+                  <FileText className="mx-auto mb-4 text-slate-300" size={44} />
+                  <h3 className="text-lg font-bold text-slate-700">
+                    لا توجد تكليفات في العرض الحالي
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-500">
+                    {isDirector && !showArchivedTasks
+                      ? "يمكنك إنشاء تكليف جديد أو عرض التكليفات المحفوظة."
+                      : "جرّب تغيير البحث أو الفلاتر."}
+                  </p>
+                </div>
+              ) : (
+                filteredTasks.map((task) => {
+                  const overallStatus = getOverallTaskStatus(task.targets);
+                  const counts = getTargetCounts(task.targets);
+                  const expanded = expandedTaskId === task.id;
+                  const needsAttention = taskNeedsAttention(task);
 
-                const needsAttention =
-                  taskNeedsAttention(
-                    task
-                  );
-
-                return (
-                  <div
-                    key={
-                      task.id
-                    }
-                    className={`overflow-hidden rounded-2xl bg-white shadow-sm ${
-                      needsAttention
-                        ? "ring-1 ring-orange-200"
-                        : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedTaskId(
-                          (
-                            current
-                          ) =>
-                            current ===
-                            task.id
-                              ? null
-                              : task.id
-                        )
-                      }
-                      className="w-full p-4 text-right md:p-5"
+                  return (
+                    <div
+                      key={task.id}
+                      className={`overflow-hidden rounded-2xl bg-white shadow-sm ${
+                        needsAttention ? "ring-1 ring-orange-200" : ""
+                      }`}
                     >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-bold text-slate-900">
-                              {task.title}
-                            </h3>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedTaskId((current) =>
+                            current === task.id ? null : task.id
+                          )
+                        }
+                        className="w-full p-4 text-right md:p-5"
+                      >
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-lg font-bold text-slate-900">
+                                {task.title}
+                              </h3>
 
-                            <span
-                              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getPriorityClass(
-                                task.priority
-                              )}`}
-                            >
-                              {getPriorityLabel(
-                                task.priority
-                              )}
-                            </span>
-
-                            <span
-                              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClass(
-                                overallStatus
-                              )}`}
-                            >
-                              {getStatusLabel(
-                                overallStatus
-                              )}
-                            </span>
-
-                            {needsAttention && (
-                              <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                                يحتاج متابعة
+                              <span
+                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getPriorityClass(
+                                  task.priority
+                                )}`}
+                              >
+                                {getPriorityLabel(task.priority)}
                               </span>
+
+                              <span
+                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClass(
+                                  overallStatus
+                                )}`}
+                              >
+                                {getStatusLabel(overallStatus)}
+                              </span>
+
+                              {needsAttention && (
+                                <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+                                  يحتاج متابعة
+                                </span>
+                              )}
+                            </div>
+
+                            {task.description && (
+                              <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
+                                {task.description}
+                              </p>
                             )}
+
+                            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2.5 py-1.5 text-slate-600">
+                                <Users size={14} />
+                                {task.targets.length} معهد
+                              </span>
+
+                              {counts.pending > 0 && (
+                                <span className="rounded-lg bg-sky-50 px-2.5 py-1.5 text-sky-700">
+                                  {counts.pending} جديد
+                                </span>
+                              )}
+
+                              {counts.inProgress > 0 && (
+                                <span className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-amber-700">
+                                  {counts.inProgress} قيد التنفيذ
+                                </span>
+                              )}
+
+                              {counts.submitted > 0 && (
+                                <span className="rounded-lg bg-violet-50 px-2.5 py-1.5 text-violet-700">
+                                  {counts.submitted} بانتظار الاعتماد
+                                </span>
+                              )}
+
+                              {counts.completed > 0 && (
+                                <span className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-emerald-700">
+                                  {counts.completed} مكتمل
+                                </span>
+                              )}
+                            </div>
                           </div>
 
-                          {task.description && (
-                            <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
-                              {task.description}
-                            </p>
-                          )}
-
-                          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-                            <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2.5 py-1.5 text-slate-600">
-                              <Users size={14} />
-                              {task.targets.length}{" "}
-                              معهد
+                          <div className="flex shrink-0 flex-col items-start gap-2 text-xs text-slate-500 lg:items-end">
+                            <span>
+                              الاستحقاق:{" "}
+                              <strong className="text-slate-700">
+                                {formatDate(task.due_date)}
+                              </strong>
                             </span>
 
-                            {counts.pending >
-                              0 && (
-                              <span className="rounded-lg bg-sky-50 px-2.5 py-1.5 text-sky-700">
-                                {counts.pending}{" "}
-                                جديد
-                              </span>
-                            )}
+                            <span>
+                              الإنشاء: {formatCreatedDate(task.created_at)}
+                            </span>
 
-                            {counts.inProgress >
-                              0 && (
-                              <span className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-amber-700">
-                                {counts.inProgress}{" "}
-                                قيد التنفيذ
-                              </span>
-                            )}
-
-                            {counts.submitted >
-                              0 && (
-                              <span className="rounded-lg bg-violet-50 px-2.5 py-1.5 text-violet-700">
-                                {counts.submitted}{" "}
-                                بانتظار الاعتماد
-                              </span>
-                            )}
-
-                            {counts.completed >
-                              0 && (
-                              <span className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-emerald-700">
-                                {counts.completed}{" "}
-                                مكتمل
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex shrink-0 flex-col items-start gap-2 text-xs text-slate-500 lg:items-end">
-                          <span>
-                            الاستحقاق:{" "}
-                            <strong className="text-slate-700">
-                              {formatDate(
-                                task.due_date
-                              )}
-                            </strong>
-                          </span>
-
-                          <span>
-                            الإنشاء:{" "}
-                            {formatCreatedDate(
-                              task.created_at
-                            )}
-                          </span>
-
-                          <span className="inline-flex items-center gap-1 font-semibold text-blue-600">
-                            {expanded
-                              ? "إخفاء التفاصيل"
-                              : "متابعة المعاهد"}
-
-                            {expanded ? (
-                              <ChevronUp
-                                size={16}
-                              />
-                            ) : (
-                              <ChevronDown
-                                size={16}
-                              />
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-
-                    {expanded && (
-                      <div className="border-t border-slate-100 bg-slate-50 p-4 md:p-5">
-                        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <h4 className="font-bold text-slate-800">
-                              حالة التنفيذ حسب المعهد
-                            </h4>
-
-                            <p className="mt-1 text-xs text-slate-500">
-                              كل معهد له حالة متابعة مستقلة داخل نفس التكليف.
-                            </p>
-                          </div>
-
-                          {isDirector && (
-                            <button
-                              type="button"
-                              disabled={
-                                deletingTaskId ===
-                                task.id
-                              }
-                              onClick={(
-                                event
-                              ) => {
-                                event.stopPropagation();
-                                deleteTask(
-                                  task
-                                );
-                              }}
-                              className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                            >
-                              {deletingTaskId ===
-                              task.id ? (
-                                <Loader2
-                                  size={15}
-                                  className="animate-spin"
-                                />
+                            <span className="inline-flex items-center gap-1 font-semibold text-blue-600">
+                              {expanded ? "إخفاء التفاصيل" : "متابعة المعاهد"}
+                              {expanded ? (
+                                <ChevronUp size={16} />
                               ) : (
-                                <Trash2
-                                  size={15}
-                                />
+                                <ChevronDown size={16} />
                               )}
-                              حذف التكليف
-                            </button>
-                          )}
+                            </span>
+                          </div>
                         </div>
+                      </button>
 
-                        <div className="grid gap-3">
-                          {task.targets.map(
-                            (
-                              target
-                            ) => {
-                              const overdue =
-                                isTargetOverdue(
-                                  target,
-                                  task.due_date
-                                );
+                      {expanded && (
+                        <div className="border-t border-slate-100 bg-slate-50 p-4 md:p-5">
+                          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <h4 className="font-bold text-slate-800">
+                                حالة التنفيذ حسب المعهد
+                              </h4>
+                              <p className="mt-1 text-xs text-slate-500">
+                                كل معهد له حالة مستقلة داخل نفس التكليف الجماعي.
+                              </p>
+                            </div>
+
+                            {isDirector && (
+                              <button
+                                type="button"
+                                disabled={deletingTaskId === task.id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  deleteTask(task);
+                                }}
+                                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                {deletingTaskId === task.id ? (
+                                  <Loader2
+                                    size={15}
+                                    className="animate-spin"
+                                  />
+                                ) : (
+                                  <Trash2 size={15} />
+                                )}
+                                حذف التكليف
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid gap-3">
+                            {task.targets.map((target) => {
+                              const overdue = isTargetOverdue(
+                                target,
+                                task.due_date
+                              );
 
                               return (
                                 <div
-                                  key={
-                                    target.id
-                                  }
+                                  key={target.id}
                                   className="rounded-xl border border-slate-200 bg-white p-4"
                                 >
                                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                                     <div className="min-w-0">
                                       <div className="flex flex-wrap items-center gap-2">
                                         <span className="font-bold text-slate-800">
-                                          {
-                                            target.institute_name
-                                          }
+                                          {target.institute_name}
                                         </span>
 
                                         <span
@@ -2040,12 +1440,9 @@ return ( <AppShell> <div
                                             target.status
                                           )}`}
                                         >
-                                          {target.status ===
-                                          "late"
+                                          {target.status === "late"
                                             ? "متأخر"
-                                            : getStatusLabel(
-                                                target.status
-                                              )}
+                                            : getStatusLabel(target.status)}
                                         </span>
 
                                         {overdue && (
@@ -2060,439 +1457,260 @@ return ( <AppShell> <div
                                           <strong className="text-slate-700">
                                             الرد:
                                           </strong>{" "}
-                                          {
-                                            target.response
-                                          }
+                                          {target.response}
                                         </div>
                                       )}
                                     </div>
 
                                     <div className="shrink-0">
-                                      {renderTargetAction(
-                                        task,
-                                        target
-                                      )}
+                                      {renderTargetAction(task, target)}
                                     </div>
                                   </div>
                                 </div>
                               );
-                            }
-                          )}
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-            )
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           )}
         </div>
-      )}
-    </div>
-  </div>
+      </div>
 
-  {showForm &&
-    isDirector && (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-        dir="rtl"
-        onMouseDown={(
-          event
-        ) => {
-          if (
-            event.target ===
-            event.currentTarget
-          ) {
-            setShowForm(false);
-          }
-        }}
-      >
-        <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white p-5">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">
-                إنشاء تكليف جديد
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                يمكنك إرسال نفس التكليف إلى معهد واحد أو عدة معاهد.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                setShowForm(false)
-              }
-              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          <div className="space-y-5 p-5">
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                عنوان التكليف
-              </label>
-
-              <input
-                value={
-                  form.title
-                }
-                onChange={(
-                  event
-                ) =>
-                  setForm(
-                    (
-                      current
-                    ) => ({
-                      ...current,
-                      title:
-                        event
-                          .target
-                          .value,
-                    })
-                  )
-                }
-                placeholder="مثال: إرسال تقرير أعداد الطلاب"
-                className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">
-                تفاصيل التكليف
-              </label>
-
-              <textarea
-                value={
-                  form.description
-                }
-                onChange={(
-                  event
-                ) =>
-                  setForm(
-                    (
-                      current
-                    ) => ({
-                      ...current,
-                      description:
-                        event
-                          .target
-                          .value,
-                    })
-                  )
-                }
-                rows={4}
-                placeholder="اكتب المطلوب من المعهد بالتفصيل..."
-                className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
-              />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
+      {showForm && isDirector && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          dir="rtl"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setShowForm(false);
+          }}
+        >
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white p-5">
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  الأولوية
-                </label>
-
-                <select
-                  value={
-                    form.priority
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-                        priority:
-                          event
-                            .target
-                            .value as typeof current.priority,
-                      })
-                    )
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
-                >
-                  {priorityOptions.map(
-                    (
-                      item
-                    ) => (
-                      <option
-                        key={
-                          item.value
-                        }
-                        value={
-                          item.value
-                        }
-                      >
-                        {
-                          item.label
-                        }
-                      </option>
-                    )
-                  )}
-                </select>
+                <h2 className="text-xl font-bold text-slate-900">
+                  إنشاء تكليف جديد
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  يمكنك إرسال نفس التكليف إلى معهد واحد أو عدة معاهد.
+                </p>
               </div>
 
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-5">
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  تاريخ الاستحقاق
+                  عنوان التكليف
                 </label>
-
                 <input
-                  type="date"
-                  value={
-                    form.due_date
+                  value={form.title}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
                   }
-                  onChange={(
-                    event
-                  ) =>
-                    setForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-                        due_date:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
+                  placeholder="مثال: إرسال تقرير أعداد الطلاب"
                   className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="mb-3 block text-sm font-semibold text-slate-700">
-                إرسال التكليف إلى
-              </label>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  تفاصيل التكليف
+                </label>
+                <textarea
+                  value={form.description}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                  placeholder="اكتب المطلوب من المعهد بالتفصيل..."
+                  className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
+                />
+              </div>
 
-              <div className="grid gap-2 sm:grid-cols-3">
-                {[
-                  {
-                    value:
-                      "single",
-                    label:
-                      "معهد واحد",
-                  },
-                  {
-                    value:
-                      "selected",
-                    label:
-                      "معاهد محددة",
-                  },
-                  {
-                    value:
-                      "all",
-                    label:
-                      "كل المعاهد",
-                  },
-                ].map(
-                  (item) => (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    الأولوية
+                  </label>
+                  <select
+                    value={form.priority}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        priority: event.target.value as typeof current.priority,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
+                  >
+                    {priorityOptions.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    تاريخ الاستحقاق
+                  </label>
+                  <input
+                    type="date"
+                    value={form.due_date}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        due_date: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-3 block text-sm font-semibold text-slate-700">
+                  إرسال التكليف إلى
+                </label>
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    { value: "single", label: "معهد واحد" },
+                    { value: "selected", label: "معاهد محددة" },
+                    { value: "all", label: "كل المعاهد" },
+                  ].map((item) => (
                     <button
-                      key={
-                        item.value
-                      }
+                      key={item.value}
                       type="button"
                       onClick={() =>
                         setTargetMode(
-                          item.value as
-                            | "all"
-                            | "selected"
-                            | "single"
+                          item.value as "all" | "selected" | "single"
                         )
                       }
                       className={`rounded-xl border px-3 py-3 text-sm font-semibold transition ${
-                        targetMode ===
-                        item.value
+                        targetMode === item.value
                           ? "border-blue-500 bg-blue-50 text-blue-700"
                           : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                       }`}
                     >
-                      {
-                        item.label
-                      }
+                      {item.label}
                     </button>
-                  )
-                )}
-              </div>
-            </div>
-
-            {targetMode ===
-              "single" && (
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  المعهد
-                </label>
-
-                <select
-                  value={
-                    form.institute_id
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    setForm(
-                      (
-                        current
-                      ) => ({
-                        ...current,
-                        institute_id:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
-                >
-                  <option value="">
-                    اختر المعهد
-                  </option>
-
-                  {institutes.map(
-                    (
-                      institute
-                    ) => (
-                      <option
-                        key={
-                          institute.id
-                        }
-                        value={
-                          institute.id
-                        }
-                      >
-                        {
-                          institute.name
-                        }
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-            )}
-
-            {targetMode ===
-              "selected" && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-700">
-                    اختر المعاهد
-                  </span>
-
-                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
-                    {
-                      selectedInstitutes.length
-                    }{" "}
-                    محدد
-                  </span>
+                  ))}
                 </div>
+              </div>
 
-                <div className="grid gap-2">
-                  {institutes.map(
-                    (
-                      institute
-                    ) => {
-                      const selected =
-                        selectedInstitutes.includes(
-                          institute.id
-                        );
+              {targetMode === "single" && (
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    المعهد
+                  </label>
+                  <select
+                    value={form.institute_id}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        institute_id: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
+                  >
+                    <option value="">اختر المعهد</option>
+                    {institutes.map((institute) => (
+                      <option key={institute.id} value={institute.id}>
+                        {institute.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {targetMode === "selected" && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-700">
+                      اختر المعاهد
+                    </span>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
+                      {selectedInstitutes.length} محدد
+                    </span>
+                  </div>
+
+                  <div className="grid gap-2">
+                    {institutes.map((institute) => {
+                      const selected = selectedInstitutes.includes(institute.id);
 
                       return (
                         <button
-                          key={
-                            institute.id
-                          }
+                          key={institute.id}
                           type="button"
-                          onClick={() =>
-                            toggleInstituteSelection(
-                              institute.id
-                            )
-                          }
+                          onClick={() => toggleInstituteSelection(institute.id)}
                           className={`flex items-center justify-between rounded-lg border px-3 py-3 text-right text-sm transition ${
                             selected
                               ? "border-blue-400 bg-blue-50 text-blue-800"
                               : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                           }`}
                         >
-                          <span>
-                            {
-                              institute.name
-                            }
-                          </span>
-
-                          {selected && (
-                            <Check
-                              size={
-                                18
-                              }
-                            />
-                          )}
+                          <span>{institute.name}</span>
+                          {selected && <Check size={18} />}
                         </button>
                       );
-                    }
-                  )}
+                    })}
+                  </div>
                 </div>
+              )}
+
+              {targetMode === "all" && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+                  سيتم إنشاء <strong>تكليف واحد</strong> وربطه بكل المعاهد الظاهرة
+                  للإدارة الحالية. لكل معهد سجل متابعة مستقل.
+                </div>
+              )}
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  إلغاء
+                </button>
+
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={createTask}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {saving ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Plus size={18} />
+                  )}
+                  إنشاء التكليف
+                </button>
               </div>
-            )}
-
-            {targetMode ===
-              "all" && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
-                سيتم إنشاء{" "}
-                <strong>
-                  تكليف واحد
-                </strong>{" "}
-                وربطه بكل المعاهد الظاهرة للإدارة الحالية، ولكل معهد سجل متابعة مستقل.
-              </div>
-            )}
-
-            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() =>
-                  setShowForm(false)
-                }
-                className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-              >
-                إلغاء
-              </button>
-
-              <button
-                type="button"
-                disabled={
-                  saving
-                }
-                onClick={
-                  createTask
-                }
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-              >
-                {saving ? (
-                  <Loader2
-                    size={18}
-                    className="animate-spin"
-                  />
-                ) : (
-                  <Plus
-                    size={18}
-                  />
-                )}
-                إنشاء التكليف
-              </button>
             </div>
           </div>
         </div>
-      </div>
-    )}
-</AppShell>
-
-
-);
+      )}
+    </AppShell>
+  );
 }
