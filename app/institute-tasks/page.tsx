@@ -298,9 +298,12 @@ export default function InstituteTasksPage() {
       (task) => getOverallTaskStatus(task.targets) === "submitted"
     ).length;
 
-    const completed = visibleTasks.filter(
-      (task) => getOverallTaskStatus(task.targets) === "completed"
-    ).length;
+    const completed = visibleTasks.reduce(
+      (count, task) =>
+        count +
+        task.targets.filter((target) => target.status === "completed").length,
+      0
+    );
 
     const urgent = visibleTasks.filter(
       (task) =>
@@ -957,12 +960,18 @@ export default function InstituteTasksPage() {
     );
   }
 
-  const followUpItems = useMemo(() => {
+  const interventionItems = useMemo(() => {
     if (!isDirector) return [];
 
     return visibleTasks.flatMap((task) =>
       task.targets
-        .filter((target) => target.status !== "completed")
+        .filter((target) => {
+          if (target.status === "completed") return false;
+
+          const overdue = isTargetOverdue(target, task.due_date);
+
+          return target.status === "submitted" || overdue || task.priority === "urgent";
+        })
         .map((target) => ({
           taskId: task.id,
           taskTitle: task.title,
@@ -972,6 +981,33 @@ export default function InstituteTasksPage() {
           dueDate: task.due_date,
           priority: task.priority,
           overdue: isTargetOverdue(target, task.due_date),
+        }))
+    );
+  }, [isDirector, visibleTasks]);
+
+  const followUpItems = useMemo(() => {
+    if (!isDirector) return [];
+
+    return visibleTasks.flatMap((task) =>
+      task.targets
+        .filter((target) => {
+          if (target.status === "completed") return false;
+
+          const overdue = isTargetOverdue(target, task.due_date);
+          const needsIntervention =
+            target.status === "submitted" || overdue || task.priority === "urgent";
+
+          return !needsIntervention;
+        })
+        .map((target) => ({
+          taskId: task.id,
+          taskTitle: task.title,
+          instituteId: target.institute_id,
+          instituteName: target.institute_name ?? "معهد غير محدد",
+          status: target.status,
+          dueDate: task.due_date,
+          priority: task.priority,
+          overdue: false,
         }))
     );
   }, [isDirector, visibleTasks]);
@@ -1113,6 +1149,64 @@ export default function InstituteTasksPage() {
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
               أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
               تنظيفها من العرض سابقًا. لا يوجد حذف من قاعدة البيانات.
+            </div>
+          )}
+
+          {isDirector && interventionItems.length > 0 && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm md:p-5">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-red-800">
+                    <AlertCircle size={19} />
+                    <h2 className="font-bold">يحتاج تدخل المدير الآن</h2>
+                  </div>
+                  <p className="mt-1 text-sm text-red-700">
+                    عناصر تحتاج إجراءً من الإدارة: تسليم بانتظار الاعتماد، أو موعد تجاوز، أو تكليف عاجل لم يُغلق.
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-red-800">
+                  {interventionItems.length} تحتاج تدخل
+                </span>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {interventionItems.map((item) => (
+                  <button
+                    key={`intervention-${item.taskId}-${item.instituteId}`}
+                    type="button"
+                    onClick={() => {
+                      setInstituteFilter(item.instituteId);
+                      setExpandedTaskId(item.taskId);
+                    }}
+                    className="rounded-xl border border-red-200 bg-white p-3 text-right transition hover:border-red-400 hover:shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-800">
+                          {item.instituteName}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {item.taskTitle}
+                        </div>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-700">
+                        {item.status === "submitted"
+                          ? "بانتظار الاعتماد"
+                          : item.overdue
+                            ? "متأخر"
+                            : "عاجل"}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-xs text-red-700">
+                      {item.status === "submitted"
+                        ? "المعهد سلّم ويحتاج اعتماد الإدارة."
+                        : item.overdue
+                          ? "تجاوز الموعد المحدد ويحتاج متابعة المدير."
+                          : "تكليف عاجل يحتاج إجراءً من المدير."}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1328,9 +1422,9 @@ export default function InstituteTasksPage() {
                                 {getStatusLabel(overallStatus)}
                               </span>
 
-                              {needsAttention && (
+                              {isDirector && needsAttention && (
                                 <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                                  يحتاج متابعة
+                                  يحتاج تدخل المدير
                                 </span>
                               )}
                             </div>
