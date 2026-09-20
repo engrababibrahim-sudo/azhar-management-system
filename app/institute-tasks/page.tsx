@@ -298,9 +298,11 @@ export default function InstituteTasksPage() {
       (task) => getOverallTaskStatus(task.targets) === "submitted"
     ).length;
 
-    const completed = visibleTasks.filter(
-      (task) => getOverallTaskStatus(task.targets) === "completed"
-    ).length;
+    const completed = visibleTasks.reduce(
+      (count, task) =>
+        count + task.targets.filter((target) => target.status === "completed").length,
+      0
+    );
 
     const urgent = visibleTasks.filter(
       (task) =>
@@ -323,37 +325,6 @@ export default function InstituteTasksPage() {
       submitted,
       urgent,
       overdue,
-      completed,
-    };
-  }, [visibleTasks]);
-
-  const directorAttention = useMemo(() => {
-    const active = visibleTasks.filter(
-      (task) => getOverallTaskStatus(task.targets) !== "completed"
-    );
-
-    const needsIntervention = active.filter(
-      (task) =>
-        task.priority === "urgent" ||
-        task.targets.some((target) => isTargetOverdue(target, task.due_date))
-    );
-
-    const needsFollowUp = active.filter(
-      (task) =>
-        !needsIntervention.some((item) => item.id === task.id) &&
-        task.targets.some(
-          (target) =>
-            target.status === "pending" || target.status === "in_progress"
-        )
-    );
-
-    const completed = visibleTasks.filter(
-      (task) => getOverallTaskStatus(task.targets) === "completed"
-    );
-
-    return {
-      needsIntervention,
-      needsFollowUp,
       completed,
     };
   }, [visibleTasks]);
@@ -752,7 +723,7 @@ export default function InstituteTasksPage() {
     if (!isDirector) return;
 
     const confirmed = window.confirm(
-      "هل أنت متأكد من حذف هذا التكليف نهائيًا؟ سيتم حذف التكليف بالكامل وجميع سجلات المتابعة المرتبطة به من قاعدة البيانات."
+      "سيتم إخفاء هذا التكليف من الصفحة فقط، ولن يتم حذفه من قاعدة البيانات. هل تريد المتابعة؟"
     );
 
     if (!confirmed) return;
@@ -760,74 +731,7 @@ export default function InstituteTasksPage() {
     setDeletingTaskId(task.id);
 
     try {
-      let deleteQuery = supabase
-        .from("institute_tasks")
-        .delete()
-        .select("id");
-
-      if (task.assignment_group_id) {
-        deleteQuery = deleteQuery.eq(
-          "assignment_group_id",
-          task.assignment_group_id
-        );
-      } else {
-        deleteQuery = deleteQuery.eq("id", task.id);
-      }
-
-      const { data: deletedRows, error } = await deleteQuery;
-
-      if (error) {
-        throw error;
-      }
-
-      if (!deletedRows || deletedRows.length === 0) {
-        throw new Error(
-          "لم يتم حذف التكليف من قاعدة البيانات. غالبًا توجد مشكلة في صلاحية DELETE الخاصة بمدير الإدارة (RLS)."
-        );
-      }
-
-      const deletedIds = tasks
-        .filter((item) => {
-          if (task.assignment_group_id) {
-            return (
-              item.assignment_group_id ===
-              task.assignment_group_id
-            );
-          }
-
-          return item.id === task.id;
-        })
-        .map((item) => item.id);
-
-      setTasks((current) =>
-        current.filter((item) => {
-          if (task.assignment_group_id) {
-            return (
-              item.assignment_group_id !==
-              task.assignment_group_id
-            );
-          }
-
-          return item.id !== task.id;
-        })
-      );
-
-      saveHiddenIds(
-        hiddenTaskIds.filter(
-          (id) => !deletedIds.includes(id)
-        )
-      );
-
-      setExpandedTaskId(null);
-
-      alert("تم حذف التكليف نهائيًا من قاعدة البيانات بنجاح.");
-    } catch (error: any) {
-      console.error("deleteTask error:", error);
-
-      alert(
-        error?.message ??
-          "تعذر حذف التكليف من قاعدة البيانات."
-      );
+      hideTask(task.id);
     } finally {
       setDeletingTaskId(null);
     }
@@ -1187,108 +1091,6 @@ export default function InstituteTasksPage() {
             })}
           </div>
 
-          {isDirector && (
-            <div className="grid gap-4 lg:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => setStatusFilter("all")}
-                className="rounded-2xl border border-red-200 bg-red-50 p-5 text-right transition hover:bg-red-100"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-red-700">تحتاج تدخل المدير</div>
-                    <div className="mt-2 text-3xl font-bold text-red-800">
-                      {directorAttention.needsIntervention.length}
-                    </div>
-                  </div>
-                  <AlertCircle size={28} className="text-red-600" />
-                </div>
-                <p className="mt-3 text-xs leading-5 text-red-700">
-                  تكليفات عاجلة أو تجاوزت موعدها. ابدأ بها أولًا.
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setStatusFilter("pending")}
-                className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-right transition hover:bg-amber-100"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-amber-700">تحتاج متابعة</div>
-                    <div className="mt-2 text-3xl font-bold text-amber-800">
-                      {directorAttention.needsFollowUp.length}
-                    </div>
-                  </div>
-                  <Clock3 size={28} className="text-amber-600" />
-                </div>
-                <p className="mt-3 text-xs leading-5 text-amber-700">
-                  تكليفات لم يبدأ تنفيذها أو ما زالت قيد التنفيذ.
-                </p>
-              </button>
-
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-emerald-700">مكتملة</div>
-                    <div className="mt-2 text-3xl font-bold text-emerald-800">
-                      {directorAttention.completed.length}
-                    </div>
-                  </div>
-                  <Check size={28} className="text-emerald-600" />
-                </div>
-                <p className="mt-3 text-xs leading-5 text-emerald-700">
-                  تكليفات أُنجزت واعتمدت من الإدارة.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {isDirector && directorAttention.needsIntervention.length > 0 && (
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="font-bold text-slate-900">أولوية اليوم</h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    التكليفات التي تحتاج انتباهك الآن بدل مراجعة القائمة كاملة.
-                  </p>
-                </div>
-                <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
-                  {directorAttention.needsIntervention.length} تحتاج تدخل
-                </span>
-              </div>
-
-              <div className="grid gap-2">
-                {directorAttention.needsIntervention.slice(0, 5).map((task) => {
-                  const overdue = task.targets.some((target) =>
-                    isTargetOverdue(target, task.due_date)
-                  );
-
-                  return (
-                    <button
-                      key={task.id}
-                      type="button"
-                      onClick={() => setExpandedTaskId(task.id)}
-                      className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-right transition hover:border-red-200 hover:bg-red-50 md:flex-row md:items-center md:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-bold text-slate-800">
-                          {task.title}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {task.targets.length} معهد · الاستحقاق: {formatDate(task.due_date)}
-                        </div>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
-                        {overdue ? "متأخر" : "عاجل"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {showArchivedTasks && isDirector && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
               أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
@@ -1544,7 +1346,7 @@ export default function InstituteTasksPage() {
                                 ) : (
                                   <Trash2 size={15} />
                                 )}
-                                حذف التكليف
+                                إخفاء من الصفحة
                               </button>
                             )}
                           </div>
