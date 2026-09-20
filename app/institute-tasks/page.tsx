@@ -87,7 +87,7 @@ const statusOptions = [
   { value: "completed", label: "مكتمل" },
 ] as const;
 
-const HIDDEN_STORAGE_KEY = "azhar_institute_tasks_hidden_v3";
+const HIDDEN_STORAGE_KEY = "azhar_institute_tasks_hidden_v2";
 
 function getPriorityLabel(priority?: string | null) {
   return priorityOptions.find((item) => item.value === priority)?.label ?? "متوسطة";
@@ -238,12 +238,11 @@ export default function InstituteTasksPage() {
     profile?.role === "employee";
 
   const visibleTasks = useMemo(() => {
-    if (isInstituteUser) return tasks;
     if (showArchivedTasks) return tasks;
 
     const hidden = new Set(hiddenTaskIds);
     return tasks.filter((task) => !hidden.has(task.id));
-  }, [tasks, hiddenTaskIds, showArchivedTasks, isInstituteUser]);
+  }, [tasks, hiddenTaskIds, showArchivedTasks]);
 
   const filteredTasks = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -575,7 +574,7 @@ export default function InstituteTasksPage() {
         const keyExists = localStorage.getItem(HIDDEN_STORAGE_KEY) !== null;
 
         if (!keyExists) {
-          saveHiddenIds([]);
+          saveHiddenIds(currentTaskIds);
           setShowArchivedTasks(false);
         } else {
           const cleaned = currentHidden.filter((id) =>
@@ -722,7 +721,7 @@ export default function InstituteTasksPage() {
     if (!isDirector) return;
 
     const confirmed = window.confirm(
-      "سيتم إخفاء هذا التكليف من الصفحة فقط، ولن يتم حذفه من قاعدة البيانات. هل تريد المتابعة؟"
+      "هل أنت متأكد من حذف هذا التكليف نهائيًا؟ سيتم حذف التكليف وجميع حالات المتابعة المرتبطة به من قاعدة البيانات."
     );
 
     if (!confirmed) return;
@@ -730,7 +729,21 @@ export default function InstituteTasksPage() {
     setDeletingTaskId(task.id);
 
     try {
-      hideTask(task.id);
+      const { error } = await supabase
+        .from("institute_tasks")
+        .delete()
+        .eq("id", task.id);
+
+      if (error) throw error;
+
+      setTasks((current) => current.filter((item) => item.id !== task.id));
+      saveHiddenIds(hiddenTaskIds.filter((id) => id !== task.id));
+      setExpandedTaskId((current) => (current === task.id ? null : current));
+
+      alert("تم حذف التكليف نهائيًا.");
+    } catch (error: any) {
+      console.error("deleteTask error:", error);
+      alert(error?.message ?? "تعذر حذف التكليف.");
     } finally {
       setDeletingTaskId(null);
     }
@@ -1345,7 +1358,7 @@ export default function InstituteTasksPage() {
                                 ) : (
                                   <Trash2 size={15} />
                                 )}
-                                إخفاء من الصفحة
+                                حذف التكليف
                               </button>
                             )}
                           </div>
