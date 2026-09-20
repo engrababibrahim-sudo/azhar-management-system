@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
 AlertCircle,
 ArrowDown,
-ArrowUp,
 Bell,
 Check,
 ChevronDown,
@@ -21,6 +20,7 @@ Send,
 Trash2,
 Users,
 X,
+ArrowUp,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
@@ -420,9 +420,7 @@ try {
 
   const { data: profileData, error: profileError } = await supabase
     .from("profiles")
-    .select(
-      "id, role, full_name, institute_id, directorate_id"
-    )
+    .select("id, role, full_name, institute_id, directorate_id")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -552,7 +550,7 @@ try {
       .select(
         "id, assignment_group_id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
       )
-      .in(taskIds)
+      .in("id", taskIds)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -644,11 +642,6 @@ try {
     }
   }
 
-  /*
-   * هذا الجزء خاص بالتكليفات القديمة
-   * التي كانت تحتوي على institute_id مباشرة
-   * بدون سجل في institute_task_targets.
-   */
   for (const task of taskData) {
     const groupKey =
       task.assignment_group_id || task.id;
@@ -686,9 +679,7 @@ try {
   }
 
   const groupedTasks =
-    Array.from(
-      grouped.values()
-    );
+    Array.from(grouped.values());
 
   setTasks(groupedTasks);
 
@@ -700,20 +691,13 @@ try {
       (task) => task.id
     );
 
-  if (
-    typeof window !==
-    "undefined"
-  ) {
+  if (typeof window !== "undefined") {
     const keyExists =
       localStorage.getItem(
         HIDDEN_STORAGE_KEY
       ) !== null;
 
     if (!keyExists) {
-      /*
-       * أول مرة فقط:
-       * لا نخفي التكليفات الجديدة.
-       */
       saveHiddenIds([]);
     } else {
       const cleaned =
@@ -765,19 +749,12 @@ setTargetMode("single");
 
 }
 
-function toggleInstituteSelection(
-id: string
-) {
+function toggleInstituteSelection(id: string) {
 setSelectedInstitutes(
 (current) =>
 current.includes(id)
-? current.filter(
-(item) => item !== id
-)
-: [
-...current,
-id,
-]
+? current.filter((item) => item !== id)
+: [...current, id]
 );
 }
 
@@ -789,10 +766,7 @@ return institutes.map(
 }
 
 
-if (
-  targetMode ===
-  "selected"
-) {
+if (targetMode === "selected") {
   return selectedInstitutes;
 }
 
@@ -827,9 +801,7 @@ if (!form.title.trim()) {
 const targetInstitutes =
   getSelectedTargetInstitutes();
 
-if (
-  !targetInstitutes.length
-) {
+if (!targetInstitutes.length) {
   alert(
     "اختر معهدًا واحدًا على الأقل"
   );
@@ -940,9 +912,7 @@ try {
 
 }
 
-function hideTask(
-taskId: string
-) {
+function hideTask(taskId: string) {
 saveHiddenIds([
 ...hiddenTaskIds,
 taskId,
@@ -959,9 +929,7 @@ setExpandedTaskId(
 
 }
 
-function restoreTask(
-taskId: string
-) {
+function restoreTask(taskId: string) {
 saveHiddenIds(
 hiddenTaskIds.filter(
 (id) => id !== taskId
@@ -969,25 +937,11 @@ hiddenTaskIds.filter(
 );
 }
 
-/*
-
-* الحذف النهائي:
-* إذا كان التكليف جماعيًا، نحذف كل سجلات
-* institute_tasks التي تحمل نفس assignment_group_id.
-*
-* institute_task_targets مرتبطة بـ ON DELETE CASCADE
-* لذلك حالات المتابعة التابعة تحذف تلقائيًا.
-  */
-  async function deleteTask(
-  task: TaskView
-  ) {
-  if (!isDirector) return;
+async function deleteTask(task: TaskView) {
+if (!isDirector) return;
 
 
 const confirmed =
-
-
-
   window.confirm(
     "هل أنت متأكد من حذف هذا التكليف نهائيًا؟ سيتم حذف التكليف بالكامل وجميع حالات المتابعة المرتبطة به من قاعدة البيانات."
   );
@@ -1104,24 +1058,16 @@ try {
 
 }
 
-/*
-
-* تنظيف الصفحة لا يحذف أي بيانات من قاعدة البيانات.
-* فقط يخفي التكليفات من واجهة المستخدم.
-  */
-  async function deleteAllTasks() {
-  if (
-  !isDirector ||
-  !visibleTasks.length
-  ) {
-  return;
-  }
+async function deleteAllTasks() {
+if (
+!isDirector ||
+!visibleTasks.length
+) {
+return;
+}
 
 
 const confirmed =
-
-
-
   window.confirm(
     "سيتم إخفاء التكليفات الحالية من الصفحة فقط، ولن يتم حذف أي بيانات من قاعدة البيانات. هل تريد المتابعة؟"
   );
@@ -1655,8 +1601,7 @@ return ( <AppShell> <div
       {showArchivedTasks &&
         isDirector && (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
-            تنظيفها من العرض سابقًا.
+            أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم تنظيفها من العرض سابقًا.
           </div>
         )}
 
@@ -1683,8 +1628,7 @@ return ( <AppShell> <div
                 event
               ) =>
                 setSearchTerm(
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               placeholder="ابحث عن تكليف أو معهد..."
@@ -1700,8 +1644,7 @@ return ( <AppShell> <div
               event
             ) =>
               setStatusFilter(
-                event.target
-                  .value
+                event.target.value
               )
             }
             className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
@@ -1734,8 +1677,7 @@ return ( <AppShell> <div
               event
             ) =>
               setPriorityFilter(
-                event.target
-                  .value
+                event.target.value
               )
             }
             className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
@@ -1768,8 +1710,7 @@ return ( <AppShell> <div
               event
             ) =>
               setInstituteFilter(
-                event.target
-                  .value
+                event.target.value
               )
             }
             className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
@@ -1788,9 +1729,7 @@ return ( <AppShell> <div
                     institute.id
                   }
                 >
-                  {
-                    institute.name
-                  }
+                  {institute.name}
                 </option>
               )
             )}
@@ -1813,22 +1752,16 @@ return ( <AppShell> <div
           <div className="flex items-center justify-between">
             <div className="text-sm text-slate-500">
               عرض{" "}
-              {
-                filteredTasks.length
-              }{" "}
+              {filteredTasks.length}{" "}
               من{" "}
-              {
-                visibleTasks.length
-              }{" "}
+              {visibleTasks.length}{" "}
               تكليف
             </div>
 
             <button
               type="button"
               onClick={() => {
-                setRefreshing(
-                  true
-                );
+                setRefreshing(true);
                 loadData(false);
               }}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
@@ -1916,9 +1849,7 @@ return ( <AppShell> <div
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="text-lg font-bold text-slate-900">
-                              {
-                                task.title
-                              }
+                              {task.title}
                             </h3>
 
                             <span
@@ -1950,33 +1881,21 @@ return ( <AppShell> <div
 
                           {task.description && (
                             <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
-                              {
-                                task.description
-                              }
+                              {task.description}
                             </p>
                           )}
 
                           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                             <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2.5 py-1.5 text-slate-600">
-                              <Users
-                                size={
-                                  14
-                                }
-                              />
-                              {
-                                task
-                                  .targets
-                                  .length
-                              }{" "}
+                              <Users size={14} />
+                              {task.targets.length}{" "}
                               معهد
                             </span>
 
                             {counts.pending >
                               0 && (
                               <span className="rounded-lg bg-sky-50 px-2.5 py-1.5 text-sky-700">
-                                {
-                                  counts.pending
-                                }{" "}
+                                {counts.pending}{" "}
                                 جديد
                               </span>
                             )}
@@ -1984,9 +1903,7 @@ return ( <AppShell> <div
                             {counts.inProgress >
                               0 && (
                               <span className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-amber-700">
-                                {
-                                  counts.inProgress
-                                }{" "}
+                                {counts.inProgress}{" "}
                                 قيد التنفيذ
                               </span>
                             )}
@@ -1994,9 +1911,7 @@ return ( <AppShell> <div
                             {counts.submitted >
                               0 && (
                               <span className="rounded-lg bg-violet-50 px-2.5 py-1.5 text-violet-700">
-                                {
-                                  counts.submitted
-                                }{" "}
+                                {counts.submitted}{" "}
                                 بانتظار الاعتماد
                               </span>
                             )}
@@ -2004,9 +1919,7 @@ return ( <AppShell> <div
                             {counts.completed >
                               0 && (
                               <span className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-emerald-700">
-                                {
-                                  counts.completed
-                                }{" "}
+                                {counts.completed}{" "}
                                 مكتمل
                               </span>
                             )}
@@ -2037,15 +1950,11 @@ return ( <AppShell> <div
 
                             {expanded ? (
                               <ChevronUp
-                                size={
-                                  16
-                                }
+                                size={16}
                               />
                             ) : (
                               <ChevronDown
-                                size={
-                                  16
-                                }
+                                size={16}
                               />
                             )}
                           </span>
@@ -2086,16 +1995,12 @@ return ( <AppShell> <div
                               {deletingTaskId ===
                               task.id ? (
                                 <Loader2
-                                  size={
-                                    15
-                                  }
+                                  size={15}
                                   className="animate-spin"
                                 />
                               ) : (
                                 <Trash2
-                                  size={
-                                    15
-                                  }
+                                  size={15}
                                 />
                               )}
                               حذف التكليف
@@ -2198,9 +2103,7 @@ return ( <AppShell> <div
             event.target ===
             event.currentTarget
           ) {
-            setShowForm(
-              false
-            );
+            setShowForm(false);
           }
         }}
       >
@@ -2219,9 +2122,7 @@ return ( <AppShell> <div
             <button
               type="button"
               onClick={() =>
-                setShowForm(
-                  false
-                )
+                setShowForm(false)
               }
               className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
             >
@@ -2556,9 +2457,7 @@ return ( <AppShell> <div
               <button
                 type="button"
                 onClick={() =>
-                  setShowForm(
-                    false
-                  )
+                  setShowForm(false)
                 }
                 className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
               >
@@ -2577,16 +2476,12 @@ return ( <AppShell> <div
               >
                 {saving ? (
                   <Loader2
-                    size={
-                      18
-                    }
+                    size={18}
                     className="animate-spin"
                   />
                 ) : (
                   <Plus
-                    size={
-                      18
-                    }
+                    size={18}
                   />
                 )}
                 إنشاء التكليف
