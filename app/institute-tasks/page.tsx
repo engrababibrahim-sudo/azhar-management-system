@@ -34,6 +34,7 @@ directorate_id: string | null;
 
 type Task = {
 id: string;
+assignment_group_id: string | null;
 directorate_id: string | null;
 institute_id: string | null;
 title: string;
@@ -153,23 +154,6 @@ return "bg-blue-100 text-blue-700";
 return "bg-slate-100 text-slate-700";
 }
 
-function isTaskOverdue(task: Task) {
-if (!task.due_date) {
-return false;
-}
-
-const today = new Date();
-today.setHours(0, 0, 0, 0);
-
-const due = new Date(task.due_date + "T00:00:00");
-
-if (Number.isNaN(due.getTime())) {
-return false;
-}
-
-return due < today;
-}
-
 function isTargetOverdue(
 task: Task,
 target: TaskTargetView
@@ -181,7 +165,9 @@ return false;
 const today = new Date();
 today.setHours(0, 0, 0, 0);
 
-const due = new Date(task.due_date + "T00:00:00");
+const due = new Date(
+task.due_date + "T00:00:00"
+);
 
 if (Number.isNaN(due.getTime())) {
 return false;
@@ -195,7 +181,9 @@ if (!value) {
 return "غير محدد";
 }
 
-const date = new Date(value + "T00:00:00");
+const date = new Date(
+value + "T00:00:00"
+);
 
 if (Number.isNaN(date.getTime())) {
 return value;
@@ -214,7 +202,9 @@ return value;
 return date.toLocaleDateString("ar-EG");
 }
 
-function getOverallTaskStatus(targets: TaskTargetView[]) {
+function getOverallTaskStatus(
+targets: TaskTargetView[]
+) {
 if (targets.length === 0) {
 return "pending";
 }
@@ -223,67 +213,131 @@ const statuses = targets.map(
 (target) => target.status || "pending"
 );
 
-if (statuses.every((status) => status === "completed")) {
+if (
+statuses.every(
+(status) => status === "completed"
+)
+) {
 return "completed";
 }
 
-if (statuses.some((status) => status === "submitted")) {
+if (
+statuses.some(
+(status) => status === "submitted"
+)
+) {
 return "submitted";
 }
 
-if (statuses.some((status) => status === "in_progress")) {
+if (
+statuses.some(
+(status) => status === "in_progress"
+)
+) {
 return "in_progress";
 }
 
 return "pending";
 }
 
-function getTargetCounts(targets: TaskTargetView[]) {
+function getTargetCounts(
+targets: TaskTargetView[]
+) {
 return {
 total: targets.length,
 pending: targets.filter(
-(target) => target.status === "pending"
+(target) =>
+(target.status || "pending") ===
+"pending"
 ).length,
 inProgress: targets.filter(
-(target) => target.status === "in_progress"
+(target) =>
+target.status === "in_progress"
 ).length,
 submitted: targets.filter(
-(target) => target.status === "submitted"
+(target) =>
+target.status === "submitted"
 ).length,
 completed: targets.filter(
-(target) => target.status === "completed"
+(target) =>
+target.status === "completed"
 ).length,
 };
 }
 
+function createGroupId() {
+if (
+typeof crypto !== "undefined" &&
+typeof crypto.randomUUID === "function"
+) {
+return crypto.randomUUID();
+}
+
+return (
+Date.now().toString(36) +
+Math.random()
+.toString(36)
+.substring(2)
+);
+}
+
 export default function InstituteTasksPage() {
-const [profile, setProfile] = useState<Profile | null>(null);
-const [institutes, setInstitutes] = useState<Institute[]>([]);
-const [tasks, setTasks] = useState<TaskView[]>([]);
+const [profile, setProfile] =
+useState<Profile | null>(null);
 
-const [loading, setLoading] = useState(true);
-const [saving, setSaving] = useState(false);
-const [updatingTargetId, setUpdatingTargetId] =
-useState<string | null>(null);
+const [institutes, setInstitutes] =
+useState<Institute[]>([]);
 
-const [showForm, setShowForm] = useState(false);
-const [expandedTaskId, setExpandedTaskId] =
-useState<string | null>(null);
+const [tasks, setTasks] =
+useState<TaskView[]>([]);
 
-const [searchTerm, setSearchTerm] = useState("");
-const [statusFilter, setStatusFilter] = useState("all");
-const [priorityFilter, setPriorityFilter] =
+const [loading, setLoading] =
+useState(true);
+
+const [saving, setSaving] =
+useState(false);
+
+const [
+updatingTargetId,
+setUpdatingTargetId,
+] = useState<string | null>(null);
+
+const [showForm, setShowForm] =
+useState(false);
+
+const [
+expandedTaskId,
+setExpandedTaskId,
+] = useState<string | null>(null);
+
+const [searchTerm, setSearchTerm] =
+useState("");
+
+const [statusFilter, setStatusFilter] =
 useState("all");
-const [instituteFilter, setInstituteFilter] =
-useState("all");
 
-const [targetMode, setTargetMode] = useState<
+const [
+priorityFilter,
+setPriorityFilter,
+] = useState("all");
+
+const [
+instituteFilter,
+setInstituteFilter,
+] = useState("all");
+
+const [
+targetMode,
+setTargetMode,
+] = useState<
 "all" | "selected" | "single"
 
 > ("single");
 
-const [selectedInstitutes, setSelectedInstitutes] =
-useState<string[]>([]);
+const [
+selectedInstitutes,
+setSelectedInstitutes,
+] = useState<string[]>([]);
 
 const [form, setForm] = useState({
 institute_id: "",
@@ -329,35 +383,49 @@ try {
     return;
   }
 
-  const currentProfile = profileData as Profile;
+  const currentProfile =
+    profileData as Profile;
 
   setProfile(currentProfile);
 
-  let institutesQuery = supabase
-    .from("institutes")
-    .select("id, name, code")
-    .order("name");
+  const isDirector =
+    currentProfile.role ===
+      "director" ||
+    currentProfile.role ===
+      "super_admin";
+
+  let institutesQuery =
+    supabase
+      .from("institutes")
+      .select(
+        "id, name, code"
+      )
+      .order("name");
 
   if (
-    (currentProfile.role === "director" ||
-      currentProfile.role === "super_admin") &&
+    isDirector &&
     currentProfile.directorate_id
   ) {
-    institutesQuery = institutesQuery.eq(
-      "directorate_id",
-      currentProfile.directorate_id
-    );
-  } else if (currentProfile.institute_id) {
-    institutesQuery = institutesQuery.eq(
-      "id",
-      currentProfile.institute_id
-    );
+    institutesQuery =
+      institutesQuery.eq(
+        "directorate_id",
+        currentProfile.directorate_id
+      );
+  } else if (
+    currentProfile.institute_id
+  ) {
+    institutesQuery =
+      institutesQuery.eq(
+        "id",
+        currentProfile.institute_id
+      );
   }
 
   const {
     data: instituteData,
     error: instituteError,
-  } = await institutesQuery;
+  } =
+    await institutesQuery;
 
   if (instituteError) {
     console.error(
@@ -367,40 +435,114 @@ try {
   }
 
   const loadedInstitutes =
-    (instituteData || []) as Institute[];
+    (instituteData ||
+      []) as Institute[];
 
-  setInstitutes(loadedInstitutes);
+  setInstitutes(
+    loadedInstitutes
+  );
 
-  let tasksQuery = supabase
-    .from("institute_tasks")
-    .select(
-      "id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
+  let targetQuery =
+    supabase
+      .from(
+        "institute_task_targets"
+      )
+      .select(
+        "id, task_id, institute_id, status, response, responded_at, created_at, updated_at"
+      );
+
+  if (!isDirector) {
+    if (
+      !currentProfile.institute_id
+    ) {
+      setTasks([]);
+      return;
+    }
+
+    targetQuery =
+      targetQuery.eq(
+        "institute_id",
+        currentProfile.institute_id
+      );
+  }
+
+  const {
+    data: targetData,
+    error: targetError,
+  } =
+    await targetQuery.order(
+      "created_at",
+      {
+        ascending: false,
+      }
+    );
+
+  if (targetError) {
+    console.error(
+      "Targets error:",
+      targetError
+    );
+    setTasks([]);
+    return;
+  }
+
+  const loadedTargets =
+    (targetData ||
+      []) as TaskTarget[];
+
+  const targetTaskIds = Array.from(
+    new Set(
+      loadedTargets.map(
+        (target) =>
+          target.task_id
+      )
     )
-    .order("created_at", {
-      ascending: false,
-    });
+  );
 
-  if (
-    (currentProfile.role === "director" ||
-      currentProfile.role === "super_admin") &&
-    currentProfile.directorate_id
-  ) {
-    tasksQuery = tasksQuery.eq(
-      "directorate_id",
+  let tasksQuery =
+    supabase
+      .from("institute_tasks")
+      .select(
+        "id, assignment_group_id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
+      )
+      .order(
+        "created_at",
+        {
+          ascending: false,
+        }
+      );
+
+  if (isDirector) {
+    if (
       currentProfile.directorate_id
-    );
-  } else if (currentProfile.institute_id) {
-    tasksQuery = tasksQuery.or(
-      "institute_id.eq." +
-        currentProfile.institute_id +
-        ",institute_id.is.null"
-    );
+    ) {
+      tasksQuery =
+        tasksQuery.eq(
+          "directorate_id",
+          currentProfile.directorate_id
+        );
+    }
+  } else {
+    if (
+      targetTaskIds.length ===
+      0
+    ) {
+      setTasks([]);
+      return;
+    }
+
+    tasksQuery =
+      tasksQuery.in(
+        "id",
+        targetTaskIds
+      );
   }
 
   const {
     data: taskData,
     error: taskError,
-  } = await tasksQuery;
+  } =
+    await tasksQuery;
 
   if (taskError) {
     console.error(
@@ -411,57 +553,120 @@ try {
     return;
   }
 
-  const taskRows = (taskData || []) as Task[];
+  const taskRows =
+    (taskData ||
+      []) as Task[];
 
-  if (taskRows.length === 0) {
+  if (
+    taskRows.length === 0
+  ) {
     setTasks([]);
     return;
   }
 
-  const taskIds = taskRows.map(
-    (task) => task.id
-  );
-
-  const {
-    data: targetData,
-    error: targetError,
-  } = await supabase
-    .from("institute_task_targets")
-    .select(
-      "id, task_id, institute_id, status, response, responded_at, created_at, updated_at"
-    )
-    .in("task_id", taskIds);
-
-  if (targetError) {
-    console.error(
-      "Task targets error:",
-      targetError
+  const taskIds =
+    taskRows.map(
+      (task) => task.id
     );
+
+  let finalTargets =
+    loadedTargets.filter(
+      (target) =>
+        taskIds.includes(
+          target.task_id
+        )
+    );
+
+  /*
+   * For directors, the first target query
+   * already contains all targets.
+   * This keeps the query efficient and
+   * avoids exposing unrelated data to
+   * institute users.
+   */
+  if (isDirector) {
+    const missingTaskIds =
+      taskIds.filter(
+        (taskId) =>
+          !finalTargets.some(
+            (target) =>
+              target.task_id ===
+              taskId
+          )
+      );
+
+    if (
+      missingTaskIds.length >
+      0
+    ) {
+      const {
+        data: extraTargets,
+        error:
+          extraTargetError,
+      } =
+        await supabase
+          .from(
+            "institute_task_targets"
+          )
+          .select(
+            "id, task_id, institute_id, status, response, responded_at, created_at, updated_at"
+          )
+          .in(
+            "task_id",
+            missingTaskIds
+          );
+
+      if (
+        extraTargetError
+      ) {
+        console.error(
+          "Extra targets error:",
+          extraTargetError
+        );
+      }
+
+      if (
+        extraTargets
+      ) {
+        finalTargets =
+          finalTargets.concat(
+            extraTargets as TaskTarget[]
+          );
+      }
+    }
   }
 
-  const loadedTargets =
-    (targetData || []) as TaskTarget[];
+  const instituteMap =
+    new Map(
+      loadedInstitutes.map(
+        (institute) => [
+          institute.id,
+          institute.name,
+        ]
+      )
+    );
 
-  const instituteMap = new Map(
-    loadedInstitutes.map((institute) => [
-      institute.id,
-      institute.name,
-    ])
-  );
+  /*
+   * Group targets by task.
+   */
+  const targetsByTask =
+    new Map<
+      string,
+      TaskTargetView[]
+    >();
 
-  const targetsByTask = new Map<
-    string,
-    TaskTargetView[]
-  >();
-
-  for (const target of loadedTargets) {
+  for (const target of finalTargets) {
     const existing =
-      targetsByTask.get(target.task_id) || [];
+      targetsByTask.get(
+        target.task_id
+      ) || [];
 
     existing.push({
       ...target,
       instituteName:
-        instituteMap.get(target.institute_id) ||
+        instituteMap.get(
+          target.institute_id
+        ) ||
         "معهد غير معروف",
     });
 
@@ -471,45 +676,128 @@ try {
     );
   }
 
-  const mappedTasks: TaskView[] =
-    taskRows.map((task) => {
-      let taskTargets =
-        targetsByTask.get(task.id) || [];
+  /*
+   * Map tasks to targets.
+   * Old records without target rows
+   * remain visible as legacy tasks.
+   */
+  const mappedTasks =
+    taskRows.map(
+      (task) => {
+        let taskTargets =
+          targetsByTask.get(
+            task.id
+          ) || [];
 
-      /*
-       * Backward compatibility:
-       * Old tasks were created with institute_id directly
-       * and may not have a target row.
-       */
-      if (
-        taskTargets.length === 0 &&
-        task.institute_id
-      ) {
-        taskTargets = [
-          {
-            id: "legacy-" + task.id,
-            task_id: task.id,
-            institute_id: task.institute_id,
-            status: task.status || "pending",
-            response: task.response,
-            responded_at: null,
-            created_at: task.created_at,
-            updated_at: task.updated_at,
-            instituteName:
-              instituteMap.get(
-                task.institute_id
-              ) || "معهد غير معروف",
-          },
-        ];
+        if (
+          taskTargets.length ===
+            0 &&
+          task.institute_id
+        ) {
+          taskTargets = [
+            {
+              id:
+                "legacy-" +
+                task.id,
+              task_id:
+                task.id,
+              institute_id:
+                task.institute_id,
+              status:
+                task.status ||
+                "pending",
+              response:
+                task.response,
+              responded_at:
+                null,
+              created_at:
+                task.created_at,
+              updated_at:
+                task.updated_at,
+              instituteName:
+                instituteMap.get(
+                  task.institute_id
+                ) ||
+                "معهد غير معروف",
+            },
+          ];
+        }
+
+        return {
+          ...task,
+          targets:
+            taskTargets,
+        };
       }
+    );
 
-      return {
-        ...task,
-        targets: taskTargets,
-      };
-    });
+  /*
+   * Remove duplicate logical rows
+   * when several task records share the
+   * same assignment_group_id.
+   */
+  const grouped =
+    new Map<
+      string,
+      TaskView
+    >();
 
-  setTasks(mappedTasks);
+  for (const task of mappedTasks) {
+    const groupKey =
+      task.assignment_group_id ||
+      task.id;
+
+    const existing =
+      grouped.get(groupKey);
+
+    if (!existing) {
+      grouped.set(
+        groupKey,
+        task
+      );
+      continue;
+    }
+
+    const mergedTargets =
+      new Map<
+        string,
+        TaskTargetView
+      >();
+
+    [
+      ...existing.targets,
+      ...task.targets,
+    ].forEach(
+      (target) => {
+        mergedTargets.set(
+          target.id,
+          target
+        );
+      }
+    );
+
+    grouped.set(
+      groupKey,
+      {
+        ...existing,
+        targets:
+          Array.from(
+            mergedTargets.values()
+          ),
+        updated_at:
+          task.updated_at >
+          existing.updated_at
+            ? task.updated_at
+            : existing.updated_at,
+      }
+    );
+  }
+
+  setTasks(
+    Array.from(
+      grouped.values()
+    )
+  );
 } catch (error) {
   console.error(
     "Unexpected load error:",
@@ -529,12 +817,15 @@ loadData();
 function getTargetInstituteIds() {
 if (targetMode === "all") {
 return institutes.map(
-(institute) => institute.id
+(institute) =>
+institute.id
 );
 }
 
 
-if (targetMode === "selected") {
+if (
+  targetMode === "selected"
+) {
   return selectedInstitutes;
 }
 
@@ -550,16 +841,27 @@ return [];
 function toggleInstitute(
 instituteId: string
 ) {
-setSelectedInstitutes((current) => {
-if (current.includes(instituteId)) {
+setSelectedInstitutes(
+(current) => {
+if (
+current.includes(
+instituteId
+)
+) {
 return current.filter(
-(id) => id !== instituteId
+(id) =>
+id !==
+instituteId
 );
 }
 
 
-  return [...current, instituteId];
-});
+    return [
+      ...current,
+      instituteId,
+    ];
+  }
+);
 
 
 }
@@ -567,7 +869,8 @@ return current.filter(
 function selectAllInstitutes() {
 setSelectedInstitutes(
 institutes.map(
-(institute) => institute.id
+(institute) =>
+institute.id
 )
 );
 }
@@ -578,20 +881,28 @@ setSelectedInstitutes([]);
 
 async function createTask() {
 if (!profile) {
-alert("لم يتم تحميل بيانات المستخدم");
+alert(
+"لم يتم تحميل بيانات المستخدم"
+);
 return;
 }
 
-
-if (!form.title.trim()) {
-  alert("اكتبي عنوان التكليف");
+if (
+  !form.title.trim()
+) {
+  alert(
+    "اكتبي عنوان التكليف"
+  );
   return;
 }
 
 const targetInstituteIds =
   getTargetInstituteIds();
 
-if (targetInstituteIds.length === 0) {
+if (
+  targetInstituteIds.length ===
+  0
+) {
   alert(
     "اختاري المعهد أو المعاهد المستهدفة أولًا"
   );
@@ -602,33 +913,49 @@ setSaving(true);
 
 try {
   /*
-   * One logical task only.
-   * institute_id remains NULL.
-   * Individual institutes are stored in
-   * institute_task_targets.
+   * One logical task = one row.
+   * One assignment_group_id identifies
+   * the logical assignment.
    */
+  const assignmentGroupId =
+    createGroupId();
+
   const {
     data: createdTask,
     error: taskError,
   } = await supabase
-    .from("institute_tasks")
+    .from(
+      "institute_tasks"
+    )
     .insert({
+      assignment_group_id:
+        assignmentGroupId,
       directorate_id:
         profile.directorate_id,
       institute_id: null,
-      title: form.title.trim(),
+      title:
+        form.title.trim(),
       description:
-        form.description.trim() || null,
-      priority: form.priority,
+        form.description.trim() ||
+        null,
+      priority:
+        form.priority,
       status: "pending",
       due_date:
-        form.due_date || null,
-      created_by: profile.id,
+        form.due_date ||
+        null,
+      created_by:
+        profile.id,
     })
-    .select("id")
+    .select(
+      "id"
+    )
     .single();
 
-  if (taskError || !createdTask) {
+  if (
+    taskError ||
+    !createdTask
+  ) {
     console.error(
       "Create task error:",
       taskError
@@ -646,34 +973,43 @@ try {
   const targetRows =
     targetInstituteIds.map(
       (instituteId) => ({
-        task_id: createdTask.id,
-        institute_id: instituteId,
-        status: "pending",
+        task_id:
+          createdTask.id,
+        institute_id:
+          instituteId,
+        status:
+          "pending",
         response: null,
-        responded_at: null,
+        responded_at:
+          null,
       })
     );
 
   const {
     error: targetError,
   } = await supabase
-    .from("institute_task_targets")
-    .insert(targetRows);
+    .from(
+      "institute_task_targets"
+    )
+    .insert(
+      targetRows
+    );
 
   if (targetError) {
     console.error(
-      "Create task targets error:",
+      "Create targets error:",
       targetError
     );
 
-    /*
-     * Remove the just-created empty task
-     * if targets could not be created.
-     */
     await supabase
-      .from("institute_tasks")
+      .from(
+        "institute_tasks"
+      )
       .delete()
-      .eq("id", createdTask.id);
+      .eq(
+        "id",
+        createdTask.id
+      );
 
     alert(
       "تعذر تسجيل المعاهد المستهدفة:\n" +
@@ -691,14 +1027,20 @@ try {
     due_date: "",
   });
 
-  setTargetMode("single");
-  setSelectedInstitutes([]);
+  setTargetMode(
+    "single"
+  );
+
+  setSelectedInstitutes(
+    []
+  );
+
   setShowForm(false);
 
   await loadData();
 
   alert(
-    "تم إنشاء التكليف بنجاح وإرساله إلى " +
+    "تم إنشاء تكليف واحد بنجاح وإرساله إلى " +
       targetInstituteIds.length +
       " معهد"
   );
@@ -714,7 +1056,11 @@ taskId: string,
 target: TaskTargetView,
 status: string
 ) {
-if (target.id.startsWith("legacy-")) {
+if (
+target.id.startsWith(
+"legacy-"
+)
+) {
 alert(
 "هذا تكليف قديم. لا يمكن تغيير حالته من النسخة الجماعية الجديدة."
 );
@@ -722,7 +1068,9 @@ return;
 }
 
 
-setUpdatingTargetId(target.id);
+setUpdatingTargetId(
+  target.id
+);
 
 try {
   const now =
@@ -747,9 +1095,16 @@ try {
   const {
     error,
   } = await supabase
-    .from("institute_task_targets")
-    .update(updatePayload)
-    .eq("id", target.id);
+    .from(
+      "institute_task_targets"
+    )
+    .update(
+      updatePayload
+    )
+    .eq(
+      "id",
+      target.id
+    );
 
   if (error) {
     console.error(
@@ -765,120 +1120,173 @@ try {
     return;
   }
 
-  setTasks((current) =>
-    current.map((task) => {
-      if (task.id !== taskId) {
-        return task;
-      }
+  /*
+   * Keep the parent task status synchronized
+   * for backward compatibility.
+   */
+  const currentTask =
+    tasks.find(
+      (task) =>
+        task.id ===
+        taskId
+    );
 
-      const updatedTargets =
-        task.targets.map(
-          (currentTarget) => {
-            if (
-              currentTarget.id !==
-              target.id
-            ) {
-              return currentTarget;
-            }
+  if (currentTask) {
+    const updatedTargets =
+      currentTask.targets.map(
+        (currentTarget) =>
+          currentTarget.id ===
+          target.id
+            ? {
+                ...currentTarget,
+                status,
+                updated_at:
+                  now,
+                responded_at:
+                  status ===
+                  "submitted"
+                    ? now
+                    : currentTarget.responded_at,
+              }
+            : currentTarget
+      );
 
-            return {
-              ...currentTarget,
-              status,
-              updated_at: now,
-              responded_at:
-                status === "submitted"
-                  ? now
-                  : currentTarget.responded_at,
-            };
-          }
-        );
+    const overallStatus =
+      getOverallTaskStatus(
+        updatedTargets
+      );
 
-      return {
-        ...task,
-        targets: updatedTargets,
+    await supabase
+      .from(
+        "institute_tasks"
+      )
+      .update({
         status:
-          getOverallTaskStatus(
-            updatedTargets
-          ),
-        updated_at: now,
-      };
-    })
-  );
+          overallStatus,
+        updated_at:
+          now,
+      })
+      .eq(
+        "id",
+        taskId
+      );
+
+    setTasks(
+      (current) =>
+        current.map(
+          (task) =>
+            task.id ===
+            taskId
+              ? {
+                  ...task,
+                  targets:
+                    updatedTargets,
+                  status:
+                    overallStatus,
+                  updated_at:
+                    now,
+                }
+              : task
+        )
+    );
+  }
 } finally {
-  setUpdatingTargetId(null);
+  setUpdatingTargetId(
+    null
+  );
 }
 
 
 }
 
 const isDirector =
-profile?.role === "director" ||
-profile?.role === "super_admin";
+profile?.role ===
+"director" ||
+profile?.role ===
+"super_admin";
 
-const filteredTasks = useMemo(() => {
+const filteredTasks =
+useMemo(() => {
 const normalizedSearch =
-searchTerm.trim().toLowerCase();
+searchTerm
+.trim()
+.toLowerCase();
 
 
-return tasks.filter((task) => {
-  const targetNames = task.targets
-    .map((target) =>
-      target.instituteName.toLowerCase()
-    )
-    .join(" ");
+  return tasks.filter(
+    (task) => {
+      const targetNames =
+        task.targets
+          .map(
+            (target) =>
+              target.instituteName.toLowerCase()
+          )
+          .join(" ");
 
-  const matchesSearch =
-    !normalizedSearch ||
-    task.title
-      .toLowerCase()
-      .includes(normalizedSearch) ||
-    (task.description || "")
-      .toLowerCase()
-      .includes(normalizedSearch) ||
-    targetNames.includes(
-      normalizedSearch
-    );
+      const matchesSearch =
+        !normalizedSearch ||
+        task.title
+          .toLowerCase()
+          .includes(
+            normalizedSearch
+          ) ||
+        (
+          task.description ||
+          ""
+        )
+          .toLowerCase()
+          .includes(
+            normalizedSearch
+          ) ||
+        targetNames.includes(
+          normalizedSearch
+        );
 
-  const overallStatus =
-    getOverallTaskStatus(
-      task.targets
-    );
+      const overallStatus =
+        getOverallTaskStatus(
+          task.targets
+        );
 
-  const matchesStatus =
-    statusFilter === "all" ||
-    overallStatus === statusFilter;
+      const matchesStatus =
+        statusFilter ===
+          "all" ||
+        overallStatus ===
+          statusFilter;
 
-  const matchesPriority =
-    priorityFilter === "all" ||
-    task.priority === priorityFilter;
+      const matchesPriority =
+        priorityFilter ===
+          "all" ||
+        task.priority ===
+          priorityFilter;
 
-  const matchesInstitute =
-    instituteFilter === "all" ||
-    task.targets.some(
-      (target) =>
-        target.institute_id ===
-        instituteFilter
-    );
+      const matchesInstitute =
+        instituteFilter ===
+          "all" ||
+        task.targets.some(
+          (target) =>
+            target.institute_id ===
+            instituteFilter
+        );
 
-  return (
-    matchesSearch &&
-    matchesStatus &&
-    matchesPriority &&
-    matchesInstitute
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesInstitute
+      );
+    }
   );
-});
-
-
 }, [
-tasks,
-searchTerm,
-statusFilter,
-priorityFilter,
-instituteFilter,
+  tasks,
+  searchTerm,
+  statusFilter,
+  priorityFilter,
+  instituteFilter,
 ]);
 
-const statistics = useMemo(() => {
-let totalTargets = 0;
+
+const statistics =
+useMemo(() => {
 let pending = 0;
 let inProgress = 0;
 let submitted = 0;
@@ -886,50 +1294,64 @@ let completed = 0;
 let urgent = 0;
 let overdue = 0;
 
-for (const task of tasks) {
-  const counts =
-    getTargetCounts(task.targets);
 
-  totalTargets += counts.total;
-  pending += counts.pending;
-  inProgress += counts.inProgress;
-  submitted += counts.submitted;
-  completed += counts.completed;
+  for (const task of tasks) {
+    const counts =
+      getTargetCounts(
+        task.targets
+      );
 
-  if (
-    task.priority === "urgent" &&
-    getOverallTaskStatus(
-      task.targets
-    ) !== "completed"
-  ) {
-    urgent += 1;
+    pending +=
+      counts.pending;
+
+    inProgress +=
+      counts.inProgress;
+
+    submitted +=
+      counts.submitted;
+
+    completed +=
+      counts.completed;
+
+    if (
+      task.priority ===
+        "urgent" &&
+      getOverallTaskStatus(
+        task.targets
+      ) !== "completed"
+    ) {
+      urgent += 1;
+    }
+
+    if (
+      task.targets.some(
+        (target) =>
+          isTargetOverdue(
+            task,
+            target
+          )
+      )
+    ) {
+      overdue += 1;
+    }
   }
 
-  if (
-    task.targets.some((target) =>
-      isTargetOverdue(task, target)
-    )
-  ) {
-    overdue += 1;
-  }
-}
-
-return {
-  tasks: tasks.length,
-  totalTargets,
-  pending,
-  inProgress,
-  submitted,
-  completed,
-  urgent,
-  overdue,
-};
-
-
+  return {
+    tasks:
+      tasks.length,
+    pending,
+    inProgress,
+    submitted,
+    completed,
+    urgent,
+    overdue,
+  };
 }, [tasks]);
 
+
 const targetCount =
-getTargetInstituteIds().length;
+getTargetInstituteIds()
+.length;
 
 return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8"> <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"> <div> <h1 className="text-2xl font-black text-slate-900">
 مركز المتابعة والتكليفات </h1>
@@ -1086,10 +1508,15 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
           />
 
           <input
-            value={searchTerm}
-            onChange={(event) =>
+            value={
+              searchTerm
+            }
+            onChange={(
+              event
+            ) =>
               setSearchTerm(
-                event.target.value
+                event.target
+                  .value
               )
             }
             placeholder="ابحث عن تكليف أو معهد..."
@@ -1098,10 +1525,15 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
         </div>
 
         <select
-          value={instituteFilter}
-          onChange={(event) =>
+          value={
+            instituteFilter
+          }
+          onChange={(
+            event
+          ) =>
             setInstituteFilter(
-              event.target.value
+              event.target
+                .value
             )
           }
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
@@ -1113,20 +1545,31 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
           {institutes.map(
             (institute) => (
               <option
-                key={institute.id}
-                value={institute.id}
+                key={
+                  institute.id
+                }
+                value={
+                  institute.id
+                }
               >
-                {institute.name}
+                {
+                  institute.name
+                }
               </option>
             )
           )}
         </select>
 
         <select
-          value={statusFilter}
-          onChange={(event) =>
+          value={
+            statusFilter
+          }
+          onChange={(
+            event
+          ) =>
             setStatusFilter(
-              event.target.value
+              event.target
+                .value
             )
           }
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
@@ -1138,20 +1581,31 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
           {statusOptions.map(
             (status) => (
               <option
-                key={status.value}
-                value={status.value}
+                key={
+                  status.value
+                }
+                value={
+                  status.value
+                }
               >
-                {status.label}
+                {
+                  status.label
+                }
               </option>
             )
           )}
         </select>
 
         <select
-          value={priorityFilter}
-          onChange={(event) =>
+          value={
+            priorityFilter
+          }
+          onChange={(
+            event
+          ) =>
             setPriorityFilter(
-              event.target.value
+              event.target
+                .value
             )
           }
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
@@ -1163,10 +1617,16 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
           {priorityOptions.map(
             (priority) => (
               <option
-                key={priority.value}
-                value={priority.value}
+                key={
+                  priority.value
+                }
+                value={
+                  priority.value
+                }
               >
-                {priority.label}
+                {
+                  priority.label
+                }
               </option>
             )
           )}
@@ -1241,7 +1701,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
 
               return (
                 <div
-                  key={task.id}
+                  key={
+                    task.id
+                  }
                   className={
                     "overflow-hidden rounded-2xl bg-white shadow-sm ring-1 " +
                     (overdue
@@ -1254,7 +1716,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-base font-black text-slate-900">
-                            {task.title}
+                            {
+                              task.title
+                            }
                           </h3>
 
                           <span
@@ -1292,7 +1756,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
 
                         {task.description && (
                           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-500">
-                            {task.description}
+                            {
+                              task.description
+                            }
                           </p>
                         )}
 
@@ -1304,28 +1770,40 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                           {counts.pending >
                             0 && (
                             <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
-                              {counts.pending} جديدة
+                              {
+                                counts.pending
+                              }{" "}
+                              جديدة
                             </span>
                           )}
 
                           {counts.inProgress >
                             0 && (
                             <span className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">
-                              {counts.inProgress} قيد التنفيذ
+                              {
+                                counts.inProgress
+                              }{" "}
+                              قيد التنفيذ
                             </span>
                           )}
 
                           {counts.submitted >
                             0 && (
                             <span className="rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-bold text-purple-700">
-                              {counts.submitted} تم التسليم
+                              {
+                                counts.submitted
+                              }{" "}
+                              تم التسليم
                             </span>
                           )}
 
                           {counts.completed >
                             0 && (
                             <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-                              {counts.completed} مكتملة
+                              {
+                                counts.completed
+                              }{" "}
+                              مكتملة
                             </span>
                           )}
                         </div>
@@ -1390,19 +1868,27 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                           </h4>
 
                           <p className="mt-1 text-xs font-semibold text-slate-500">
-                            يمكن متابعة كل معهد بشكل مستقل.
+                            كل معهد له حالة مستقلة داخل نفس التكليف.
                           </p>
                         </div>
 
                         <span className="text-xs font-bold text-slate-500">
-                          {counts.completed} /{" "}
-                          {counts.total} مكتملة
+                          {
+                            counts.completed
+                          }{" "}
+                          /{" "}
+                          {
+                            counts.total
+                          }{" "}
+                          مكتملة
                         </span>
                       </div>
 
                       <div className="space-y-3">
                         {task.targets.map(
-                          (target) => {
+                          (
+                            target
+                          ) => {
                             const targetOverdue =
                               isTargetOverdue(
                                 task,
@@ -1466,50 +1952,56 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
 
                                   <div className="flex shrink-0 flex-wrap gap-2">
                                     {target.status ===
-                                      "pending" && (
-                                      <button
-                                        type="button"
-                                        disabled={
-                                          isUpdating
-                                        }
-                                        onClick={() =>
-                                          updateTargetStatus(
-                                            task.id,
-                                            target,
-                                            "in_progress"
-                                          )
-                                        }
-                                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
-                                      >
-                                        <RefreshCw
-                                          size={15}
-                                        />
-                                        بدء التنفيذ
-                                      </button>
-                                    )}
+                                      "pending" &&
+                                      !isDirector && (
+                                        <button
+                                          type="button"
+                                          disabled={
+                                            isUpdating
+                                          }
+                                          onClick={() =>
+                                            updateTargetStatus(
+                                              task.id,
+                                              target,
+                                              "in_progress"
+                                            )
+                                          }
+                                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                                        >
+                                          <RefreshCw
+                                            size={
+                                              15
+                                            }
+                                          />
+                                          بدء التنفيذ
+                                        </button>
+                                      )}
 
                                     {target.status ===
-                                      "in_progress" && (
-                                      <button
-                                        type="button"
-                                        disabled={
-                                          isUpdating
-                                        }
-                                        onClick={() =>
-                                          updateTargetStatus(
-                                            task.id,
-                                            target,
-                                            "submitted"
-                                          )
-                                        }
-                                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-xs font-bold text-purple-700 transition hover:bg-purple-100 disabled:opacity-50"
-                                      >
-                                        <Send
-                                          size={15}
-                                        />
-                                        تم التسليم
-                                      </button>
-                                    )}
+                                      "in_progress" &&
+                                      !isDirector && (
+                                        <button
+                                          type="button"
+                                          disabled={
+                                            isUpdating
+                                          }
+                                          onClick={() =>
+                                            updateTargetStatus(
+                                              task.id,
+                                              target,
+                                              "submitted"
+                                            )
+                                          }
+                                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-xs font-bold text-purple-700 transition hover:bg-purple-100 disabled:opacity-50"
+                                        >
+                                          <Send
+                                            size={
+                                              15
+                                            }
+                                          />
+                                          تم التسليم
+                                        </button>
+                                      )}
 
                                     {target.status ===
                                       "submitted" &&
@@ -1529,7 +2021,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                                           className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                                         >
                                           <CheckCircle2
-                                            size={15}
+                                            size={
+                                              15
+                                            }
                                           />
                                           اعتماد وإغلاق
                                         </button>
@@ -1539,7 +2033,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                                       "completed" && (
                                       <span className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-700">
                                         <CheckCircle2
-                                          size={15}
+                                          size={
+                                            15
+                                          }
                                         />
                                         تم الإنجاز
                                       </span>
@@ -1597,10 +2093,14 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
               <button
                 type="button"
                 onClick={() => {
-                  setTargetMode("all");
+                  setTargetMode(
+                    "all"
+                  );
 
                   setForm(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       institute_id:
                         "",
@@ -1630,7 +2130,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                   );
 
                   setForm(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       institute_id:
                         "",
@@ -1654,6 +2156,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                   setTargetMode(
                     "single"
                   );
+
                   setSelectedInstitutes(
                     []
                   );
@@ -1671,7 +2174,8 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
             </div>
           </div>
 
-          {targetMode === "single" && (
+          {targetMode ===
+            "single" && (
             <div>
               <label className="mb-2 block text-sm font-bold text-slate-700">
                 المعهد
@@ -1681,12 +2185,17 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                 value={
                   form.institute_id
                 }
-                onChange={(event) =>
+                onChange={(
+                  event
+                ) =>
                   setForm(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       institute_id:
-                        event.target
+                        event
+                          .target
                           .value,
                     })
                   )
@@ -1698,7 +2207,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                 </option>
 
                 {institutes.map(
-                  (institute) => (
+                  (
+                    institute
+                  ) => (
                     <option
                       key={
                         institute.id
@@ -1707,7 +2218,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                         institute.id
                       }
                     >
-                      {institute.name}
+                      {
+                        institute.name
+                      }
                     </option>
                   )
                 )}
@@ -1715,7 +2228,8 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
             </div>
           )}
 
-          {targetMode === "all" && (
+          {targetMode ===
+            "all" && (
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
               <div className="text-sm font-black text-blue-800">
                 سيتم إنشاء تكليف واحد لجميع المعاهد
@@ -1723,7 +2237,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
 
               <div className="mt-1 text-xs font-semibold text-blue-700">
                 عدد المعاهد المستهدفة:{" "}
-                {institutes.length}
+                {
+                  institutes.length
+                }
               </div>
             </div>
           )}
@@ -1771,7 +2287,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
 
               <div className="max-h-56 space-y-2 overflow-y-auto">
                 {institutes.map(
-                  (institute) => {
+                  (
+                    institute
+                  ) => {
                     const checked =
                       selectedInstitutes.includes(
                         institute.id
@@ -1821,13 +2339,20 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
             </label>
 
             <input
-              value={form.title}
-              onChange={(event) =>
+              value={
+                form.title
+              }
+              onChange={(
+                event
+              ) =>
                 setForm(
-                  (current) => ({
+                  (
+                    current
+                  ) => ({
                     ...current,
                     title:
-                      event.target
+                      event
+                        .target
                         .value,
                   })
                 )
@@ -1843,13 +2368,20 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
             </label>
 
             <textarea
-              value={form.description}
-              onChange={(event) =>
+              value={
+                form.description
+              }
+              onChange={(
+                event
+              ) =>
                 setForm(
-                  (current) => ({
+                  (
+                    current
+                  ) => ({
                     ...current,
                     description:
-                      event.target
+                      event
+                        .target
                         .value,
                   })
                 )
@@ -1870,12 +2402,17 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                 value={
                   form.priority
                 }
-                onChange={(event) =>
+                onChange={(
+                  event
+                ) =>
                   setForm(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       priority:
-                        event.target
+                        event
+                          .target
                           .value,
                     })
                   )
@@ -1883,7 +2420,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
               >
                 {priorityOptions.map(
-                  (priority) => (
+                  (
+                    priority
+                  ) => (
                     <option
                       key={
                         priority.value
@@ -1911,12 +2450,17 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                 value={
                   form.due_date
                 }
-                onChange={(event) =>
+                onChange={(
+                  event
+                ) =>
                   setForm(
-                    (current) => ({
+                    (
+                      current
+                    ) => ({
                       ...current,
                       due_date:
-                        event.target
+                        event
+                          .target
                           .value,
                     })
                   )
@@ -1929,7 +2473,9 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
           <div className="rounded-xl bg-slate-50 p-3 text-sm font-bold text-slate-600">
             عدد المعاهد المستهدفة:{" "}
             <span className="text-slate-950">
-              {targetCount}
+              {
+                targetCount
+              }
             </span>
           </div>
 
@@ -1946,8 +2492,12 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
 
             <button
               type="button"
-              onClick={createTask}
-              disabled={saving}
+              onClick={
+                createTask
+              }
+              disabled={
+                saving
+              }
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send size={17} />
