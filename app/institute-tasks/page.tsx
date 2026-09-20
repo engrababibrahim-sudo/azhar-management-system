@@ -265,18 +265,18 @@ profile?.role === "employee";
 const visibleTasks = useMemo(() => {
 if (showArchivedTasks) return tasks;
 
-```
+
 const hidden = new Set(hiddenTaskIds);
 
 return tasks.filter((task) => !hidden.has(task.id));
-```
+
 
 }, [tasks, hiddenTaskIds, showArchivedTasks]);
 
 const filteredTasks = useMemo(() => {
 const query = searchTerm.trim().toLowerCase();
 
-```
+
 return visibleTasks.filter((task) => {
   const overallStatus = getOverallTaskStatus(task.targets);
 
@@ -307,7 +307,7 @@ return visibleTasks.filter((task) => {
     matchesInstitute
   );
 });
-```
+
 
 }, [
 visibleTasks,
@@ -320,7 +320,7 @@ instituteFilter,
 const statistics = useMemo(() => {
 const total = visibleTasks.length;
 
-```
+
 const pending = visibleTasks.filter(
   (task) => getOverallTaskStatus(task.targets) === "pending"
 ).length;
@@ -360,14 +360,14 @@ return {
   overdue,
   completed,
 };
-```
+
 
 }, [visibleTasks]);
 
 function getStoredHiddenIds() {
 if (typeof window === "undefined") return [];
 
-```
+
 try {
   const raw = localStorage.getItem(HIDDEN_STORAGE_KEY);
 
@@ -381,20 +381,20 @@ try {
 } catch {
   return [];
 }
-```
+
 
 }
 
 function saveHiddenIds(ids: string[]) {
 if (typeof window === "undefined") return;
 
-```
+
 const unique = Array.from(new Set(ids));
 
 localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(unique));
 
 setHiddenTaskIds(unique);
-```
+
 
 }
 
@@ -403,7 +403,7 @@ if (showSpinner) {
 setLoading(true);
 }
 
-```
+
 try {
   const {
     data: { user },
@@ -741,7 +741,7 @@ try {
   setLoading(false);
   setRefreshing(false);
 }
-```
+
 
 }
 
@@ -758,10 +758,10 @@ priority: "medium",
 due_date: "",
 });
 
-```
+
 setSelectedInstitutes([]);
 setTargetMode("single");
-```
+
 
 }
 
@@ -788,7 +788,7 @@ return institutes.map(
 );
 }
 
-```
+
 if (
   targetMode ===
   "selected"
@@ -799,7 +799,7 @@ if (
 return form.institute_id
   ? [form.institute_id]
   : [];
-```
+
 
 }
 
@@ -811,7 +811,7 @@ alert(
 return;
 }
 
-```
+
 if (!isDirector) {
   alert(
     "إنشاء التكليفات متاح لمدير الإدارة فقط"
@@ -936,7 +936,7 @@ try {
 } finally {
   setSaving(false);
 }
-```
+
 
 }
 
@@ -948,14 +948,14 @@ saveHiddenIds([
 taskId,
 ]);
 
-```
+
 setExpandedTaskId(
   (current) =>
     current === taskId
       ? null
       : current
 );
-```
+
 
 }
 
@@ -983,11 +983,11 @@ hiddenTaskIds.filter(
   ) {
   if (!isDirector) return;
 
-```
-const confirmed =
-```
 
-```
+const confirmed =
+
+
+
   window.confirm(
     "هل أنت متأكد من حذف هذا التكليف نهائيًا؟ سيتم حذف التكليف بالكامل وجميع حالات المتابعة المرتبطة به من قاعدة البيانات."
   );
@@ -1100,7 +1100,7 @@ try {
     null
   );
 }
-```
+
 
 }
 
@@ -1117,11 +1117,11 @@ try {
   return;
   }
 
-```
-const confirmed =
-```
 
-```
+const confirmed =
+
+
+
   window.confirm(
     "سيتم إخفاء التكليفات الحالية من الصفحة فقط، ولن يتم حذف أي بيانات من قاعدة البيانات. هل تريد المتابعة؟"
   );
@@ -1150,7 +1150,7 @@ try {
 } finally {
   setDeletingAll(false);
 }
-```
+
 
 }
 
@@ -1170,7 +1170,7 @@ alert(
 return;
 }
 
-```
+
 if (
   !isDirector &&
   !isInstituteUser
@@ -1311,7 +1311,7 @@ try {
     null
   );
 }
-```
+
 
 }
 
@@ -1323,7 +1323,7 @@ const busy =
 updatingTargetId ===
 target.id;
 
-```
+
 if (
   target.status ===
   "completed"
@@ -1466,7 +1466,7 @@ if (
 }
 
 return null;
-```
+
 
 }
 
@@ -1478,7 +1478,7 @@ getOverallTaskStatus(
 task.targets
 );
 
-```
+
 if (
   overall === "completed"
 ) {
@@ -1499,7 +1499,7 @@ return task.targets.some(
       task.due_date
     )
 );
-```
+
 
 }
 
@@ -1509,7 +1509,7 @@ return ( <AppShell> <div
    > <div className="mx-auto max-w-7xl space-y-6"> <div className="rounded-2xl bg-white p-5 shadow-sm md:p-6"> <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"> <div> <div className="mb-2 flex items-center gap-2 text-blue-600"> <FileText size={22} /> <span className="text-sm font-semibold">
 الإدارة والمتابعة </span> </div>
 
-```
+
             <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">
               التكليفات والمتابعة
             </h1>
@@ -2597,7 +2597,7 @@ return ( <AppShell> <div
       </div>
     )}
 </AppShell>
-```
+
 
 );
 }
