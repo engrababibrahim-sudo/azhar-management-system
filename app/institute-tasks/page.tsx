@@ -110,11 +110,9 @@ return false;
 }
 
 const today = new Date();
-
 today.setHours(0, 0, 0, 0);
 
 const due = new Date(task.due_date);
-
 due.setHours(0, 0, 0, 0);
 
 return due < today;
@@ -190,9 +188,10 @@ const [targetMode, setTargetMode] = useState<
 
 > ("single");
 
-const [selectedInstitutes, setSelectedInstitutes] = useState<string[]>(
-[]
-);
+const [selectedInstitutes, setSelectedInstitutes] = useState<
+string[]
+
+> ([]);
 
 const [form, setForm] = useState({
 institute_id: "",
@@ -401,8 +400,6 @@ if (targetInstituteIds.length === 0) {
 setSaving(true);
 
 try {
-  const createdTasks: string[] = [];
-
   for (const instituteId of targetInstituteIds) {
     const {
       data: createdTask,
@@ -432,8 +429,6 @@ try {
 
       return;
     }
-
-    createdTasks.push(createdTask.id);
 
     const { error: targetError } = await supabase
       .from("institute_task_targets")
@@ -945,9 +940,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                       {task.due_date && (
                         <span>
                           الاستحقاق:{" "}
-                          {formatDate(
-                            task.due_date
-                          )}
+                          {formatDate(task.due_date)}
                         </span>
                       )}
 
@@ -1081,6 +1074,8 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                     ...current,
                     institute_id: "",
                   }));
+
+                  setSelectedInstitutes([]);
                 }}
                 className={
                   "rounded-xl border px-4 py-3 text-sm font-bold transition " +
@@ -1303,7 +1298,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                       event.target.value,
                   }))
                 }
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:bg-white"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
               >
                 {priorityOptions.map(
                   (priority) => (
@@ -1333,7 +1328,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                       event.target.value,
                   }))
                 }
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:bg-white"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
               />
             </div>
           </div>
@@ -1374,7 +1369,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
     </div>
   )}
 </AppShell>
-
+```
 
 );
 }
