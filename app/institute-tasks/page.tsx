@@ -298,11 +298,9 @@ export default function InstituteTasksPage() {
       (task) => getOverallTaskStatus(task.targets) === "submitted"
     ).length;
 
-    const completed = visibleTasks.reduce(
-      (count, task) =>
-        count + task.targets.filter((target) => target.status === "completed").length,
-      0
-    );
+    const completed = visibleTasks.filter(
+      (task) => getOverallTaskStatus(task.targets) === "completed"
+    ).length;
 
     const urgent = visibleTasks.filter(
       (task) =>
@@ -954,9 +952,29 @@ export default function InstituteTasksPage() {
     if (task.priority === "urgent") return true;
 
     return task.targets.some((target) =>
+      target.status !== "completed" &&
       isTargetOverdue(target, task.due_date)
     );
   }
+
+  const followUpItems = useMemo(() => {
+    if (!isDirector) return [];
+
+    return visibleTasks.flatMap((task) =>
+      task.targets
+        .filter((target) => target.status !== "completed")
+        .map((target) => ({
+          taskId: task.id,
+          taskTitle: task.title,
+          instituteId: target.institute_id,
+          instituteName: target.institute_name ?? "معهد غير محدد",
+          status: target.status,
+          dueDate: task.due_date,
+          priority: task.priority,
+          overdue: isTargetOverdue(target, task.due_date),
+        }))
+    );
+  }, [isDirector, visibleTasks]);
 
   return (
     <AppShell>
@@ -1095,6 +1113,69 @@ export default function InstituteTasksPage() {
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
               أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
               تنظيفها من العرض سابقًا. لا يوجد حذف من قاعدة البيانات.
+            </div>
+          )}
+
+          {isDirector && followUpItems.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm md:p-5">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <Clock3 size={19} />
+                    <h2 className="font-bold">تحتاج متابعة</h2>
+                  </div>
+                  <p className="mt-1 text-sm text-amber-700">
+                    المعاهد التي لم تُكمل التكليفات الموجهة إليها بعد.
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-amber-800">
+                  {followUpItems.length} متابعة مفتوحة
+                </span>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {followUpItems.map((item) => (
+                  <button
+                    key={`${item.taskId}-${item.instituteId}`}
+                    type="button"
+                    onClick={() => {
+                      setInstituteFilter(item.instituteId);
+                      setExpandedTaskId(item.taskId);
+                    }}
+                    className="rounded-xl border border-amber-200 bg-white p-3 text-right transition hover:border-amber-400 hover:shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-800">
+                          {item.instituteName}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {item.taskTitle}
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${
+                          item.overdue
+                            ? "bg-red-100 text-red-700"
+                            : item.status === "in_progress"
+                              ? "bg-amber-100 text-amber-700"
+                              : item.status === "submitted"
+                                ? "bg-violet-100 text-violet-700"
+                                : "bg-sky-100 text-sky-700"
+                        }`}
+                      >
+                        {item.overdue
+                          ? "متأخر"
+                          : item.status === "in_progress"
+                            ? "قيد التنفيذ"
+                            : item.status === "submitted"
+                              ? "بانتظار الاعتماد"
+                              : "لم يبدأ"}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
