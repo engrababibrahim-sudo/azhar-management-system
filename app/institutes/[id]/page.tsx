@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -233,10 +232,12 @@ export default function InstituteDashboard() {
             title="النتائج"
           />
 
-          <MenuItem
-            icon={ClipboardList}
-            title="التكليفات"
-          />
+          <Link href="/institute-tasks">
+            <MenuItem
+              icon={ClipboardList}
+              title="التكليفات"
+            />
+          </Link>
 
           <MenuItem
             icon={MessageSquare}
@@ -536,14 +537,16 @@ export default function InstituteDashboard() {
                 />
               </Link>
 
+              <Link href="/institute-tasks">
+                <Action
+                  icon={ClipboardList}
+                  title="التكليفات"
+                />
+              </Link>
+
               <Action
                 icon={Send}
                 title="إرسال للإدارة"
-              />
-
-              <Action
-                icon={MessageSquare}
-                title="مراسلة الإدارة"
               />
 
               <Link href="/complaints">
@@ -567,7 +570,13 @@ export default function InstituteDashboard() {
                 </p>
               </div>
 
-              <ClipboardList size={21} />
+              <Link
+                href="/institute-tasks"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                عرض كل التكليفات
+                <ArrowRight size={15} />
+              </Link>
             </div>
 
             <div className="divide-y divide-slate-100">
@@ -967,4 +976,3 @@ function Activity({
     </div>
   );
 }
-
