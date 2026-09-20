@@ -300,8 +300,7 @@ export default function InstituteTasksPage() {
 
     const completed = visibleTasks.reduce(
       (count, task) =>
-        count +
-        task.targets.filter((target) => target.status === "completed").length,
+        count + task.targets.filter((target) => target.status === "completed").length,
       0
     );
 
@@ -947,6 +946,40 @@ export default function InstituteTasksPage() {
     return null;
   }
 
+  function getNeedsInterventionTargets(task: TaskView) {
+    return task.targets.filter((target) => {
+      if (target.status === "completed") return false;
+
+      const overdue = isTargetOverdue(target, task.due_date);
+      return target.status === "submitted" || overdue || task.priority === "urgent";
+    });
+  }
+
+  function getFollowUpTargets(task: TaskView) {
+    return task.targets.filter((target) => {
+      if (target.status === "completed") return false;
+
+      const overdue = isTargetOverdue(target, task.due_date);
+      const needsIntervention =
+        target.status === "submitted" || overdue || task.priority === "urgent";
+
+      if (needsIntervention) return false;
+      return target.status === "pending" || target.status === "in_progress" || target.status === "late";
+    });
+  }
+
+  const needsInterventionItems = useMemo(() => {
+    return visibleTasks.flatMap((task) =>
+      getNeedsInterventionTargets(task).map((target) => ({ task, target }))
+    );
+  }, [visibleTasks]);
+
+  const followUpItems = useMemo(() => {
+    return visibleTasks.flatMap((task) =>
+      getFollowUpTargets(task).map((target) => ({ task, target }))
+    );
+  }, [visibleTasks]);
+
   function taskNeedsAttention(task: TaskView) {
     const overall = getOverallTaskStatus(task.targets);
 
@@ -955,62 +988,9 @@ export default function InstituteTasksPage() {
     if (task.priority === "urgent") return true;
 
     return task.targets.some((target) =>
-      target.status !== "completed" &&
       isTargetOverdue(target, task.due_date)
     );
   }
-
-  const interventionItems = useMemo(() => {
-    if (!isDirector) return [];
-
-    return visibleTasks.flatMap((task) =>
-      task.targets
-        .filter((target) => {
-          if (target.status === "completed") return false;
-
-          const overdue = isTargetOverdue(target, task.due_date);
-
-          return target.status === "submitted" || overdue || task.priority === "urgent";
-        })
-        .map((target) => ({
-          taskId: task.id,
-          taskTitle: task.title,
-          instituteId: target.institute_id,
-          instituteName: target.institute_name ?? "معهد غير محدد",
-          status: target.status,
-          dueDate: task.due_date,
-          priority: task.priority,
-          overdue: isTargetOverdue(target, task.due_date),
-        }))
-    );
-  }, [isDirector, visibleTasks]);
-
-  const followUpItems = useMemo(() => {
-    if (!isDirector) return [];
-
-    return visibleTasks.flatMap((task) =>
-      task.targets
-        .filter((target) => {
-          if (target.status === "completed") return false;
-
-          const overdue = isTargetOverdue(target, task.due_date);
-          const needsIntervention =
-            target.status === "submitted" || overdue || task.priority === "urgent";
-
-          return !needsIntervention;
-        })
-        .map((target) => ({
-          taskId: task.id,
-          taskTitle: task.title,
-          instituteId: target.institute_id,
-          instituteName: target.institute_name ?? "معهد غير محدد",
-          status: target.status,
-          dueDate: task.due_date,
-          priority: task.priority,
-          overdue: false,
-        }))
-    );
-  }, [isDirector, visibleTasks]);
 
   return (
     <AppShell>
@@ -1145,131 +1125,93 @@ export default function InstituteTasksPage() {
             })}
           </div>
 
-          {showArchivedTasks && isDirector && (
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-              أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
-              تنظيفها من العرض سابقًا. لا يوجد حذف من قاعدة البيانات.
-            </div>
-          )}
-
-          {isDirector && interventionItems.length > 0 && (
+          {isDirector && needsInterventionItems.length > 0 && (
             <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm md:p-5">
-              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <div className="flex items-center gap-2 text-red-800">
-                    <AlertCircle size={19} />
+                  <div className="flex items-center gap-2 text-red-700">
+                    <AlertCircle size={20} />
                     <h2 className="font-bold">يحتاج تدخل المدير الآن</h2>
                   </div>
-                  <p className="mt-1 text-sm text-red-700">
-                    عناصر تحتاج إجراءً من الإدارة: تسليم بانتظار الاعتماد، أو موعد تجاوز، أو تكليف عاجل لم يُغلق.
+                  <p className="mt-1 text-sm text-red-600">
+                    حالات تحتاج قرارًا أو اعتمادًا أو تدخلًا من الإدارة.
                   </p>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-red-800">
-                  {interventionItems.length} تحتاج تدخل
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-red-700">
+                  {needsInterventionItems.length} حالة
                 </span>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {interventionItems.map((item) => (
-                  <button
-                    key={`intervention-${item.taskId}-${item.instituteId}`}
-                    type="button"
-                    onClick={() => {
-                      setInstituteFilter(item.instituteId);
-                      setExpandedTaskId(item.taskId);
-                    }}
-                    className="rounded-xl border border-red-200 bg-white p-3 text-right transition hover:border-red-400 hover:shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-800">
-                          {item.instituteName}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {item.taskTitle}
-                        </div>
+              <div className="grid gap-2">
+                {needsInterventionItems.map(({ task, target }) => {
+                  const overdue = isTargetOverdue(target, task.due_date);
+                  return (
+                    <button
+                      key={`${task.id}-${target.id}`}
+                      type="button"
+                      onClick={() => setExpandedTaskId(task.id)}
+                      className="flex w-full flex-col gap-2 rounded-xl border border-red-100 bg-white p-3 text-right transition hover:border-red-300 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-800">{target.institute_name}</div>
+                        <div className="mt-1 text-xs text-slate-500">{task.title}</div>
                       </div>
-                      <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-700">
-                        {item.status === "submitted"
-                          ? "بانتظار الاعتماد"
-                          : item.overdue
-                            ? "متأخر"
-                            : "عاجل"}
+                      <span className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">
+                        {target.status === "submitted"
+                          ? "بانتظار اعتماد المدير"
+                          : overdue
+                            ? "متأخر عن الموعد"
+                            : "تكليف عاجل"}
                       </span>
-                    </div>
-                    <div className="mt-3 text-xs text-red-700">
-                      {item.status === "submitted"
-                        ? "المعهد سلّم ويحتاج اعتماد الإدارة."
-                        : item.overdue
-                          ? "تجاوز الموعد المحدد ويحتاج متابعة المدير."
-                          : "تكليف عاجل يحتاج إجراءً من المدير."}
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
 
           {isDirector && followUpItems.length > 0 && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm md:p-5">
-              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm md:p-5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <div className="flex items-center gap-2 text-amber-800">
-                    <Clock3 size={19} />
+                  <div className="flex items-center gap-2 text-orange-700">
+                    <Clock3 size={20} />
                     <h2 className="font-bold">تحتاج متابعة</h2>
                   </div>
-                  <p className="mt-1 text-sm text-amber-700">
+                  <p className="mt-1 text-sm text-orange-600">
                     المعاهد التي لم تُكمل التكليفات الموجهة إليها بعد.
                   </p>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-amber-800">
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-orange-700">
                   {followUpItems.length} متابعة مفتوحة
                 </span>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {followUpItems.map((item) => (
+              <div className="grid gap-2">
+                {followUpItems.map(({ task, target }) => (
                   <button
-                    key={`${item.taskId}-${item.instituteId}`}
+                    key={`${task.id}-${target.id}`}
                     type="button"
-                    onClick={() => {
-                      setInstituteFilter(item.instituteId);
-                      setExpandedTaskId(item.taskId);
-                    }}
-                    className="rounded-xl border border-amber-200 bg-white p-3 text-right transition hover:border-amber-400 hover:shadow-sm"
+                    onClick={() => setExpandedTaskId(task.id)}
+                    className="flex w-full flex-col gap-2 rounded-xl border border-orange-100 bg-white p-3 text-right transition hover:border-orange-300 md:flex-row md:items-center md:justify-between"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-800">
-                          {item.instituteName}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {item.taskTitle}
-                        </div>
-                      </div>
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${
-                          item.overdue
-                            ? "bg-red-100 text-red-700"
-                            : item.status === "in_progress"
-                              ? "bg-amber-100 text-amber-700"
-                              : item.status === "submitted"
-                                ? "bg-violet-100 text-violet-700"
-                                : "bg-sky-100 text-sky-700"
-                        }`}
-                      >
-                        {item.overdue
-                          ? "متأخر"
-                          : item.status === "in_progress"
-                            ? "قيد التنفيذ"
-                            : item.status === "submitted"
-                              ? "بانتظار الاعتماد"
-                              : "لم يبدأ"}
-                      </span>
+                    <div>
+                      <div className="font-bold text-slate-800">{target.institute_name}</div>
+                      <div className="mt-1 text-xs text-slate-500">{task.title}</div>
                     </div>
+                    <span className="rounded-full bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700">
+                      {target.status === "in_progress" ? "قيد التنفيذ" : "لم يبدأ"}
+                    </span>
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {showArchivedTasks && isDirector && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
+              تنظيفها من العرض سابقًا. لا يوجد حذف من قاعدة البيانات.
             </div>
           )}
 
@@ -1422,9 +1364,9 @@ export default function InstituteTasksPage() {
                                 {getStatusLabel(overallStatus)}
                               </span>
 
-                              {isDirector && needsAttention && (
+                              {needsAttention && (
                                 <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                                  يحتاج تدخل المدير
+                                  يحتاج متابعة
                                 </span>
                               )}
                             </div>
