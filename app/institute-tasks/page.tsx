@@ -87,7 +87,7 @@ const statusOptions = [
   { value: "completed", label: "مكتمل" },
 ] as const;
 
-const HIDDEN_STORAGE_KEY = "azhar_institute_tasks_hidden_v2";
+const HIDDEN_STORAGE_KEY = "azhar_institute_tasks_hidden_v3";
 
 function getPriorityLabel(priority?: string | null) {
   return priorityOptions.find((item) => item.value === priority)?.label ?? "متوسطة";
@@ -238,11 +238,12 @@ export default function InstituteTasksPage() {
     profile?.role === "employee";
 
   const visibleTasks = useMemo(() => {
+    if (isInstituteUser) return tasks;
     if (showArchivedTasks) return tasks;
 
     const hidden = new Set(hiddenTaskIds);
     return tasks.filter((task) => !hidden.has(task.id));
-  }, [tasks, hiddenTaskIds, showArchivedTasks]);
+  }, [tasks, hiddenTaskIds, showArchivedTasks, isInstituteUser]);
 
   const filteredTasks = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -335,9 +336,7 @@ export default function InstituteTasksPage() {
       if (!raw) return [];
 
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed)
-        ? parsed.filter((id) => typeof id === "string")
-        : [];
+      return Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : [];
     } catch {
       return [];
     }
@@ -361,7 +360,6 @@ export default function InstituteTasksPage() {
       } = await supabase.auth.getUser();
 
       if (authError) throw authError;
-
       if (!user) {
         setProfile(null);
         setTasks([]);
@@ -375,7 +373,6 @@ export default function InstituteTasksPage() {
         .maybeSingle();
 
       if (profileError) throw profileError;
-
       if (!profileData) {
         setProfile(null);
         setTasks([]);
@@ -402,15 +399,9 @@ export default function InstituteTasksPage() {
           );
         }
       } else if (currentProfile.institute_id) {
-        instituteQuery = instituteQuery.eq(
-          "id",
-          currentProfile.institute_id
-        );
+        instituteQuery = instituteQuery.eq("id", currentProfile.institute_id);
       } else {
-        instituteQuery = instituteQuery.eq(
-          "id",
-          "00000000-0000-0000-0000-000000000000"
-        );
+        instituteQuery = instituteQuery.eq("id", "00000000-0000-0000-0000-000000000000");
       }
 
       const { data: instituteData, error: instituteError } =
@@ -444,8 +435,7 @@ export default function InstituteTasksPage() {
         targetQuery = targetQuery.in("institute_id", instituteIds);
       }
 
-      const { data: targetData, error: targetError } =
-        await targetQuery;
+      const { data: targetData, error: targetError } = await targetQuery;
 
       if (targetError) throw targetError;
 
@@ -473,7 +463,6 @@ export default function InstituteTasksPage() {
         }
 
         const { data, error } = await taskQuery;
-
         if (error) throw error;
 
         taskData = (data ?? []) as Task[];
@@ -492,10 +481,7 @@ export default function InstituteTasksPage() {
       }
 
       const missingTargetTaskIds = taskData
-        .filter(
-          (task) =>
-            !rawTargets.some((target) => target.task_id === task.id)
-        )
+        .filter((task) => !rawTargets.some((target) => target.task_id === task.id))
         .map((task) => task.id);
 
       let extraTargets: TaskTarget[] = [];
@@ -530,7 +516,6 @@ export default function InstituteTasksPage() {
 
       for (const task of taskData) {
         const groupKey = task.assignment_group_id || task.id;
-
         const taskTargets = targetsWithNames.filter(
           (target) => target.task_id === task.id
         );
@@ -584,22 +569,18 @@ export default function InstituteTasksPage() {
       setTasks(Array.from(grouped.values()));
 
       const currentHidden = getStoredHiddenIds();
-      const currentTaskIds = Array.from(grouped.values()).map(
-        (task) => task.id
-      );
+      const currentTaskIds = Array.from(grouped.values()).map((task) => task.id);
 
       if (typeof window !== "undefined") {
-        const keyExists =
-          localStorage.getItem(HIDDEN_STORAGE_KEY) !== null;
+        const keyExists = localStorage.getItem(HIDDEN_STORAGE_KEY) !== null;
 
         if (!keyExists) {
-          saveHiddenIds(currentTaskIds);
+          saveHiddenIds([]);
           setShowArchivedTasks(false);
         } else {
           const cleaned = currentHidden.filter((id) =>
             currentTaskIds.includes(id)
           );
-
           saveHiddenIds(cleaned);
         }
       }
@@ -624,7 +605,6 @@ export default function InstituteTasksPage() {
       priority: "medium",
       due_date: "",
     });
-
     setSelectedInstitutes([]);
     setTargetMode("single");
   }
@@ -696,10 +676,7 @@ export default function InstituteTasksPage() {
         .single();
 
       if (taskError) throw taskError;
-
-      if (!createdTask) {
-        throw new Error("تعذر إنشاء التكليف");
-      }
+      if (!createdTask) throw new Error("تعذر إنشاء التكليف");
 
       const targetRows = targetInstitutes.map((instituteId) => ({
         task_id: createdTask.id,
@@ -712,11 +689,7 @@ export default function InstituteTasksPage() {
         .insert(targetRows);
 
       if (targetError) {
-        await supabase
-          .from("institute_tasks")
-          .delete()
-          .eq("id", createdTask.id);
-
+        await supabase.from("institute_tasks").delete().eq("id", createdTask.id);
         throw targetError;
       }
 
@@ -726,7 +699,6 @@ export default function InstituteTasksPage() {
 
       resetForm();
       setShowForm(false);
-
       await loadData(false);
     } catch (error: any) {
       console.error("createTask error:", error);
@@ -738,12 +710,8 @@ export default function InstituteTasksPage() {
 
   function hideTask(taskId: string) {
     const next = [...hiddenTaskIds, taskId];
-
     saveHiddenIds(next);
-
-    setExpandedTaskId((current) =>
-      current === taskId ? null : current
-    );
+    setExpandedTaskId((current) => (current === taskId ? null : current));
   }
 
   function restoreTask(taskId: string) {
@@ -781,14 +749,9 @@ export default function InstituteTasksPage() {
 
     try {
       const ids = visibleTasks.map((task) => task.id);
-
       saveHiddenIds([...hiddenTaskIds, ...ids]);
-
       setExpandedTaskId(null);
-
-      alert(
-        "تم تنظيف عرض الصفحة فقط. بيانات التكليفات ما زالت محفوظة في قاعدة البيانات."
-      );
+      alert("تم تنظيف عرض الصفحة فقط. بيانات التكليفات ما زالت محفوظة في قاعدة البيانات.");
     } finally {
       setDeletingAll(false);
     }
@@ -826,8 +789,7 @@ export default function InstituteTasksPage() {
       };
 
       if (status === "submitted") {
-        updatePayload.responded_at =
-          new Date().toISOString();
+        updatePayload.responded_at = new Date().toISOString();
       }
 
       if (status === "completed") {
@@ -854,8 +816,7 @@ export default function InstituteTasksPage() {
           : item
       );
 
-      const overallStatus =
-        getOverallTaskStatus(updatedTargets);
+      const overallStatus = getOverallTaskStatus(updatedTargets);
 
       const { error: taskError } = await supabase
         .from("institute_tasks")
@@ -878,61 +839,17 @@ export default function InstituteTasksPage() {
             : item
         )
       );
-
-      /*
-       * الإخفاء التلقائي:
-       *
-       * 1. المعهد:
-       *    يختفي التكليف بعد الضغط على "تم التسليم"
-       *    أو إذا أصبح مكتملًا.
-       *
-       * 2. المدير:
-       *    يختفي التكليف فقط بعد اكتمال جميع المعاهد
-       *    واعتماد آخر معهد.
-       *
-       * مهم:
-       * هذا الإخفاء من واجهة الصفحة فقط.
-       * لا يتم حذف أي سجل من قاعدة البيانات.
-       */
-      const shouldHideForInstitute =
-        isInstituteUser &&
-        (status === "submitted" || status === "completed");
-
-      const shouldHideForDirector =
-        isDirector && overallStatus === "completed";
-
-      if (
-        shouldHideForInstitute ||
-        shouldHideForDirector
-      ) {
-        hideTask(task.id);
-      }
     } catch (error: any) {
-      console.error(
-        "updateTargetStatus error:",
-        error
-      );
-
-      alert(
-        error?.message ??
-          "حدث خطأ أثناء تحديث حالة التكليف"
-      );
+      console.error("updateTargetStatus error:", error);
+      alert(error?.message ?? "حدث خطأ أثناء تحديث حالة التكليف");
     } finally {
       setUpdatingTargetId(null);
     }
   }
 
-  function renderTargetAction(
-    task: TaskView,
-    target: TaskTarget
-  ) {
-    const overdue = isTargetOverdue(
-      target,
-      task.due_date
-    );
-
-    const busy =
-      updatingTargetId === target.id;
+  function renderTargetAction(task: TaskView, target: TaskTarget) {
+    const overdue = isTargetOverdue(target, task.due_date);
+    const busy = updatingTargetId === target.id;
 
     if (target.status === "completed") {
       return (
@@ -949,20 +866,11 @@ export default function InstituteTasksPage() {
           <button
             type="button"
             disabled={busy}
-            onClick={() =>
-              updateTargetStatus(
-                task,
-                target,
-                "completed"
-              )
-            }
+            onClick={() => updateTargetStatus(task, target, "completed")}
             className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
           >
             {busy ? (
-              <Loader2
-                size={16}
-                className="animate-spin"
-              />
+              <Loader2 size={16} className="animate-spin" />
             ) : (
               <Check size={16} />
             )}
@@ -986,35 +894,20 @@ export default function InstituteTasksPage() {
       );
     }
 
-    if (
-      profile?.institute_id !==
-      target.institute_id
-    ) {
+    if (profile?.institute_id !== target.institute_id) {
       return null;
     }
 
-    if (
-      target.status === "pending" ||
-      target.status === "late"
-    ) {
+    if (target.status === "pending" || target.status === "late") {
       return (
         <button
           type="button"
           disabled={busy}
-          onClick={() =>
-            updateTargetStatus(
-              task,
-              target,
-              "in_progress"
-            )
-          }
+          onClick={() => updateTargetStatus(task, target, "in_progress")}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
         >
           {busy ? (
-            <Loader2
-              size={16}
-              className="animate-spin"
-            />
+            <Loader2 size={16} className="animate-spin" />
           ) : (
             <ArrowUp size={16} />
           )}
@@ -1028,20 +921,11 @@ export default function InstituteTasksPage() {
         <button
           type="button"
           disabled={busy}
-          onClick={() =>
-            updateTargetStatus(
-              task,
-              target,
-              "submitted"
-            )
-          }
+          onClick={() => updateTargetStatus(task, target, "submitted")}
           className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-60"
         >
           {busy ? (
-            <Loader2
-              size={16}
-              className="animate-spin"
-            />
+            <Loader2 size={16} className="animate-spin" />
           ) : (
             <Send size={16} />
           )}
@@ -1062,36 +946,27 @@ export default function InstituteTasksPage() {
   }
 
   function taskNeedsAttention(task: TaskView) {
-    const overall =
-      getOverallTaskStatus(task.targets);
+    const overall = getOverallTaskStatus(task.targets);
 
     if (overall === "completed") return false;
 
     if (task.priority === "urgent") return true;
 
     return task.targets.some((target) =>
-      isTargetOverdue(
-        target,
-        task.due_date
-      )
+      isTargetOverdue(target, task.due_date)
     );
   }
 
   return (
     <AppShell>
-      <div
-        className="min-h-screen bg-slate-100 p-4 md:p-6"
-        dir="rtl"
-      >
+      <div className="min-h-screen bg-slate-100 p-4 md:p-6" dir="rtl">
         <div className="mx-auto max-w-7xl space-y-6">
           <div className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="mb-2 flex items-center gap-2 text-blue-600">
                   <FileText size={22} />
-                  <span className="text-sm font-semibold">
-                    الإدارة والمتابعة
-                  </span>
+                  <span className="text-sm font-semibold">الإدارة والمتابعة</span>
                 </div>
 
                 <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">
@@ -1120,33 +995,21 @@ export default function InstituteTasksPage() {
 
                   <button
                     type="button"
-                    onClick={() =>
-                      setShowArchivedTasks(
-                        (value) => !value
-                      )
-                    }
+                    onClick={() => setShowArchivedTasks((value) => !value)}
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                     <Eye size={18} />
-                    {showArchivedTasks
-                      ? "إخفاء المحفوظة"
-                      : "عرض المحفوظة"}
+                    {showArchivedTasks ? "إخفاء المحفوظة" : "عرض المحفوظة"}
                   </button>
 
                   <button
                     type="button"
-                    disabled={
-                      deletingAll ||
-                      !visibleTasks.length
-                    }
+                    disabled={deletingAll || !visibleTasks.length}
                     onClick={deleteAllTasks}
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
                   >
                     {deletingAll ? (
-                      <Loader2
-                        size={18}
-                        className="animate-spin"
-                      />
+                      <Loader2 size={18} className="animate-spin" />
                     ) : (
                       <Trash2 size={18} />
                     )}
@@ -1163,50 +1026,43 @@ export default function InstituteTasksPage() {
                 label: "إجمالي التكليفات",
                 value: statistics.total,
                 icon: FileText,
-                className:
-                  "text-blue-600 bg-blue-50",
+                className: "text-blue-600 bg-blue-50",
               },
               {
                 label: "جديدة",
                 value: statistics.pending,
                 icon: Bell,
-                className:
-                  "text-sky-600 bg-sky-50",
+                className: "text-sky-600 bg-sky-50",
               },
               {
                 label: "قيد التنفيذ",
                 value: statistics.inProgress,
                 icon: Clock3,
-                className:
-                  "text-amber-600 bg-amber-50",
+                className: "text-amber-600 bg-amber-50",
               },
               {
                 label: "تم التسليم",
                 value: statistics.submitted,
                 icon: Send,
-                className:
-                  "text-violet-600 bg-violet-50",
+                className: "text-violet-600 bg-violet-50",
               },
               {
                 label: "عاجلة",
                 value: statistics.urgent,
                 icon: AlertCircle,
-                className:
-                  "text-red-600 bg-red-50",
+                className: "text-red-600 bg-red-50",
               },
               {
                 label: "متأخرة",
                 value: statistics.overdue,
                 icon: ArrowDown,
-                className:
-                  "text-orange-600 bg-orange-50",
+                className: "text-orange-600 bg-orange-50",
               },
               {
                 label: "مكتملة",
                 value: statistics.completed,
                 icon: Check,
-                className:
-                  "text-emerald-600 bg-emerald-50",
+                className: "text-emerald-600 bg-emerald-50",
               },
             ].map((item) => {
               const Icon = item.icon;
@@ -1244,9 +1100,7 @@ export default function InstituteTasksPage() {
           <div className="rounded-2xl bg-white p-4 shadow-sm md:p-5">
             <div className="mb-4 flex items-center gap-2 text-slate-700">
               <Filter size={18} />
-              <h2 className="font-bold">
-                البحث والتصفية
-              </h2>
+              <h2 className="font-bold">البحث والتصفية</h2>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
@@ -1255,14 +1109,9 @@ export default function InstituteTasksPage() {
                   size={18}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
                 />
-
                 <input
                   value={searchTerm}
-                  onChange={(event) =>
-                    setSearchTerm(
-                      event.target.value
-                    )
-                  }
+                  onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="ابحث عن تكليف أو معهد..."
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-3 pr-10 text-sm outline-none transition focus:border-blue-400 focus:bg-white"
                 />
@@ -1270,22 +1119,12 @@ export default function InstituteTasksPage() {
 
               <select
                 value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setStatusFilter(event.target.value)}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
               >
-                <option value="all">
-                  كل الحالات
-                </option>
-
+                <option value="all">كل الحالات</option>
                 {statusOptions.map((item) => (
-                  <option
-                    key={item.value}
-                    value={item.value}
-                  >
+                  <option key={item.value} value={item.value}>
                     {item.label}
                   </option>
                 ))}
@@ -1293,22 +1132,12 @@ export default function InstituteTasksPage() {
 
               <select
                 value={priorityFilter}
-                onChange={(event) =>
-                  setPriorityFilter(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setPriorityFilter(event.target.value)}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
               >
-                <option value="all">
-                  كل الأولويات
-                </option>
-
+                <option value="all">كل الأولويات</option>
                 {priorityOptions.map((item) => (
-                  <option
-                    key={item.value}
-                    value={item.value}
-                  >
+                  <option key={item.value} value={item.value}>
                     {item.label}
                   </option>
                 ))}
@@ -1316,22 +1145,12 @@ export default function InstituteTasksPage() {
 
               <select
                 value={instituteFilter}
-                onChange={(event) =>
-                  setInstituteFilter(
-                    event.target.value
-                  )
-                }
+                onChange={(event) => setInstituteFilter(event.target.value)}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-blue-400"
               >
-                <option value="all">
-                  كل المعاهد
-                </option>
-
+                <option value="all">كل المعاهد</option>
                 {institutes.map((institute) => (
-                  <option
-                    key={institute.id}
-                    value={institute.id}
-                  >
+                  <option key={institute.id} value={institute.id}>
                     {institute.name}
                   </option>
                 ))}
@@ -1342,10 +1161,7 @@ export default function InstituteTasksPage() {
           {loading ? (
             <div className="flex min-h-[300px] items-center justify-center rounded-2xl bg-white shadow-sm">
               <div className="flex items-center gap-3 text-slate-500">
-                <Loader2
-                  size={24}
-                  className="animate-spin"
-                />
+                <Loader2 size={24} className="animate-spin" />
                 جاري تحميل التكليفات...
               </div>
             </div>
@@ -1353,8 +1169,7 @@ export default function InstituteTasksPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-slate-500">
-                  عرض {filteredTasks.length} من{" "}
-                  {visibleTasks.length} تكليف
+                  عرض {filteredTasks.length} من {visibleTasks.length} تكليف
                 </div>
 
                 <button
@@ -1367,11 +1182,7 @@ export default function InstituteTasksPage() {
                 >
                   <RefreshCw
                     size={16}
-                    className={
-                      refreshing
-                        ? "animate-spin"
-                        : ""
-                    }
+                    className={refreshing ? "animate-spin" : ""}
                   />
                   تحديث
                 </button>
@@ -1379,57 +1190,35 @@ export default function InstituteTasksPage() {
 
               {filteredTasks.length === 0 ? (
                 <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
-                  <FileText
-                    className="mx-auto mb-4 text-slate-300"
-                    size={44}
-                  />
-
+                  <FileText className="mx-auto mb-4 text-slate-300" size={44} />
                   <h3 className="text-lg font-bold text-slate-700">
                     لا توجد تكليفات في العرض الحالي
                   </h3>
-
                   <p className="mt-2 text-sm text-slate-500">
-                    {isDirector &&
-                    !showArchivedTasks
+                    {isDirector && !showArchivedTasks
                       ? "يمكنك إنشاء تكليف جديد أو عرض التكليفات المحفوظة."
                       : "جرّب تغيير البحث أو الفلاتر."}
                   </p>
                 </div>
               ) : (
                 filteredTasks.map((task) => {
-                  const overallStatus =
-                    getOverallTaskStatus(
-                      task.targets
-                    );
-
-                  const counts =
-                    getTargetCounts(
-                      task.targets
-                    );
-
-                  const expanded =
-                    expandedTaskId === task.id;
-
-                  const needsAttention =
-                    taskNeedsAttention(task);
+                  const overallStatus = getOverallTaskStatus(task.targets);
+                  const counts = getTargetCounts(task.targets);
+                  const expanded = expandedTaskId === task.id;
+                  const needsAttention = taskNeedsAttention(task);
 
                   return (
                     <div
                       key={task.id}
                       className={`overflow-hidden rounded-2xl bg-white shadow-sm ${
-                        needsAttention
-                          ? "ring-1 ring-orange-200"
-                          : ""
+                        needsAttention ? "ring-1 ring-orange-200" : ""
                       }`}
                     >
                       <button
                         type="button"
                         onClick={() =>
-                          setExpandedTaskId(
-                            (current) =>
-                              current === task.id
-                                ? null
-                                : task.id
+                          setExpandedTaskId((current) =>
+                            current === task.id ? null : task.id
                           )
                         }
                         className="w-full p-4 text-right md:p-5"
@@ -1446,9 +1235,7 @@ export default function InstituteTasksPage() {
                                   task.priority
                                 )}`}
                               >
-                                {getPriorityLabel(
-                                  task.priority
-                                )}
+                                {getPriorityLabel(task.priority)}
                               </span>
 
                               <span
@@ -1456,9 +1243,7 @@ export default function InstituteTasksPage() {
                                   overallStatus
                                 )}`}
                               >
-                                {getStatusLabel(
-                                  overallStatus
-                                )}
+                                {getStatusLabel(overallStatus)}
                               </span>
 
                               {needsAttention && (
@@ -1477,8 +1262,7 @@ export default function InstituteTasksPage() {
                             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                               <span className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2.5 py-1.5 text-slate-600">
                                 <Users size={14} />
-                                {task.targets.length}{" "}
-                                معهد
+                                {task.targets.length} معهد
                               </span>
 
                               {counts.pending > 0 && (
@@ -1511,32 +1295,20 @@ export default function InstituteTasksPage() {
                             <span>
                               الاستحقاق:{" "}
                               <strong className="text-slate-700">
-                                {formatDate(
-                                  task.due_date
-                                )}
+                                {formatDate(task.due_date)}
                               </strong>
                             </span>
 
                             <span>
-                              الإنشاء:{" "}
-                              {formatCreatedDate(
-                                task.created_at
-                              )}
+                              الإنشاء: {formatCreatedDate(task.created_at)}
                             </span>
 
                             <span className="inline-flex items-center gap-1 font-semibold text-blue-600">
-                              {expanded
-                                ? "إخفاء التفاصيل"
-                                : "متابعة المعاهد"}
-
+                              {expanded ? "إخفاء التفاصيل" : "متابعة المعاهد"}
                               {expanded ? (
-                                <ChevronUp
-                                  size={16}
-                                />
+                                <ChevronUp size={16} />
                               ) : (
-                                <ChevronDown
-                                  size={16}
-                                />
+                                <ChevronDown size={16} />
                               )}
                             </span>
                           </div>
@@ -1550,7 +1322,6 @@ export default function InstituteTasksPage() {
                               <h4 className="font-bold text-slate-800">
                                 حالة التنفيذ حسب المعهد
                               </h4>
-
                               <p className="mt-1 text-xs text-slate-500">
                                 كل معهد له حالة مستقلة داخل نفس التكليف الجماعي.
                               </p>
@@ -1559,18 +1330,14 @@ export default function InstituteTasksPage() {
                             {isDirector && (
                               <button
                                 type="button"
-                                disabled={
-                                  deletingTaskId ===
-                                  task.id
-                                }
+                                disabled={deletingTaskId === task.id}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   deleteTask(task);
                                 }}
                                 className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
                               >
-                                {deletingTaskId ===
-                                task.id ? (
+                                {deletingTaskId === task.id ? (
                                   <Loader2
                                     size={15}
                                     className="animate-spin"
@@ -1578,78 +1345,64 @@ export default function InstituteTasksPage() {
                                 ) : (
                                   <Trash2 size={15} />
                                 )}
-
                                 إخفاء من الصفحة
                               </button>
                             )}
                           </div>
 
                           <div className="grid gap-3">
-                            {task.targets.map(
-                              (target) => {
-                                const overdue =
-                                  isTargetOverdue(
-                                    target,
-                                    task.due_date
-                                  );
+                            {task.targets.map((target) => {
+                              const overdue = isTargetOverdue(
+                                target,
+                                task.due_date
+                              );
 
-                                return (
-                                  <div
-                                    key={target.id}
-                                    className="rounded-xl border border-slate-200 bg-white p-4"
-                                  >
-                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                      <div className="min-w-0">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <span className="font-bold text-slate-800">
-                                            {
-                                              target.institute_name
-                                            }
+                              return (
+                                <div
+                                  key={target.id}
+                                  className="rounded-xl border border-slate-200 bg-white p-4"
+                                >
+                                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="font-bold text-slate-800">
+                                          {target.institute_name}
+                                        </span>
+
+                                        <span
+                                          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClass(
+                                            target.status
+                                          )}`}
+                                        >
+                                          {target.status === "late"
+                                            ? "متأخر"
+                                            : getStatusLabel(target.status)}
+                                        </span>
+
+                                        {overdue && (
+                                          <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+                                            تجاوز الموعد
                                           </span>
+                                        )}
+                                      </div>
 
-                                          <span
-                                            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusClass(
-                                              target.status
-                                            )}`}
-                                          >
-                                            {target.status ===
-                                            "late"
-                                              ? "متأخر"
-                                              : getStatusLabel(
-                                                  target.status
-                                                )}
-                                          </span>
-
-                                          {overdue && (
-                                            <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                                              تجاوز الموعد
-                                            </span>
-                                          )}
+                                      {target.response && (
+                                        <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+                                          <strong className="text-slate-700">
+                                            الرد:
+                                          </strong>{" "}
+                                          {target.response}
                                         </div>
+                                      )}
+                                    </div>
 
-                                        {target.response && (
-                                          <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600">
-                                            <strong className="text-slate-700">
-                                              الرد:
-                                            </strong>{" "}
-                                            {
-                                              target.response
-                                            }
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      <div className="shrink-0">
-                                        {renderTargetAction(
-                                          task,
-                                          target
-                                        )}
-                                      </div>
+                                    <div className="shrink-0">
+                                      {renderTargetAction(task, target)}
                                     </div>
                                   </div>
-                                );
-                              }
-                            )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -1667,12 +1420,7 @@ export default function InstituteTasksPage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
           dir="rtl"
           onMouseDown={(event) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              setShowForm(false);
-            }
+            if (event.target === event.currentTarget) setShowForm(false);
           }}
         >
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
@@ -1681,7 +1429,6 @@ export default function InstituteTasksPage() {
                 <h2 className="text-xl font-bold text-slate-900">
                   إنشاء تكليف جديد
                 </h2>
-
                 <p className="mt-1 text-sm text-slate-500">
                   يمكنك إرسال نفس التكليف إلى معهد واحد أو عدة معاهد.
                 </p>
@@ -1689,9 +1436,7 @@ export default function InstituteTasksPage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  setShowForm(false)
-                }
+                onClick={() => setShowForm(false)}
                 className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
               >
                 <X size={20} />
@@ -1703,7 +1448,6 @@ export default function InstituteTasksPage() {
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   عنوان التكليف
                 </label>
-
                 <input
                   value={form.title}
                   onChange={(event) =>
@@ -1721,14 +1465,12 @@ export default function InstituteTasksPage() {
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   تفاصيل التكليف
                 </label>
-
                 <textarea
                   value={form.description}
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
-                      description:
-                        event.target.value,
+                      description: event.target.value,
                     }))
                   }
                   rows={4}
@@ -1742,28 +1484,21 @@ export default function InstituteTasksPage() {
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     الأولوية
                   </label>
-
                   <select
                     value={form.priority}
                     onChange={(event) =>
                       setForm((current) => ({
                         ...current,
-                        priority:
-                          event.target.value as typeof current.priority,
+                        priority: event.target.value as typeof current.priority,
                       }))
                     }
                     className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
                   >
-                    {priorityOptions.map(
-                      (item) => (
-                        <option
-                          key={item.value}
-                          value={item.value}
-                        >
-                          {item.label}
-                        </option>
-                      )
-                    )}
+                    {priorityOptions.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1771,15 +1506,13 @@ export default function InstituteTasksPage() {
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     تاريخ الاستحقاق
                   </label>
-
                   <input
                     type="date"
                     value={form.due_date}
                     onChange={(event) =>
                       setForm((current) => ({
                         ...current,
-                        due_date:
-                          event.target.value,
+                        due_date: event.target.value,
                       }))
                     }
                     className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
@@ -1794,33 +1527,20 @@ export default function InstituteTasksPage() {
 
                 <div className="grid gap-2 sm:grid-cols-3">
                   {[
-                    {
-                      value: "single",
-                      label: "معهد واحد",
-                    },
-                    {
-                      value: "selected",
-                      label: "معاهد محددة",
-                    },
-                    {
-                      value: "all",
-                      label: "كل المعاهد",
-                    },
+                    { value: "single", label: "معهد واحد" },
+                    { value: "selected", label: "معاهد محددة" },
+                    { value: "all", label: "كل المعاهد" },
                   ].map((item) => (
                     <button
                       key={item.value}
                       type="button"
                       onClick={() =>
                         setTargetMode(
-                          item.value as
-                            | "all"
-                            | "selected"
-                            | "single"
+                          item.value as "all" | "selected" | "single"
                         )
                       }
                       className={`rounded-xl border px-3 py-3 text-sm font-semibold transition ${
-                        targetMode ===
-                        item.value
+                        targetMode === item.value
                           ? "border-blue-500 bg-blue-50 text-blue-700"
                           : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                       }`}
@@ -1836,32 +1556,22 @@ export default function InstituteTasksPage() {
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     المعهد
                   </label>
-
                   <select
                     value={form.institute_id}
                     onChange={(event) =>
                       setForm((current) => ({
                         ...current,
-                        institute_id:
-                          event.target.value,
+                        institute_id: event.target.value,
                       }))
                     }
                     className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400"
                   >
-                    <option value="">
-                      اختر المعهد
-                    </option>
-
-                    {institutes.map(
-                      (institute) => (
-                        <option
-                          key={institute.id}
-                          value={institute.id}
-                        >
-                          {institute.name}
-                        </option>
-                      )
-                    )}
+                    <option value="">اختر المعهد</option>
+                    {institutes.map((institute) => (
+                      <option key={institute.id} value={institute.id}>
+                        {institute.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               )}
@@ -1872,73 +1582,46 @@ export default function InstituteTasksPage() {
                     <span className="text-sm font-semibold text-slate-700">
                       اختر المعاهد
                     </span>
-
                     <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
-                      {selectedInstitutes.length}{" "}
-                      محدد
+                      {selectedInstitutes.length} محدد
                     </span>
                   </div>
 
                   <div className="grid gap-2">
-                    {institutes.map(
-                      (institute) => {
-                        const selected =
-                          selectedInstitutes.includes(
-                            institute.id
-                          );
+                    {institutes.map((institute) => {
+                      const selected = selectedInstitutes.includes(institute.id);
 
-                        return (
-                          <button
-                            key={institute.id}
-                            type="button"
-                            onClick={() =>
-                              toggleInstituteSelection(
-                                institute.id
-                              )
-                            }
-                            className={`flex items-center justify-between rounded-lg border px-3 py-3 text-right text-sm transition ${
-                              selected
-                                ? "border-blue-400 bg-blue-50 text-blue-800"
-                                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                            }`}
-                          >
-                            <span>
-                              {
-                                institute.name
-                              }
-                            </span>
-
-                            {selected && (
-                              <Check
-                                size={18}
-                              />
-                            )}
-                          </button>
-                        );
-                      }
-                    )}
+                      return (
+                        <button
+                          key={institute.id}
+                          type="button"
+                          onClick={() => toggleInstituteSelection(institute.id)}
+                          className={`flex items-center justify-between rounded-lg border px-3 py-3 text-right text-sm transition ${
+                            selected
+                              ? "border-blue-400 bg-blue-50 text-blue-800"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span>{institute.name}</span>
+                          {selected && <Check size={18} />}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
               {targetMode === "all" && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
-                  سيتم إنشاء{" "}
-                  <strong>
-                    تكليف واحد
-                  </strong>{" "}
-                  وربطه بكل المعاهد الظاهرة
-                  للإدارة الحالية. لكل معهد
-                  سجل متابعة مستقل.
+                  سيتم إنشاء <strong>تكليف واحد</strong> وربطه بكل المعاهد الظاهرة
+                  للإدارة الحالية. لكل معهد سجل متابعة مستقل.
                 </div>
               )}
 
               <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowForm(false)
-                  }
+                  onClick={() => setShowForm(false)}
                   className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
                 >
                   إلغاء
@@ -1951,14 +1634,10 @@ export default function InstituteTasksPage() {
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                 >
                   {saving ? (
-                    <Loader2
-                      size={18}
-                      className="animate-spin"
-                    />
+                    <Loader2 size={18} className="animate-spin" />
                   ) : (
                     <Plus size={18} />
                   )}
-
                   إنشاء التكليف
                 </button>
               </div>
