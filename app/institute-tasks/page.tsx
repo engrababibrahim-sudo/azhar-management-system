@@ -22,8 +22,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import AppShell from "../../components/AppShell";
-import { supabase } from "../../lib/supabase";
+import AppShell from "../components/AppShell";
+import { supabase } from "../../lib/supabase/client";
 
 type Institute = {
   id: string;
