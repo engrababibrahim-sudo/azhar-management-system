@@ -204,7 +204,7 @@ due_date: "",
 async function loadData() {
 setLoading(true);
 
-```
+
 try {
   const {
     data: { user },
@@ -328,7 +328,7 @@ try {
 } finally {
   setLoading(false);
 }
-```
+
 
 }
 
@@ -341,7 +341,7 @@ if (targetMode === "all") {
 return institutes.map((institute) => institute.id);
 }
 
-```
+
 if (targetMode === "selected") {
   return selectedInstitutes;
 }
@@ -351,7 +351,7 @@ if (form.institute_id) {
 }
 
 return [];
-```
+
 
 }
 
@@ -361,10 +361,10 @@ if (current.includes(instituteId)) {
 return current.filter((id) => id !== instituteId);
 }
 
-```
+
   return [...current, instituteId];
 });
-```
+
 
 }
 
@@ -384,7 +384,7 @@ alert("لم يتم تحميل بيانات المستخدم");
 return;
 }
 
-```
+
 if (!form.title.trim()) {
   alert("اكتبي عنوان التكليف");
   return;
@@ -477,7 +477,7 @@ try {
 } finally {
   setSaving(false);
 }
-```
+
 
 }
 
@@ -487,7 +487,7 @@ status: string
 ) {
 setUpdatingId(taskId);
 
-```
+
 try {
   const now = new Date().toISOString();
 
@@ -526,7 +526,7 @@ try {
 } finally {
   setUpdatingId(null);
 }
-```
+
 
 }
 
@@ -534,7 +534,7 @@ const filteredTasks = useMemo(() => {
 const normalizedSearch =
 searchTerm.trim().toLowerCase();
 
-```
+
 return tasks.filter((task) => {
   const matchesSearch =
     !normalizedSearch ||
@@ -567,7 +567,7 @@ return tasks.filter((task) => {
     matchesInstitute
   );
 });
-```
+
 
 }, [
 tasks,
@@ -580,7 +580,7 @@ instituteFilter,
 const statistics = useMemo(() => {
 const total = tasks.length;
 
-```
+
 const completed = tasks.filter(
   (task) => isCompleted(task.status)
 ).length;
@@ -611,7 +611,7 @@ return {
   inProgress,
   pending,
 };
-```
+
 
 }, [tasks]);
 
@@ -625,7 +625,7 @@ getTargetInstituteIds().length;
 return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8"> <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"> <div> <h1 className="text-2xl font-black text-slate-900">
 مركز المتابعة والتكليفات </h1>
 
-```
+
         <p className="mt-2 text-sm text-slate-500">
           إرسال التكليفات للمعاهد ومتابعة التنفيذ والتدخل عند الحاجة.
         </p>
@@ -1369,7 +1369,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
     </div>
   )}
 </AppShell>
-```
+
 
 );
 }
