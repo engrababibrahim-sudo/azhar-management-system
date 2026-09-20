@@ -44,7 +44,12 @@ type TaskTarget = {
 id: string;
 task_id: string;
 institute_id: string;
-status: "pending" | "in_progress" | "submitted" | "completed" | "late";
+status:
+| "pending"
+| "in_progress"
+| "submitted"
+| "completed"
+| "late";
 response?: string | null;
 responded_at?: string | null;
 created_at?: string | null;
@@ -152,12 +157,15 @@ return "pending";
 function getTargetCounts(targets: TaskTarget[]) {
 return {
 pending: targets.filter((target) => target.status === "pending").length,
-inProgress: targets.filter((target) => target.status === "in_progress")
-.length,
-submitted: targets.filter((target) => target.status === "submitted")
-.length,
-completed: targets.filter((target) => target.status === "completed")
-.length,
+inProgress: targets.filter(
+(target) => target.status === "in_progress"
+).length,
+submitted: targets.filter(
+(target) => target.status === "submitted"
+).length,
+completed: targets.filter(
+(target) => target.status === "completed"
+).length,
 late: targets.filter((target) => target.status === "late").length,
 };
 }
@@ -218,7 +226,9 @@ const [showForm, setShowForm] = useState(false);
 const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 const [showArchivedTasks, setShowArchivedTasks] = useState(false);
 
-const [updatingTargetId, setUpdatingTargetId] = useState<string | null>(null);
+const [updatingTargetId, setUpdatingTargetId] = useState<string | null>(
+null
+);
 const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
 const [deletingAll, setDeletingAll] = useState(false);
 
@@ -381,10 +391,7 @@ if (typeof window === "undefined") return;
 ```
 const unique = Array.from(new Set(ids));
 
-localStorage.setItem(
-  HIDDEN_STORAGE_KEY,
-  JSON.stringify(unique)
-);
+localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(unique));
 
 setHiddenTaskIds(unique);
 ```
@@ -392,7 +399,9 @@ setHiddenTaskIds(unique);
 }
 
 async function loadData(showSpinner = true) {
-if (showSpinner) setLoading(true);
+if (showSpinner) {
+setLoading(true);
+}
 
 ```
 try {
@@ -526,18 +535,24 @@ try {
       );
     }
 
-    const { data, error } = await taskQuery;
+    const {
+      data,
+      error,
+    } = await taskQuery;
 
     if (error) throw error;
 
     taskData = (data ?? []) as Task[];
   } else if (taskIds.length) {
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from("institute_tasks")
       .select(
         "id, assignment_group_id, directorate_id, institute_id, title, description, priority, status, assigned_to, due_date, response, created_by, created_at, updated_at"
       )
-      .in("id", taskIds)
+      .in(taskIds)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -557,7 +572,10 @@ try {
   let extraTargets: TaskTarget[] = [];
 
   if (director && missingTargetTaskIds.length) {
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from("institute_task_targets")
       .select(
         "id, task_id, institute_id, status, response, responded_at, created_at, updated_at"
@@ -570,7 +588,10 @@ try {
     extraTargets = (data ?? []) as TaskTarget[];
   }
 
-  const allTargets = [...rawTargets, ...extraTargets];
+  const allTargets = [
+    ...rawTargets,
+    ...extraTargets,
+  ];
 
   const instituteMap = new Map(
     instituteList.map((institute) => [
@@ -579,12 +600,14 @@ try {
     ])
   );
 
-  const targetsWithNames = allTargets.map((target) => ({
-    ...target,
-    institute_name:
-      instituteMap.get(target.institute_id) ??
-      "معهد غير معروف",
-  }));
+  const targetsWithNames = allTargets.map(
+    (target) => ({
+      ...target,
+      institute_name:
+        instituteMap.get(target.institute_id) ??
+        "معهد غير معروف",
+    })
+  );
 
   const grouped = new Map<string, TaskView>();
 
@@ -592,11 +615,14 @@ try {
     const groupKey =
       task.assignment_group_id || task.id;
 
-    const taskTargets = targetsWithNames.filter(
-      (target) => target.task_id === task.id
-    );
+    const taskTargets =
+      targetsWithNames.filter(
+        (target) =>
+          target.task_id === task.id
+      );
 
-    const existing = grouped.get(groupKey);
+    const existing =
+      grouped.get(groupKey);
 
     if (existing) {
       existing.targets = [
@@ -605,7 +631,8 @@ try {
           (newTarget) =>
             !existing.targets.some(
               (oldTarget) =>
-                oldTarget.id === newTarget.id
+                oldTarget.id ===
+                newTarget.id
             )
         ),
       ];
@@ -617,11 +644,17 @@ try {
     }
   }
 
+  /*
+   * هذا الجزء خاص بالتكليفات القديمة
+   * التي كانت تحتوي على institute_id مباشرة
+   * بدون سجل في institute_task_targets.
+   */
   for (const task of taskData) {
     const groupKey =
       task.assignment_group_id || task.id;
 
-    const group = grouped.get(groupKey);
+    const group =
+      grouped.get(groupKey);
 
     if (
       group &&
@@ -632,7 +665,8 @@ try {
         {
           id: `legacy-${task.id}`,
           task_id: task.id,
-          institute_id: task.institute_id,
+          institute_id:
+            task.institute_id,
           status:
             task.status === "completed"
               ? "completed"
@@ -643,38 +677,61 @@ try {
                   : "pending",
           response: task.response,
           institute_name:
-            instituteMap.get(task.institute_id) ??
-            "معهد غير معروف",
+            instituteMap.get(
+              task.institute_id
+            ) ?? "معهد غير معروف",
         },
       ];
     }
   }
 
-  setTasks(Array.from(grouped.values()));
+  const groupedTasks =
+    Array.from(
+      grouped.values()
+    );
 
-  const currentHidden = getStoredHiddenIds();
+  setTasks(groupedTasks);
 
-  const currentTaskIds = Array.from(grouped.values()).map(
-    (task) => task.id
-  );
+  const currentHidden =
+    getStoredHiddenIds();
 
-  if (typeof window !== "undefined") {
+  const currentTaskIds =
+    groupedTasks.map(
+      (task) => task.id
+    );
+
+  if (
+    typeof window !==
+    "undefined"
+  ) {
     const keyExists =
-      localStorage.getItem(HIDDEN_STORAGE_KEY) !== null;
+      localStorage.getItem(
+        HIDDEN_STORAGE_KEY
+      ) !== null;
 
     if (!keyExists) {
-      saveHiddenIds(currentTaskIds);
-      setShowArchivedTasks(false);
+      /*
+       * أول مرة فقط:
+       * لا نخفي التكليفات الجديدة.
+       */
+      saveHiddenIds([]);
     } else {
-      const cleaned = currentHidden.filter((id) =>
-        currentTaskIds.includes(id)
-      );
+      const cleaned =
+        currentHidden.filter(
+          (id) =>
+            currentTaskIds.includes(
+              id
+            )
+        );
 
       saveHiddenIds(cleaned);
     }
   }
 } catch (error: any) {
-  console.error("loadData error:", error);
+  console.error(
+    "loadData error:",
+    error
+  );
 
   alert(
     error?.message ??
@@ -708,11 +765,19 @@ setTargetMode("single");
 
 }
 
-function toggleInstituteSelection(id: string) {
-setSelectedInstitutes((current) =>
+function toggleInstituteSelection(
+id: string
+) {
+setSelectedInstitutes(
+(current) =>
 current.includes(id)
-? current.filter((item) => item !== id)
-: [...current, id]
+? current.filter(
+(item) => item !== id
+)
+: [
+...current,
+id,
+]
 );
 }
 
@@ -724,7 +789,10 @@ return institutes.map(
 }
 
 ```
-if (targetMode === "selected") {
+if (
+  targetMode ===
+  "selected"
+) {
   return selectedInstitutes;
 }
 
@@ -737,7 +805,9 @@ return form.institute_id
 
 async function createTask() {
 if (!profile) {
-alert("لم يتم العثور على بيانات المستخدم");
+alert(
+"لم يتم العثور على بيانات المستخدم"
+);
 return;
 }
 
@@ -757,8 +827,12 @@ if (!form.title.trim()) {
 const targetInstitutes =
   getSelectedTargetInstitutes();
 
-if (!targetInstitutes.length) {
-  alert("اختر معهدًا واحدًا على الأقل");
+if (
+  !targetInstitutes.length
+) {
+  alert(
+    "اختر معهدًا واحدًا على الأقل"
+  );
   return;
 }
 
@@ -779,10 +853,13 @@ try {
       directorate_id:
         profile.directorate_id,
       institute_id: null,
-      title: form.title.trim(),
+      title:
+        form.title.trim(),
       description:
-        form.description.trim() || null,
-      priority: form.priority,
+        form.description.trim() ||
+        null,
+      priority:
+        form.priority,
       status: "pending",
       due_date:
         form.due_date || null,
@@ -793,7 +870,8 @@ try {
     )
     .single();
 
-  if (taskError) throw taskError;
+  if (taskError)
+    throw taskError;
 
   if (!createdTask) {
     throw new Error(
@@ -804,21 +882,30 @@ try {
   const targetRows =
     targetInstitutes.map(
       (instituteId) => ({
-        task_id: createdTask.id,
-        institute_id: instituteId,
-        status: "pending",
+        task_id:
+          createdTask.id,
+        institute_id:
+          instituteId,
+        status:
+          "pending",
       })
     );
 
   const {
     error: targetError,
   } = await supabase
-    .from("institute_task_targets")
-    .insert(targetRows);
+    .from(
+      "institute_task_targets"
+    )
+    .insert(
+      targetRows
+    );
 
   if (targetError) {
     await supabase
-      .from("institute_tasks")
+      .from(
+        "institute_tasks"
+      )
       .delete()
       .eq(
         "id",
@@ -829,7 +916,7 @@ try {
   }
 
   alert(
-    `تم إنشاء تكليف واحد بنجاح وإرساله إلى ${targetInstitutes.length} معهد`
+    `تم إنشاء التكليف بنجاح وإرساله إلى ${targetInstitutes.length} معهد`
   );
 
   resetForm();
@@ -853,25 +940,28 @@ try {
 
 }
 
-function hideTask(taskId: string) {
-const next = [
+function hideTask(
+taskId: string
+) {
+saveHiddenIds([
 ...hiddenTaskIds,
 taskId,
-];
+]);
 
 ```
-saveHiddenIds(next);
-
-setExpandedTaskId((current) =>
-  current === taskId
-    ? null
-    : current
+setExpandedTaskId(
+  (current) =>
+    current === taskId
+      ? null
+      : current
 );
 ```
 
 }
 
-function restoreTask(taskId: string) {
+function restoreTask(
+taskId: string
+) {
 saveHiddenIds(
 hiddenTaskIds.filter(
 (id) => id !== taskId
@@ -879,26 +969,46 @@ hiddenTaskIds.filter(
 );
 }
 
-async function deleteTask(task: TaskView) {
-if (!isDirector) return;
+/*
+
+* الحذف النهائي:
+* إذا كان التكليف جماعيًا، نحذف كل سجلات
+* institute_tasks التي تحمل نفس assignment_group_id.
+*
+* institute_task_targets مرتبطة بـ ON DELETE CASCADE
+* لذلك حالات المتابعة التابعة تحذف تلقائيًا.
+  */
+  async function deleteTask(
+  task: TaskView
+  ) {
+  if (!isDirector) return;
 
 ```
 const confirmed =
+```
+
+```
   window.confirm(
-    "هل أنت متأكد من حذف هذا التكليف نهائيًا؟ سيتم حذف التكليف بالكامل من قاعدة البيانات وجميع حالات المتابعة المرتبطة به."
+    "هل أنت متأكد من حذف هذا التكليف نهائيًا؟ سيتم حذف التكليف بالكامل وجميع حالات المتابعة المرتبطة به من قاعدة البيانات."
   );
 
 if (!confirmed) return;
 
-setDeletingTaskId(task.id);
+setDeletingTaskId(
+  task.id
+);
 
 try {
   let deleteQuery =
     supabase
-      .from("institute_tasks")
+      .from(
+        "institute_tasks"
+      )
       .delete();
 
-  if (task.assignment_group_id) {
+  if (
+    task.assignment_group_id
+  ) {
     deleteQuery =
       deleteQuery.eq(
         "assignment_group_id",
@@ -916,39 +1026,55 @@ try {
     error,
   } = await deleteQuery;
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
 
-  setTasks((current) =>
-    current.filter((item) => {
-      if (
-        task.assignment_group_id
-      ) {
-        return (
-          item.assignment_group_id !==
-          task.assignment_group_id
-        );
-      }
-
-      return item.id !== task.id;
-    })
-  );
-
-  const deletedGroupTaskIds =
+  const deletedIds =
     tasks
-      .filter((item) =>
-        task.assignment_group_id
-          ? item.assignment_group_id ===
+      .filter((item) => {
+        if (
+          task.assignment_group_id
+        ) {
+          return (
+            item.assignment_group_id ===
             task.assignment_group_id
-          : item.id === task.id
-      )
+          );
+        }
+
+        return (
+          item.id === task.id
+        );
+      })
       .map(
         (item) => item.id
       );
 
+  setTasks(
+    (current) =>
+      current.filter(
+        (item) => {
+          if (
+            task.assignment_group_id
+          ) {
+            return (
+              item.assignment_group_id !==
+              task.assignment_group_id
+            );
+          }
+
+          return (
+            item.id !==
+            task.id
+          );
+        }
+      )
+  );
+
   saveHiddenIds(
     hiddenTaskIds.filter(
       (id) =>
-        !deletedGroupTaskIds.includes(
+        !deletedIds.includes(
           id
         )
     )
@@ -970,27 +1096,38 @@ try {
       "تعذر حذف التكليف."
   );
 } finally {
-  setDeletingTaskId(null);
+  setDeletingTaskId(
+    null
+  );
 }
 ```
 
 }
 
-async function deleteAllTasks() {
-if (
-!isDirector ||
-!visibleTasks.length
-) {
-return;
-}
+/*
+
+* تنظيف الصفحة لا يحذف أي بيانات من قاعدة البيانات.
+* فقط يخفي التكليفات من واجهة المستخدم.
+  */
+  async function deleteAllTasks() {
+  if (
+  !isDirector ||
+  !visibleTasks.length
+  ) {
+  return;
+  }
 
 ```
 const confirmed =
+```
+
+```
   window.confirm(
     "سيتم إخفاء التكليفات الحالية من الصفحة فقط، ولن يتم حذف أي بيانات من قاعدة البيانات. هل تريد المتابعة؟"
   );
 
-if (!confirmed) return;
+if (!confirmed)
+  return;
 
 setDeletingAll(true);
 
@@ -1126,7 +1263,9 @@ try {
   const {
     error: taskError,
   } = await supabase
-    .from("institute_tasks")
+    .from(
+      "institute_tasks"
+    )
     .update({
       status:
         overallStatus,
@@ -1141,19 +1280,21 @@ try {
   if (taskError)
     throw taskError;
 
-  setTasks((current) =>
-    current.map(
-      (item) =>
-        item.id === task.id
-          ? {
-              ...item,
-              status:
-                overallStatus,
-              targets:
-                updatedTargets,
-            }
-          : item
-    )
+  setTasks(
+    (current) =>
+      current.map(
+        (item) =>
+          item.id ===
+          task.id
+            ? {
+                ...item,
+                status:
+                  overallStatus,
+                targets:
+                  updatedTargets,
+              }
+            : item
+      )
   );
 } catch (error: any) {
   console.error(
@@ -1254,7 +1395,8 @@ if (
 if (
   target.status ===
     "pending" ||
-  target.status === "late"
+  target.status ===
+    "late"
 ) {
   return (
     <button
@@ -1344,7 +1486,8 @@ if (
 }
 
 if (
-  task.priority === "urgent"
+  task.priority ===
+  "urgent"
 ) {
   return true;
 }
@@ -1372,8 +1515,7 @@ return ( <AppShell> <div
             </h1>
 
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              متابعة دورة التكليف من إصدار الإدارة إلى تنفيذ المعهد والتسليم والاعتماد، مع
-              عرض الاستثناءات التي تحتاج تدخل الإدارة.
+              متابعة دورة التكليف من إصدار الإدارة إلى تنفيذ المعهد والتسليم والاعتماد.
             </p>
           </div>
 
@@ -1514,7 +1656,7 @@ return ( <AppShell> <div
         isDirector && (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
-            تنظيفها من العرض سابقًا. لا يوجد حذف من قاعدة البيانات.
+            تنظيفها من العرض سابقًا.
           </div>
         )}
 
@@ -1920,7 +2062,7 @@ return ( <AppShell> <div
                             </h4>
 
                             <p className="mt-1 text-xs text-slate-500">
-                              كل معهد له حالة مستقلة داخل نفس التكليف الجماعي.
+                              كل معهد له حالة متابعة مستقلة داخل نفس التكليف.
                             </p>
                           </div>
 
@@ -2406,7 +2548,7 @@ return ( <AppShell> <div
                 <strong>
                   تكليف واحد
                 </strong>{" "}
-                وربطه بكل المعاهد الظاهرة للإدارة الحالية. لكل معهد سجل متابعة مستقل.
+                وربطه بكل المعاهد الظاهرة للإدارة الحالية، ولكل معهد سجل متابعة مستقل.
               </div>
             )}
 
