@@ -12,6 +12,7 @@ Plus,
 RefreshCw,
 Search,
 Send,
+Trash2,
 X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -302,6 +303,14 @@ updatingTargetId,
 setUpdatingTargetId,
 ] = useState<string | null>(null);
 
+const [
+deletingTaskId,
+setDeletingTaskId,
+] = useState<string | null>(null);
+
+const [deletingAll, setDeletingAll] =
+useState(false);
+
 const [showForm, setShowForm] =
 useState(false);
 
@@ -490,14 +499,15 @@ try {
     (targetData ||
       []) as TaskTarget[];
 
-  const targetTaskIds = Array.from(
-    new Set(
-      loadedTargets.map(
-        (target) =>
-          target.task_id
+  const targetTaskIds =
+    Array.from(
+      new Set(
+        loadedTargets.map(
+          (target) =>
+            target.task_id
+        )
       )
-    )
-  );
+    );
 
   let tasksQuery =
     supabase
@@ -541,8 +551,7 @@ try {
   const {
     data: taskData,
     error: taskError,
-  } =
-    await tasksQuery;
+  } = await tasksQuery;
 
   if (taskError) {
     console.error(
@@ -577,13 +586,6 @@ try {
         )
     );
 
-  /*
-   * For directors, the first target query
-   * already contains all targets.
-   * This keeps the query efficient and
-   * avoids exposing unrelated data to
-   * institute users.
-   */
   if (isDirector) {
     const missingTaskIds =
       taskIds.filter(
@@ -646,9 +648,6 @@ try {
       )
     );
 
-  /*
-   * Group targets by task.
-   */
   const targetsByTask =
     new Map<
       string,
@@ -676,11 +675,6 @@ try {
     );
   }
 
-  /*
-   * Map tasks to targets.
-   * Old records without target rows
-   * remain visible as legacy tasks.
-   */
   const mappedTasks =
     taskRows.map(
       (task) => {
@@ -731,11 +725,6 @@ try {
       }
     );
 
-  /*
-   * Remove duplicate logical rows
-   * when several task records share the
-   * same assignment_group_id.
-   */
   const grouped =
     new Map<
       string,
@@ -887,6 +876,7 @@ alert(
 return;
 }
 
+
 if (
   !form.title.trim()
 ) {
@@ -912,11 +902,6 @@ if (
 setSaving(true);
 
 try {
-  /*
-   * One logical task = one row.
-   * One assignment_group_id identifies
-   * the logical assignment.
-   */
   const assignmentGroupId =
     createGroupId();
 
@@ -1051,6 +1036,240 @@ try {
 
 }
 
+async function deleteTask(
+task: TaskView
+) {
+if (!isDirector) {
+return;
+}
+
+
+const confirmed =
+  window.confirm(
+    `هل أنتِ متأكدة من حذف التكليف:\n\n"${task.title}"؟\n\nسيتم حذف التكليف وأهدافه المرتبطة به.`
+  );
+
+if (!confirmed) {
+  return;
+}
+
+setDeletingTaskId(
+  task.id
+);
+
+try {
+  const {
+    error,
+  } = await supabase
+    .from(
+      "institute_tasks"
+    )
+    .delete()
+    .eq(
+      "id",
+      task.id
+    );
+
+  if (error) {
+    console.error(
+      "Delete task error:",
+      error
+    );
+
+    alert(
+      "تعذر حذف التكليف:\n" +
+        error.message
+    );
+
+    return;
+  }
+
+  if (
+    expandedTaskId ===
+    task.id
+  ) {
+    setExpandedTaskId(
+      null
+    );
+  }
+
+  setTasks(
+    (current) =>
+      current.filter(
+        (item) =>
+          item.id !==
+          task.id
+      )
+  );
+
+  alert(
+    "تم حذف التكليف بنجاح ✅"
+  );
+} finally {
+  setDeletingTaskId(
+    null
+  );
+}
+
+
+}
+
+async function deleteAllTasks() {
+if (!isDirector) {
+return;
+}
+
+
+if (
+  tasks.length ===
+  0
+) {
+  alert(
+    "لا توجد تكليفات لحذفها."
+  );
+  return;
+}
+
+const confirmed =
+  window.confirm(
+    "هل أنتِ متأكدة من حذف جميع التكليفات الحالية؟\n\nسيتم حذف كل التكليفات الظاهرة في مركز المتابعة وأهدافها المرتبطة بها.\n\nلن يتم حذف المعاهد أو الطلاب أو المدرسين."
+  );
+
+if (!confirmed) {
+  return;
+}
+
+const secondConfirmed =
+  window.confirm(
+    "تأكيد أخير:\n\nسيتم تنظيف مركز التكليفات بالكامل والبدء من الصفر.\n\nهل تريدين المتابعة؟"
+  );
+
+if (!secondConfirmed) {
+  return;
+}
+
+setDeletingAll(true);
+
+try {
+  const { data: allTaskRows, error: taskLoadError } =
+    await supabase
+      .from("institute_tasks")
+      .select("id");
+
+  if (taskLoadError) {
+    console.error(
+      "Load tasks before delete error:",
+      taskLoadError
+    );
+
+    alert(
+      "تعذر قراءة التكليفات قبل الحذف:\n" +
+        taskLoadError.message
+    );
+
+    return;
+  }
+
+  const taskIds =
+    (allTaskRows || []).map(
+      (row) => row.id
+    );
+
+  if (
+    taskIds.length ===
+    0
+  ) {
+    setTasks([]);
+    alert(
+      "مركز التكليفات أصبح نظيفًا بالفعل."
+    );
+    return;
+  }
+
+  const {
+    error: targetDeleteError,
+  } = await supabase
+    .from(
+      "institute_task_targets"
+    )
+    .delete()
+    .in(
+      "task_id",
+      taskIds
+    );
+
+  if (
+    targetDeleteError
+  ) {
+    console.error(
+      "Delete task targets error:",
+      targetDeleteError
+    );
+
+    alert(
+      "تعذر حذف أهداف التكليفات:\n" +
+        targetDeleteError.message
+    );
+
+    return;
+  }
+
+  const {
+    error: tasksDeleteError,
+  } = await supabase
+    .from(
+      "institute_tasks"
+    )
+    .delete()
+    .in(
+      "id",
+      taskIds
+    );
+
+  if (
+    tasksDeleteError
+  ) {
+    console.error(
+      "Delete all tasks error:",
+      tasksDeleteError
+    );
+
+    alert(
+      "تم حذف أهداف التكليفات لكن تعذر إكمال حذف التكليفات:\n" +
+        tasksDeleteError.message
+    );
+
+    await loadData();
+    return;
+  }
+
+  setTasks([]);
+  setExpandedTaskId(
+    null
+  );
+  setSearchTerm("");
+  setStatusFilter(
+    "all"
+  );
+  setPriorityFilter(
+    "all"
+  );
+  setInstituteFilter(
+    "all"
+  );
+
+  alert(
+    "تم تنظيف مركز التكليفات بالكامل بنجاح ✅\n\nيمكنك الآن البدء من الصفر."
+  );
+
+  await loadData();
+} finally {
+  setDeletingAll(false);
+}
+
+
+}
+
 async function updateTargetStatus(
 taskId: string,
 target: TaskTargetView,
@@ -1120,10 +1339,6 @@ try {
     return;
   }
 
-  /*
-   * Keep the parent task status synchronized
-   * for backward compatibility.
-   */
   const currentTask =
     tasks.find(
       (task) =>
@@ -1363,16 +1578,37 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
       </div>
 
       {isDirector && (
-        <button
-          type="button"
-          onClick={() =>
-            setShowForm(true)
-          }
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-slate-800"
-        >
-          <Plus size={19} />
-          تكليف جديد
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={() =>
+              setShowForm(true)
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-slate-800"
+          >
+            <Plus size={19} />
+            تكليف جديد
+          </button>
+
+          <button
+            type="button"
+            onClick={
+              deleteAllTasks
+            }
+            disabled={
+              deletingAll ||
+              tasks.length ===
+                0
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 size={18} />
+
+            {deletingAll
+              ? "جاري التنظيف..."
+              : "حذف جميع التكليفات"}
+          </button>
+        </div>
       )}
     </div>
 
@@ -1669,7 +1905,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
           </h3>
 
           <p className="mt-2 text-sm text-slate-500">
-            عند إنشاء أول تكليف سيظهر هنا لمتابعة تنفيذه.
+            مركز المتابعة نظيف. يمكنك الآن إنشاء أول تكليف جديد.
           </p>
         </div>
       ) : (
@@ -1697,6 +1933,10 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
 
               const isExpanded =
                 expandedTaskId ===
+                task.id;
+
+              const isDeleting =
+                deletingTaskId ===
                 task.id;
 
               return (
@@ -1855,6 +2095,30 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                             </>
                           )}
                         </button>
+
+                        {isDirector && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              deleteTask(
+                                task
+                              )
+                            }
+                            disabled={
+                              isDeleting ||
+                              deletingAll
+                            }
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Trash2
+                              size={16}
+                            />
+
+                            {isDeleting
+                              ? "جاري الحذف..."
+                              : "حذف"}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
