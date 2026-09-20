@@ -124,7 +124,7 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 useEffect(() => {
 let mounted = true;
 
-```
+
 async function loadProfile() {
   try {
     const {
@@ -181,7 +181,7 @@ loadProfile();
 return () => {
   mounted = false;
 };
-```
+
 
 }, []);
 
@@ -194,13 +194,13 @@ if (!item.roles || item.roles.length === 0) {
 return true;
 }
 
-```
+
 if (!role) {
   return false;
 }
 
 return item.roles.includes(role);
-```
+
 
 });
 
@@ -209,9 +209,9 @@ if (href === "/") {
 return pathname === "/";
 }
 
-```
+
 return pathname === href || pathname.startsWith(href + "/");
-```
+
 
 }
 
@@ -224,7 +224,7 @@ className="rounded-xl p-2 text-slate-700 transition hover:bg-slate-100"
 aria-label="فتح القائمة"
 > <Menu size={24} /> </button>
 
-```
+
     <div className="text-center">
       <div className="text-sm font-bold text-slate-900">
         نظام إدارة المعاهد الأزهرية
@@ -335,7 +335,7 @@ aria-label="فتح القائمة"
     {children}
   </main>
 </div>
-```
+
 
 );
 }
