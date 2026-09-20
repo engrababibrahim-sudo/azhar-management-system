@@ -79,6 +79,10 @@ value: "in_progress",
 label: "قيد التنفيذ",
 },
 {
+value: "submitted",
+label: "تم التسليم",
+},
+{
 value: "completed",
 label: "مكتملة",
 },
@@ -139,6 +143,10 @@ if (status === "completed") {
 return "bg-emerald-100 text-emerald-700";
 }
 
+if (status === "submitted") {
+return "bg-purple-100 text-purple-700";
+}
+
 if (status === "in_progress") {
 return "bg-blue-100 text-blue-700";
 }
@@ -162,25 +170,16 @@ return date.toLocaleDateString("ar-EG");
 
 export default function InstituteTasksPage() {
 const [profile, setProfile] = useState<Profile | null>(null);
-
 const [institutes, setInstitutes] = useState<Institute[]>([]);
-
 const [tasks, setTasks] = useState<TaskWithInstitute[]>([]);
-
 const [loading, setLoading] = useState(true);
-
 const [saving, setSaving] = useState(false);
-
 const [updatingId, setUpdatingId] = useState<string | null>(null);
-
 const [showForm, setShowForm] = useState(false);
 
 const [searchTerm, setSearchTerm] = useState("");
-
 const [statusFilter, setStatusFilter] = useState("all");
-
 const [priorityFilter, setPriorityFilter] = useState("all");
-
 const [instituteFilter, setInstituteFilter] = useState("all");
 
 const [targetMode, setTargetMode] = useState<
@@ -188,10 +187,9 @@ const [targetMode, setTargetMode] = useState<
 
 > ("single");
 
-const [selectedInstitutes, setSelectedInstitutes] = useState<
-string[]
-
-> ([]);
+const [selectedInstitutes, setSelectedInstitutes] = useState<string[]>(
+[]
+);
 
 const [form, setForm] = useState({
 institute_id: "",
@@ -266,8 +264,7 @@ try {
     console.error("Institutes error:", instituteError);
   }
 
-  const loadedInstitutes =
-    (instituteData || []) as Institute[];
+  const loadedInstitutes = (instituteData || []) as Institute[];
 
   setInstitutes(loadedInstitutes);
 
@@ -462,9 +459,7 @@ try {
   });
 
   setTargetMode("single");
-
   setSelectedInstitutes([]);
-
   setShowForm(false);
 
   await loadData();
@@ -494,7 +489,7 @@ try {
   const { error } = await supabase
     .from("institute_tasks")
     .update({
-      status: status,
+      status,
       updated_at: now,
     })
     .eq("id", taskId);
@@ -518,7 +513,7 @@ try {
 
       return {
         ...task,
-        status: status,
+        status,
         updated_at: now,
       };
     })
@@ -582,7 +577,11 @@ const total = tasks.length;
 
 
 const completed = tasks.filter(
-  (task) => isCompleted(task.status)
+  (task) => task.status === "completed"
+).length;
+
+const submitted = tasks.filter(
+  (task) => task.status === "submitted"
 ).length;
 
 const overdue = tasks.filter(
@@ -592,7 +591,7 @@ const overdue = tasks.filter(
 const urgent = tasks.filter(
   (task) =>
     task.priority === "urgent" &&
-    !isCompleted(task.status)
+    task.status !== "completed"
 ).length;
 
 const inProgress = tasks.filter(
@@ -606,6 +605,7 @@ const pending = tasks.filter(
 return {
   total,
   completed,
+  submitted,
   overdue,
   urgent,
   inProgress,
@@ -643,12 +643,10 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
       )}
     </div>
 
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
         <div className="flex items-center justify-between">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-            <CheckSquare size={19} />
-          </div>
+          <CheckSquare size={19} />
 
           <span className="text-2xl font-black text-slate-900">
             {statistics.total}
@@ -663,34 +661,51 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
         <div className="flex items-center justify-between">
           <Clock3
-            className="text-blue-600"
+            className="text-slate-600"
             size={21}
           />
 
-          <span className="text-2xl font-black text-blue-700">
+          <span className="text-2xl font-black text-slate-700">
             {statistics.pending}
           </span>
         </div>
 
         <p className="mt-3 text-xs font-semibold text-slate-500">
-          تحتاج متابعة
+          جديدة
         </p>
       </div>
 
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
         <div className="flex items-center justify-between">
           <RefreshCw
-            className="text-indigo-600"
+            className="text-blue-600"
             size={21}
           />
 
-          <span className="text-2xl font-black text-indigo-700">
+          <span className="text-2xl font-black text-blue-700">
             {statistics.inProgress}
           </span>
         </div>
 
         <p className="mt-3 text-xs font-semibold text-slate-500">
           قيد التنفيذ
+        </p>
+      </div>
+
+      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <div className="flex items-center justify-between">
+          <Send
+            className="text-purple-600"
+            size={21}
+          />
+
+          <span className="text-2xl font-black text-purple-700">
+            {statistics.submitted}
+          </span>
+        </div>
+
+        <p className="mt-3 text-xs font-semibold text-slate-500">
+          تم التسليم
         </p>
       </div>
 
@@ -875,6 +890,8 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
         <div className="space-y-3">
           {filteredTasks.map((task) => {
             const overdue = isOverdue(task);
+            const isUpdating =
+              updatingId === task.id;
 
             return (
               <div
@@ -968,58 +985,61 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                   </div>
 
                   <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
-                    {task.status !==
-                      "in_progress" &&
-                      task.status !==
-                        "completed" && (
-                        <button
-                          type="button"
-                          disabled={
-                            updatingId ===
-                            task.id
-                          }
-                          onClick={() =>
-                            updateTaskStatus(
-                              task.id,
-                              "in_progress"
-                            )
-                          }
-                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
-                        >
-                          <RefreshCw size={15} />
-                          قيد التنفيذ
-                        </button>
-                      )}
-
-                    {task.status !==
-                      "completed" && (
+                    {task.status === "pending" && (
                       <button
                         type="button"
-                        disabled={
-                          updatingId ===
-                          task.id
-                        }
+                        disabled={isUpdating}
                         onClick={() =>
                           updateTaskStatus(
                             task.id,
-                            "completed"
+                            "in_progress"
                           )
                         }
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
                       >
-                        <CheckCircle2
-                          size={15}
-                        />
-                        إغلاق التكليف
+                        <RefreshCw size={15} />
+                        بدء التنفيذ
                       </button>
                     )}
 
-                    {task.status ===
-                      "completed" && (
+                    {task.status === "in_progress" && (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() =>
+                          updateTaskStatus(
+                            task.id,
+                            "submitted"
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 text-xs font-bold text-purple-700 transition hover:bg-purple-100 disabled:opacity-50"
+                      >
+                        <Send size={15} />
+                        تم التسليم
+                      </button>
+                    )}
+
+                    {task.status === "submitted" &&
+                      isDirector && (
+                        <button
+                          type="button"
+                          disabled={isUpdating}
+                          onClick={() =>
+                            updateTaskStatus(
+                              task.id,
+                              "completed"
+                            )
+                          }
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          <CheckCircle2 size={15} />
+                          اعتماد وإغلاق
+                        </button>
+                      )}
+
+                    {task.status === "completed" && (
                       <span className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-700">
-                        <CheckCircle2
-                          size={15}
-                        />
+                        <CheckCircle2 size={15} />
                         تم الإنجاز
                       </span>
                     )}
@@ -1197,9 +1217,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
 
                   <button
                     type="button"
-                    onClick={
-                      clearSelectedInstitutes
-                    }
+                    onClick={clearSelectedInstitutes}
                     className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"
                   >
                     إلغاء الكل
@@ -1258,7 +1276,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                   title: event.target.value,
                 }))
               }
-              placeholder="مثال: إرسال تقرير أعداد الطلاب"
+              placeholder="مثال: مراجعة جاهزية المعهد"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:bg-white"
             />
           </div>
