@@ -190,10 +190,9 @@ const [targetMode, setTargetMode] = useState<
 
 > ("single");
 
-const [selectedInstitutes, setSelectedInstitutes] = useState<
-string[]
-
-> ([]);
+const [selectedInstitutes, setSelectedInstitutes] = useState<string[]>(
+[]
+);
 
 const [form, setForm] = useState({
 institute_id: "",
@@ -206,7 +205,7 @@ due_date: "",
 async function loadData() {
 setLoading(true);
 
-
+```
 try {
   const {
     data: { user },
@@ -265,10 +264,7 @@ try {
   } = await institutesQuery;
 
   if (instituteError) {
-    console.error(
-      "Institutes error:",
-      instituteError
-    );
+    console.error("Institutes error:", instituteError);
   }
 
   const loadedInstitutes =
@@ -329,14 +325,11 @@ try {
 
   setTasks(mappedTasks);
 } catch (error) {
-  console.error(
-    "Unexpected load error:",
-    error
-  );
+  console.error("Unexpected load error:", error);
 } finally {
   setLoading(false);
 }
-
+```
 
 }
 
@@ -346,12 +339,10 @@ loadData();
 
 function getTargetInstituteIds() {
 if (targetMode === "all") {
-return institutes.map(
-(institute) => institute.id
-);
+return institutes.map((institute) => institute.id);
 }
 
-
+```
 if (targetMode === "selected") {
   return selectedInstitutes;
 }
@@ -361,30 +352,26 @@ if (form.institute_id) {
 }
 
 return [];
-
+```
 
 }
 
 function toggleInstitute(instituteId: string) {
 setSelectedInstitutes((current) => {
 if (current.includes(instituteId)) {
-return current.filter(
-(id) => id !== instituteId
-);
+return current.filter((id) => id !== instituteId);
 }
 
-
+```
   return [...current, instituteId];
 });
-
+```
 
 }
 
 function selectAllInstitutes() {
 setSelectedInstitutes(
-institutes.map(
-(institute) => institute.id
-)
+institutes.map((institute) => institute.id)
 );
 }
 
@@ -398,14 +385,13 @@ alert("لم يتم تحميل بيانات المستخدم");
 return;
 }
 
-
+```
 if (!form.title.trim()) {
   alert("اكتبي عنوان التكليف");
   return;
 }
 
-const targetInstituteIds =
-  getTargetInstituteIds();
+const targetInstituteIds = getTargetInstituteIds();
 
 if (targetInstituteIds.length === 0) {
   alert("اختاري المعهد أو المعاهد المستهدفة أولًا");
@@ -418,34 +404,30 @@ try {
   const createdTasks: string[] = [];
 
   for (const instituteId of targetInstituteIds) {
-    const { data: createdTask, error } =
-      await supabase
-        .from("institute_tasks")
-        .insert({
-          directorate_id:
-            profile.directorate_id,
-          institute_id: instituteId,
-          title: form.title.trim(),
-          description:
-            form.description.trim() || null,
-          priority: form.priority,
-          status: "pending",
-          due_date: form.due_date || null,
-          created_by: profile.id,
-        })
-        .select("id")
-        .single();
+    const {
+      data: createdTask,
+      error,
+    } = await supabase
+      .from("institute_tasks")
+      .insert({
+        directorate_id: profile.directorate_id,
+        institute_id: instituteId,
+        title: form.title.trim(),
+        description: form.description.trim() || null,
+        priority: form.priority,
+        status: "pending",
+        due_date: form.due_date || null,
+        created_by: profile.id,
+      })
+      .select("id")
+      .single();
 
     if (error || !createdTask) {
-      console.error(
-        "Create task error:",
-        error
-      );
+      console.error("Create task error:", error);
 
       alert(
         "تعذر إنشاء التكليف:\n" +
-          (error?.message ||
-            "حدث خطأ غير معروف")
+          (error?.message || "حدث خطأ غير معروف")
       );
 
       return;
@@ -453,14 +435,13 @@ try {
 
     createdTasks.push(createdTask.id);
 
-    const { error: targetError } =
-      await supabase
-        .from("institute_task_targets")
-        .insert({
-          task_id: createdTask.id,
-          institute_id: instituteId,
-          status: "pending",
-        });
+    const { error: targetError } = await supabase
+      .from("institute_task_targets")
+      .insert({
+        task_id: createdTask.id,
+        institute_id: instituteId,
+        status: "pending",
+      });
 
     if (targetError) {
       console.error(
@@ -501,7 +482,7 @@ try {
 } finally {
   setSaving(false);
 }
-
+```
 
 }
 
@@ -511,7 +492,7 @@ status: string
 ) {
 setUpdatingId(taskId);
 
-
+```
 try {
   const now = new Date().toISOString();
 
@@ -524,10 +505,7 @@ try {
     .eq("id", taskId);
 
   if (error) {
-    console.error(
-      "Update task error:",
-      error
-    );
+    console.error("Update task error:", error);
 
     alert(
       "تعذر تحديث حالة التكليف:\n" +
@@ -553,7 +531,7 @@ try {
 } finally {
   setUpdatingId(null);
 }
-
+```
 
 }
 
@@ -561,7 +539,7 @@ const filteredTasks = useMemo(() => {
 const normalizedSearch =
 searchTerm.trim().toLowerCase();
 
-
+```
 return tasks.filter((task) => {
   const matchesSearch =
     !normalizedSearch ||
@@ -594,7 +572,7 @@ return tasks.filter((task) => {
     matchesInstitute
   );
 });
-
+```
 
 }, [
 tasks,
@@ -607,10 +585,9 @@ instituteFilter,
 const statistics = useMemo(() => {
 const total = tasks.length;
 
-
+```
 const completed = tasks.filter(
-  (task) =>
-    isCompleted(task.status)
+  (task) => isCompleted(task.status)
 ).length;
 
 const overdue = tasks.filter(
@@ -624,13 +601,11 @@ const urgent = tasks.filter(
 ).length;
 
 const inProgress = tasks.filter(
-  (task) =>
-    task.status === "in_progress"
+  (task) => task.status === "in_progress"
 ).length;
 
 const pending = tasks.filter(
-  (task) =>
-    task.status === "pending"
+  (task) => task.status === "pending"
 ).length;
 
 return {
@@ -641,7 +616,7 @@ return {
   inProgress,
   pending,
 };
-
+```
 
 }, [tasks]);
 
@@ -655,7 +630,7 @@ getTargetInstituteIds().length;
 return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8"> <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"> <div> <h1 className="text-2xl font-black text-slate-900">
 مركز المتابعة والتكليفات </h1>
 
-
+```
         <p className="mt-2 text-sm text-slate-500">
           إرسال التكليفات للمعاهد ومتابعة التنفيذ والتدخل عند الحاجة.
         </p>
@@ -792,9 +767,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
           <input
             value={searchTerm}
             onChange={(event) =>
-              setSearchTerm(
-                event.target.value
-              )
+              setSearchTerm(event.target.value)
             }
             placeholder="ابحث عن تكليف أو معهد..."
             className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-10 pl-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white"
@@ -804,9 +777,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
         <select
           value={instituteFilter}
           onChange={(event) =>
-            setInstituteFilter(
-              event.target.value
-            )
+            setInstituteFilter(event.target.value)
           }
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
         >
@@ -814,24 +785,20 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
             كل المعاهد
           </option>
 
-          {institutes.map(
-            (institute) => (
-              <option
-                key={institute.id}
-                value={institute.id}
-              >
-                {institute.name}
-              </option>
-            )
-          )}
+          {institutes.map((institute) => (
+            <option
+              key={institute.id}
+              value={institute.id}
+            >
+              {institute.name}
+            </option>
+          ))}
         </select>
 
         <select
           value={statusFilter}
           onChange={(event) =>
-            setStatusFilter(
-              event.target.value
-            )
+            setStatusFilter(event.target.value)
           }
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
         >
@@ -839,24 +806,20 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
             كل الحالات
           </option>
 
-          {statusOptions.map(
-            (status) => (
-              <option
-                key={status.value}
-                value={status.value}
-              >
-                {status.label}
-              </option>
-            )
-          )}
+          {statusOptions.map((status) => (
+            <option
+              key={status.value}
+              value={status.value}
+            >
+              {status.label}
+            </option>
+          ))}
         </select>
 
         <select
           value={priorityFilter}
           onChange={(event) =>
-            setPriorityFilter(
-              event.target.value
-            )
+            setPriorityFilter(event.target.value)
           }
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400"
         >
@@ -864,16 +827,14 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
             كل الأولويات
           </option>
 
-          {priorityOptions.map(
-            (priority) => (
-              <option
-                key={priority.value}
-                value={priority.value}
-              >
-                {priority.label}
-              </option>
-            )
-          )}
+          {priorityOptions.map((priority) => (
+            <option
+              key={priority.value}
+              value={priority.value}
+            >
+              {priority.label}
+            </option>
+          ))}
         </select>
       </div>
     </div>
@@ -917,131 +878,106 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredTasks.map(
-            (task) => {
-              const overdue =
-                isOverdue(task);
+          {filteredTasks.map((task) => {
+            const overdue = isOverdue(task);
 
-              return (
-                <div
-                  key={task.id}
-                  className={
-                    "rounded-2xl bg-white p-4 shadow-sm ring-1 " +
-                    (overdue
-                      ? "ring-red-200"
-                      : "ring-slate-200")
-                  }
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-black text-slate-900">
-                          {task.title}
-                        </h3>
+            return (
+              <div
+                key={task.id}
+                className={
+                  "rounded-2xl bg-white p-4 shadow-sm ring-1 " +
+                  (overdue
+                    ? "ring-red-200"
+                    : "ring-slate-200")
+                }
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-black text-slate-900">
+                        {task.title}
+                      </h3>
 
-                        <span
-                          className={
-                            "rounded-full px-2.5 py-1 text-[11px] font-bold " +
-                            getPriorityClasses(
-                              task.priority
-                            )
-                          }
-                        >
-                          {getPriorityLabel(
+                      <span
+                        className={
+                          "rounded-full px-2.5 py-1 text-[11px] font-bold " +
+                          getPriorityClasses(
                             task.priority
-                          )}
-                        </span>
+                          )
+                        }
+                      >
+                        {getPriorityLabel(
+                          task.priority
+                        )}
+                      </span>
 
-                        <span
-                          className={
-                            "rounded-full px-2.5 py-1 text-[11px] font-bold " +
-                            getStatusClasses(
-                              task.status
-                            )
-                          }
-                        >
-                          {getStatusLabel(
+                      <span
+                        className={
+                          "rounded-full px-2.5 py-1 text-[11px] font-bold " +
+                          getStatusClasses(
                             task.status
-                          )}
-                        </span>
-
-                        {overdue && (
-                          <span className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-700">
-                            متأخر
-                          </span>
+                          )
+                        }
+                      >
+                        {getStatusLabel(
+                          task.status
                         )}
-                      </div>
+                      </span>
 
-                      <div className="mt-2 text-sm font-bold text-slate-600">
-                        {task.instituteName}
-                      </div>
-
-                      {task.description && (
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-500">
-                          {task.description}
-                        </p>
-                      )}
-
-                      <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-slate-500">
-                        {task.due_date && (
-                          <span>
-                            الاستحقاق:{" "}
-                            {formatDate(
-                              task.due_date
-                            )}
-                          </span>
-                        )}
-
-                        <span>
-                          أُنشئ:{" "}
-                          {new Date(
-                            task.created_at
-                          ).toLocaleDateString(
-                            "ar-EG"
-                          )}
+                      {overdue && (
+                        <span className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-700">
+                          متأخر
                         </span>
-                      </div>
-
-                      {task.response && (
-                        <div className="mt-4 rounded-xl bg-slate-50 p-3">
-                          <div className="mb-1 text-xs font-black text-slate-700">
-                            إفادة المعهد
-                          </div>
-
-                          <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                            {task.response}
-                          </p>
-                        </div>
                       )}
                     </div>
 
-                    <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
-                      {task.status !==
-                        "in_progress" &&
-                        task.status !==
-                          "completed" && (
-                          <button
-                            type="button"
-                            disabled={
-                              updatingId ===
-                              task.id
-                            }
-                            onClick={() =>
-                              updateTaskStatus(
-                                task.id,
-                                "in_progress"
-                              )
-                            }
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
-                          >
-                            <RefreshCw
-                              size={15}
-                            />
-                            قيد التنفيذ
-                          </button>
-                        )}
+                    <div className="mt-2 text-sm font-bold text-slate-600">
+                      {task.instituteName}
+                    </div>
 
-                      {task.status !==
+                    {task.description && (
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-500">
+                        {task.description}
+                      </p>
+                    )}
+
+                    <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-slate-500">
+                      {task.due_date && (
+                        <span>
+                          الاستحقاق:{" "}
+                          {formatDate(
+                            task.due_date
+                          )}
+                        </span>
+                      )}
+
+                      <span>
+                        أُنشئ:{" "}
+                        {new Date(
+                          task.created_at
+                        ).toLocaleDateString(
+                          "ar-EG"
+                        )}
+                      </span>
+                    </div>
+
+                    {task.response && (
+                      <div className="mt-4 rounded-xl bg-slate-50 p-3">
+                        <div className="mb-1 text-xs font-black text-slate-700">
+                          إفادة المعهد
+                        </div>
+
+                        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                          {task.response}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
+                    {task.status !==
+                      "in_progress" &&
+                      task.status !==
                         "completed" && (
                         <button
                           type="button"
@@ -1052,33 +988,53 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                           onClick={() =>
                             updateTaskStatus(
                               task.id,
-                              "completed"
+                              "in_progress"
                             )
                           }
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
                         >
-                          <CheckCircle2
-                            size={15}
-                          />
-                          إغلاق التكليف
+                          <RefreshCw size={15} />
+                          قيد التنفيذ
                         </button>
                       )}
 
-                      {task.status ===
-                        "completed" && (
-                        <span className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-700">
-                          <CheckCircle2
-                            size={15}
-                          />
-                          تم الإنجاز
-                        </span>
-                      )}
-                    </div>
+                    {task.status !==
+                      "completed" && (
+                      <button
+                        type="button"
+                        disabled={
+                          updatingId ===
+                          task.id
+                        }
+                        onClick={() =>
+                          updateTaskStatus(
+                            task.id,
+                            "completed"
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        <CheckCircle2
+                          size={15}
+                        />
+                        إغلاق التكليف
+                      </button>
+                    )}
+
+                    {task.status ===
+                      "completed" && (
+                      <span className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-700">
+                        <CheckCircle2
+                          size={15}
+                        />
+                        تم الإنجاز
+                      </span>
+                    )}
                   </div>
                 </div>
-              );
-            }
-          )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1120,6 +1076,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                 type="button"
                 onClick={() => {
                   setTargetMode("all");
+
                   setForm((current) => ({
                     ...current,
                     institute_id: "",
@@ -1139,6 +1096,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                 type="button"
                 onClick={() => {
                   setTargetMode("selected");
+
                   setForm((current) => ({
                     ...current,
                     institute_id: "",
@@ -1181,13 +1139,11 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
               <select
                 value={form.institute_id}
                 onChange={(event) =>
-                  setForm(
-                    (current) => ({
-                      ...current,
-                      institute_id:
-                        event.target.value,
-                    })
-                  )
+                  setForm((current) => ({
+                    ...current,
+                    institute_id:
+                      event.target.value,
+                  }))
                 }
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:bg-white"
               >
@@ -1195,16 +1151,14 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                   اختاري المعهد
                 </option>
 
-                {institutes.map(
-                  (institute) => (
-                    <option
-                      key={institute.id}
-                      value={institute.id}
-                    >
-                      {institute.name}
-                    </option>
-                  )
-                )}
+                {institutes.map((institute) => (
+                  <option
+                    key={institute.id}
+                    value={institute.id}
+                  >
+                    {institute.name}
+                  </option>
+                ))}
               </select>
             </div>
           )}
@@ -1240,9 +1194,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={
-                      selectAllInstitutes
-                    }
+                    onClick={selectAllInstitutes}
                     className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
                   >
                     تحديد الكل
@@ -1261,41 +1213,39 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
               </div>
 
               <div className="max-h-56 space-y-2 overflow-y-auto">
-                {institutes.map(
-                  (institute) => {
-                    const checked =
-                      selectedInstitutes.includes(
-                        institute.id
-                      );
-
-                    return (
-                      <label
-                        key={institute.id}
-                        className={
-                          "flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition " +
-                          (checked
-                            ? "border-slate-900 bg-white"
-                            : "border-slate-200 bg-white hover:bg-slate-50")
-                        }
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() =>
-                            toggleInstitute(
-                              institute.id
-                            )
-                          }
-                          className="h-4 w-4 rounded border-slate-300"
-                        />
-
-                        <span className="text-sm font-semibold text-slate-700">
-                          {institute.name}
-                        </span>
-                      </label>
+                {institutes.map((institute) => {
+                  const checked =
+                    selectedInstitutes.includes(
+                      institute.id
                     );
-                  }
-                )}
+
+                  return (
+                    <label
+                      key={institute.id}
+                      className={
+                        "flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition " +
+                        (checked
+                          ? "border-slate-900 bg-white"
+                          : "border-slate-200 bg-white hover:bg-slate-50")
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          toggleInstitute(
+                            institute.id
+                          )
+                        }
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+
+                      <span className="text-sm font-semibold text-slate-700">
+                        {institute.name}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1308,13 +1258,10 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
             <input
               value={form.title}
               onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    title:
-                      event.target.value,
-                  })
-                )
+                setForm((current) => ({
+                  ...current,
+                  title: event.target.value,
+                }))
               }
               placeholder="مثال: إرسال تقرير أعداد الطلاب"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:bg-white"
@@ -1329,13 +1276,11 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
             <textarea
               value={form.description}
               onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    description:
-                      event.target.value,
-                  })
-                )
+                setForm((current) => ({
+                  ...current,
+                  description:
+                    event.target.value,
+                }))
               }
               rows={5}
               placeholder="اكتبي المطلوب من المعهد بالتفصيل..."
@@ -1352,25 +1297,19 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
               <select
                 value={form.priority}
                 onChange={(event) =>
-                  setForm(
-                    (current) => ({
-                      ...current,
-                      priority:
-                        event.target.value,
-                    })
-                  )
+                  setForm((current) => ({
+                    ...current,
+                    priority:
+                      event.target.value,
+                  }))
                 }
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:bg-white"
               >
                 {priorityOptions.map(
                   (priority) => (
                     <option
-                      key={
-                        priority.value
-                      }
-                      value={
-                        priority.value
-                      }
+                      key={priority.value}
+                      value={priority.value}
                     >
                       {priority.label}
                     </option>
@@ -1388,13 +1327,11 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
                 type="date"
                 value={form.due_date}
                 onChange={(event) =>
-                  setForm(
-                    (current) => ({
-                      ...current,
-                      due_date:
-                        event.target.value,
-                    })
-                  )
+                  setForm((current) => ({
+                    ...current,
+                    due_date:
+                      event.target.value,
+                  }))
                 }
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:bg-white"
               />
@@ -1437,7 +1374,7 @@ return ( <AppShell> <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 l
     </div>
   )}
 </AppShell>
-```
+
 
 );
 }
