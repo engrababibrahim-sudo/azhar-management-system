@@ -5,7 +5,6 @@ import {
   AlertCircle,
   CheckCircle2,
   CheckSquare,
-  ClipboardList,
   Clock3,
   Filter,
   Plus,
@@ -87,23 +86,19 @@ const statusOptions = [
 ];
 
 function getPriorityLabel(priority: string | null) {
-  return (
-    priorityOptions.find(
-      (item) => item.value === priority
-    )?.label ||
-    priority ||
-    "غير محددة"
+  const item = priorityOptions.find(
+    (option) => option.value === priority
   );
+
+  return item ? item.label : priority || "غير محددة";
 }
 
 function getStatusLabel(status: string | null) {
-  return (
-    statusOptions.find(
-      (item) => item.value === status
-    )?.label ||
-    status ||
-    "غير محددة"
+  const item = statusOptions.find(
+    (option) => option.value === status
   );
+
+  return item ? item.label : status || "غير محددة";
 }
 
 function isCompleted(status: string | null) {
@@ -116,41 +111,42 @@ function isOverdue(task: Task) {
   }
 
   const today = new Date();
+
   today.setHours(0, 0, 0, 0);
 
   const due = new Date(task.due_date);
+
   due.setHours(0, 0, 0, 0);
 
   return due < today;
 }
 
 function getPriorityClasses(priority: string | null) {
-  switch (priority) {
-    case "urgent":
-      return "bg-red-100 text-red-700";
-
-    case "high":
-      return "bg-orange-100 text-orange-700";
-
-    case "medium":
-      return "bg-amber-100 text-amber-700";
-
-    default:
-      return "bg-slate-100 text-slate-600";
+  if (priority === "urgent") {
+    return "bg-red-100 text-red-700";
   }
+
+  if (priority === "high") {
+    return "bg-orange-100 text-orange-700";
+  }
+
+  if (priority === "medium") {
+    return "bg-amber-100 text-amber-700";
+  }
+
+  return "bg-slate-100 text-slate-600";
 }
 
 function getStatusClasses(status: string | null) {
-  switch (status) {
-    case "completed":
-      return "bg-emerald-100 text-emerald-700";
-
-    case "in_progress":
-      return "bg-blue-100 text-blue-700";
-
-    default:
-      return "bg-slate-100 text-slate-700";
+  if (status === "completed") {
+    return "bg-emerald-100 text-emerald-700";
   }
+
+  if (status === "in_progress") {
+    return "bg-blue-100 text-blue-700";
+  }
+
+  return "bg-slate-100 text-slate-700";
 }
 
 function formatDate(value: string | null) {
@@ -158,7 +154,7 @@ function formatDate(value: string | null) {
     return "غير محدد";
   }
 
-  const date = new Date(`${value}T00:00:00`);
+  const date = new Date(value + "T00:00:00");
 
   if (Number.isNaN(date.getTime())) {
     return value;
@@ -168,35 +164,27 @@ function formatDate(value: string | null) {
 }
 
 export default function InstituteTasksPage() {
-  const [profile, setProfile] = useState<Profile | null>(
-    null
-  );
+  const [profile, setProfile] = useState<Profile | null>(null);
 
-  const [institutes, setInstitutes] = useState<Institute[]>(
-    []
-  );
+  const [institutes, setInstitutes] = useState<Institute[]>([]);
 
-  const [tasks, setTasks] = useState<TaskWithInstitute[]>(
-    []
-  );
+  const [tasks, setTasks] = useState<TaskWithInstitute[]>([]);
 
   const [loading, setLoading] = useState(true);
+
   const [saving, setSaving] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(
-    null
-  );
+
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] =
-    useState("all");
 
-  const [priorityFilter, setPriorityFilter] =
-    useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const [instituteFilter, setInstituteFilter] =
-    useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+
+  const [instituteFilter, setInstituteFilter] = useState("all");
 
   const [form, setForm] = useState({
     institute_id: "",
@@ -222,25 +210,23 @@ export default function InstituteTasksPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select(
-            "id, role, full_name, institute_id, directorate_id"
-          )
-          .eq("id", user.id)
-          .single();
+      const {
+        data: profileData,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select(
+          "id, role, full_name, institute_id, directorate_id"
+        )
+        .eq("id", user.id)
+        .single();
 
       if (profileError || !profileData) {
-        console.error(
-          "Profile error:",
-          profileError
-        );
-
+        console.error("Profile error:", profileError);
         return;
       }
 
-      setProfile(profileData);
+      setProfile(profileData as Profile);
 
       let institutesQuery = supabase
         .from("institutes")
@@ -248,7 +234,8 @@ export default function InstituteTasksPage() {
         .order("name");
 
       if (
-        profileData.role === "director" &&
+        (profileData.role === "director" ||
+          profileData.role === "super_admin") &&
         profileData.directorate_id
       ) {
         institutesQuery = institutesQuery.eq(
@@ -289,7 +276,8 @@ export default function InstituteTasksPage() {
         });
 
       if (
-        profileData.role === "director" &&
+        (profileData.role === "director" ||
+          profileData.role === "super_admin") &&
         profileData.directorate_id
       ) {
         tasksQuery = tasksQuery.eq(
@@ -309,30 +297,25 @@ export default function InstituteTasksPage() {
       } = await tasksQuery;
 
       if (taskError) {
-        console.error(
-          "Tasks error:",
-          taskError
-        );
-
+        console.error("Tasks error:", taskError);
         setTasks([]);
         return;
       }
 
       const instituteMap = new Map(
-        loadedInstitutes.map((item) => [
-          item.id,
-          item.name,
+        loadedInstitutes.map((institute) => [
+          institute.id,
+          institute.name,
         ])
       );
 
-      const mappedTasks: TaskWithInstitute[] = (
-        (taskData || []) as Task[]
-      ).map((task) => ({
-        ...task,
-        instituteName:
-          instituteMap.get(task.institute_id) ||
-          "معهد غير معروف",
-      }));
+      const mappedTasks: TaskWithInstitute[] =
+        ((taskData || []) as Task[]).map((task) => ({
+          ...task,
+          instituteName:
+            instituteMap.get(task.institute_id) ||
+            "معهد غير معروف",
+        }));
 
       setTasks(mappedTasks);
     } catch (error) {
@@ -371,8 +354,7 @@ export default function InstituteTasksPage() {
       const { error } = await supabase
         .from("institute_tasks")
         .insert({
-          directorate_id:
-            profile.directorate_id,
+          directorate_id: profile.directorate_id,
           institute_id: form.institute_id,
           title: form.title.trim(),
           description:
@@ -390,7 +372,8 @@ export default function InstituteTasksPage() {
         );
 
         alert(
-          `تعذر إنشاء التكليف:\n${error.message}`
+          "تعذر إنشاء التكليف:\n" +
+            error.message
         );
 
         return;
@@ -408,7 +391,7 @@ export default function InstituteTasksPage() {
 
       await loadData();
 
-      alert("تم إنشاء التكليف بنجاح ✅");
+      alert("تم إنشاء التكليف بنجاح");
     } finally {
       setSaving(false);
     }
@@ -421,12 +404,13 @@ export default function InstituteTasksPage() {
     setUpdatingId(taskId);
 
     try {
+      const now = new Date().toISOString();
+
       const { error } = await supabase
         .from("institute_tasks")
         .update({
-          status,
-          updated_at:
-            new Date().toISOString(),
+          status: status,
+          updated_at: now,
         })
         .eq("id", taskId);
 
@@ -437,23 +421,25 @@ export default function InstituteTasksPage() {
         );
 
         alert(
-          `تعذر تحديث حالة التكليف:\n${error.message}`
+          "تعذر تحديث حالة التكليف:\n" +
+            error.message
         );
 
         return;
       }
 
       setTasks((current) =>
-        current.map((task) =>
-          task.id === taskId
-            ? {
-                ...task,
-                status,
-                updated_at:
-                  new Date().toISOString(),
-              }
-            : task
-        )
+        current.map((task) => {
+          if (task.id !== taskId) {
+            return task;
+          }
+
+          return {
+            ...task,
+            status: status,
+            updated_at: now,
+          };
+        })
       );
     } finally {
       setUpdatingId(null);
@@ -549,7 +535,6 @@ export default function InstituteTasksPage() {
   return (
     <AppShell>
       <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-black text-slate-900">
@@ -573,7 +558,6 @@ export default function InstituteTasksPage() {
           )}
         </div>
 
-        {/* Statistics */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
             <div className="flex items-center justify-between">
@@ -677,7 +661,6 @@ export default function InstituteTasksPage() {
           </div>
         </div>
 
-        {/* Filters */}
         <div className="mt-6 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
           <div className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-800">
             <Filter size={18} />
@@ -780,7 +763,6 @@ export default function InstituteTasksPage() {
           </div>
         </div>
 
-        {/* Tasks */}
         <div className="mt-6">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-black text-slate-900">
@@ -828,11 +810,12 @@ export default function InstituteTasksPage() {
                   return (
                     <div
                       key={task.id}
-                      className={`rounded-2xl bg-white p-4 shadow-sm ring-1 ${
-                        overdue
+                      className={
+                        "rounded-2xl bg-white p-4 shadow-sm ring-1 " +
+                        (overdue
                           ? "ring-red-200"
-                          : "ring-slate-200"
-                      }`}
+                          : "ring-slate-200")
+                      }
                     >
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0 flex-1">
@@ -842,9 +825,12 @@ export default function InstituteTasksPage() {
                             </h3>
 
                             <span
-                              className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${getPriorityClasses(
-                                task.priority
-                              )}`}
+                              className={
+                                "rounded-full px-2.5 py-1 text-[11px] font-bold " +
+                                getPriorityClasses(
+                                  task.priority
+                                )
+                              }
                             >
                               {getPriorityLabel(
                                 task.priority
@@ -852,9 +838,12 @@ export default function InstituteTasksPage() {
                             </span>
 
                             <span
-                              className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${getStatusClasses(
-                                task.status
-                              )}`}
+                              className={
+                                "rounded-full px-2.5 py-1 text-[11px] font-bold " +
+                                getStatusClasses(
+                                  task.status
+                                )
+                              }
                             >
                               {getStatusLabel(
                                 task.status
@@ -980,7 +969,6 @@ export default function InstituteTasksPage() {
         </div>
       </div>
 
-      {/* Create Task Modal */}
       {showForm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
