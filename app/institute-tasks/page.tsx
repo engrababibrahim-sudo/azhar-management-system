@@ -497,11 +497,21 @@ export default function InstituteTasksPage() {
           )
           .order("created_at", { ascending: false });
 
-        if (currentProfile.directorate_id) {
+        // Director visibility is based on the institutes that belong to the
+        // director's directorate. This also keeps older tasks visible when
+        // their directorate_id is missing or was created before the current
+        // directorate linkage was enforced.
+        if (taskIds.length) {
+          taskQuery = taskQuery.in("id", taskIds);
+        } else if (currentProfile.directorate_id) {
           taskQuery = taskQuery.eq(
             "directorate_id",
             currentProfile.directorate_id
           );
+        } else {
+          taskData = [];
+          setTasks([]);
+          return;
         }
 
         const { data, error } = await taskQuery;
@@ -1090,39 +1100,13 @@ export default function InstituteTasksPage() {
 
   async function openReportFile(attachment: TaskAttachment) {
     setOpeningAttachmentId(attachment.id);
-
     try {
-      if (!attachment.storage_path?.trim()) {
-        throw new Error("مسار التقرير غير موجود.");
-      }
-
       const { data, error } = await supabase.storage
         .from("task-reports")
-        .download(attachment.storage_path);
-
-      if (error) {
-        console.error("download report error:", {
-          message: error.message,
-          name: error.name,
-          attachmentId: attachment.id,
-          storagePath: attachment.storage_path,
-        });
-        throw error;
-      }
-
-      if (!data) {
-        throw new Error("لم يتم العثور على ملف التقرير.");
-      }
-
-      const blobUrl = URL.createObjectURL(data);
-      const opened = window.open(blobUrl, "_blank", "noopener,noreferrer");
-
-      if (!opened) {
-        URL.revokeObjectURL(blobUrl);
-        throw new Error("المتصفح منع فتح التقرير في نافذة جديدة. اسمحي بالنوافذ المنبثقة للموقع ثم حاولي مرة أخرى.");
-      }
-
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+        .createSignedUrl(attachment.storage_path, 300);
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error("تعذر إنشاء رابط التقرير.");
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
     } catch (error: any) {
       console.error("openReportFile:", error);
       alert(error?.message ?? "تعذر فتح التقرير.");
