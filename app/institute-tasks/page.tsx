@@ -40,6 +40,37 @@ type Profile = {
   directorate_id?: string | null;
 };
 
+type TaskSubmission = {
+  id: string;
+  task_id: string;
+  target_id: string;
+  institute_id: string;
+  submitted_by: string;
+  submission_no: number;
+  notes?: string | null;
+  status: "submitted" | "returned" | "approved";
+  director_note?: string | null;
+  submitted_at: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type TaskAttachment = {
+  id: string;
+  submission_id: string;
+  file_name: string;
+  storage_path: string;
+  mime_type?: string | null;
+  file_size?: number | null;
+  created_at?: string | null;
+};
+
+type TaskSubmissionView = TaskSubmission & {
+  attachments: TaskAttachment[];
+};
+
 type TaskTarget = {
   id: string;
   task_id: string;
@@ -50,6 +81,7 @@ type TaskTarget = {
   created_at?: string | null;
   updated_at?: string | null;
   institute_name?: string;
+  latest_submission?: TaskSubmissionView | null;
 };
 
 type Task = {
@@ -211,6 +243,17 @@ export default function InstituteTasksPage() {
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [deletingAll, setDeletingAll] = useState(false);
 
+  const [submissionTarget, setSubmissionTarget] = useState<TaskTarget | null>(null);
+  const [submissionTask, setSubmissionTask] = useState<TaskView | null>(null);
+  const [submissionNotes, setSubmissionNotes] = useState("");
+  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+  const [submissionSaving, setSubmissionSaving] = useState(false);
+  const [reviewSubmission, setReviewSubmission] = useState<TaskSubmissionView | null>(null);
+  const [reviewTask, setReviewTask] = useState<TaskView | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
+
   const [hiddenTaskIds, setHiddenTaskIds] = useState<string[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -220,11 +263,6 @@ export default function InstituteTasksPage() {
 
   const [targetMode, setTargetMode] = useState<"all" | "selected" | "single">("single");
   const [selectedInstitutes, setSelectedInstitutes] = useState<string[]>([]);
-
-  const [deliveryTask, setDeliveryTask] = useState<TaskView | null>(null);
-  const [deliveryTarget, setDeliveryTarget] = useState<TaskTarget | null>(null);
-  const [deliveryResponse, setDeliveryResponse] = useState("");
-  const [submittingDelivery, setSubmittingDelivery] = useState(false);
 
   const [form, setForm] = useState({
     institute_id: "",
@@ -506,11 +544,62 @@ export default function InstituteTasksPage() {
 
       const allTargets = [...rawTargets, ...extraTargets];
 
+      const targetIds = allTargets
+        .filter((target) => !target.id.startsWith("legacy-"))
+        .map((target) => target.id);
+
+      let submissionData: TaskSubmission[] = [];
+      let attachmentData: TaskAttachment[] = [];
+
+      if (targetIds.length) {
+        const { data: submissions, error: submissionsError } = await supabase
+          .from("institute_task_submissions")
+          .select(
+            "id, task_id, target_id, institute_id, submitted_by, submission_no, notes, status, director_note, submitted_at, reviewed_at, reviewed_by, created_at, updated_at"
+          )
+          .in("target_id", targetIds)
+          .order("submission_no", { ascending: false });
+
+        if (submissionsError) throw submissionsError;
+        submissionData = (submissions ?? []) as TaskSubmission[];
+
+        const submissionIds = submissionData.map((item) => item.id);
+        if (submissionIds.length) {
+          const { data: attachments, error: attachmentsError } = await supabase
+            .from("institute_task_submission_attachments")
+            .select(
+              "id, submission_id, file_name, storage_path, mime_type, file_size, created_at"
+            )
+            .in("submission_id", submissionIds)
+            .order("created_at", { ascending: true });
+
+          if (attachmentsError) throw attachmentsError;
+          attachmentData = (attachments ?? []) as TaskAttachment[];
+        }
+      }
+
+      const latestByTarget = new Map<string, TaskSubmissionView>();
+      for (const submission of submissionData) {
+        if (!latestByTarget.has(submission.target_id)) {
+          latestByTarget.set(submission.target_id, {
+            ...submission,
+            attachments: attachmentData.filter(
+              (attachment) => attachment.submission_id === submission.id
+            ),
+          });
+        }
+      }
+
+      const targetsWithSubmissions = allTargets.map((target) => ({
+        ...target,
+        latest_submission: latestByTarget.get(target.id) ?? null,
+      }));
+
       const instituteMap = new Map(
         instituteList.map((institute) => [institute.id, institute.name])
       );
 
-      const targetsWithNames = allTargets.map((target) => ({
+      const targetsWithNames = targetsWithSubmissions.map((target) => ({
         ...target,
         institute_name:
           instituteMap.get(target.institute_id) ?? "معهد غير معروف",
@@ -764,30 +853,24 @@ export default function InstituteTasksPage() {
   async function updateTargetStatus(
     task: TaskView,
     target: TaskTarget,
-    status: TaskTarget["status"],
-    response?: string | null
-  ): Promise<boolean> {
+    status: TaskTarget["status"]
+  ) {
     if (target.id.startsWith("legacy-")) {
       alert("هذا تكليف قديم لا يحتوي على سجل متابعة للمعهد.");
-      return false;
+      return;
     }
 
-    if (!isDirector && !isInstituteUser) return false;
+    if (!isDirector && !isInstituteUser) return;
 
     if (
       isInstituteUser &&
       profile?.institute_id !== target.institute_id
     ) {
-      return false;
+      return;
     }
 
     if (isDirector && status !== "completed") {
-      return false;
-    }
-
-    if (status === "submitted" && !response?.trim()) {
-      alert("اكتب تقرير التنفيذ قبل إرسال التكليف للمدير.");
-      return false;
+      return;
     }
 
     setUpdatingTargetId(target.id);
@@ -800,7 +883,6 @@ export default function InstituteTasksPage() {
 
       if (status === "submitted") {
         updatePayload.responded_at = new Date().toISOString();
-        updatePayload.response = response?.trim() ?? null;
       }
 
       if (status === "completed") {
@@ -820,10 +902,6 @@ export default function InstituteTasksPage() {
           ? {
               ...item,
               status,
-              response:
-                updatePayload.response !== undefined
-                  ? updatePayload.response
-                  : item.response,
               responded_at:
                 updatePayload.responded_at ?? item.responded_at,
               updated_at: updatePayload.updated_at,
@@ -854,62 +932,263 @@ export default function InstituteTasksPage() {
             : item
         )
       );
-
-      return true;
     } catch (error: any) {
       console.error("updateTargetStatus error:", error);
       alert(error?.message ?? "حدث خطأ أثناء تحديث حالة التكليف");
-      return false;
     } finally {
       setUpdatingTargetId(null);
     }
   }
 
-  function openDeliveryForm(task: TaskView, target: TaskTarget) {
+  function openSubmissionForm(task: TaskView, target: TaskTarget) {
     if (!isInstituteUser || profile?.institute_id !== target.institute_id) return;
-
-    setDeliveryTask(task);
-    setDeliveryTarget(target);
-    setDeliveryResponse(target.response ?? "");
+    setSubmissionTask(task);
+    setSubmissionTarget(target);
+    setSubmissionNotes("");
+    setSubmissionFile(null);
   }
 
-  function closeDeliveryForm() {
-    if (submittingDelivery) return;
-
-    setDeliveryTask(null);
-    setDeliveryTarget(null);
-    setDeliveryResponse("");
+  function closeSubmissionForm() {
+    if (submissionSaving) return;
+    setSubmissionTask(null);
+    setSubmissionTarget(null);
+    setSubmissionNotes("");
+    setSubmissionFile(null);
   }
 
-  async function submitDelivery() {
-    if (!deliveryTask || !deliveryTarget) return;
+  function formatReportFileSize(size?: number | null) {
+    if (!size) return "";
+    if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
-    const response = deliveryResponse.trim();
+  function safeReportFileName(fileName: string) {
+    return fileName
+      .replace(/[^\w\u0600-\u06FF.\- ]+/g, "_")
+      .replace(/\s+/g, "_")
+      .slice(0, 180);
+  }
 
-    if (!response) {
-      alert("اكتب تقرير التنفيذ قبل إرسال التكليف للمدير.");
+  async function submitInstituteReport() {
+    if (!profile || !submissionTask || !submissionTarget || !submissionFile) {
+      alert("اختر ملف التقرير أولاً.");
       return;
     }
 
-    setSubmittingDelivery(true);
+    const allowedTypes = new Set([
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "image/jpeg",
+      "image/png",
+    ]);
 
-    const success = await updateTargetStatus(
-      deliveryTask,
-      deliveryTarget,
-      "submitted",
-      response
-    );
+    if (!allowedTypes.has(submissionFile.type) && !submissionFile.type.startsWith("image/")) {
+      alert("نوع الملف غير مسموح. استخدم PDF أو Word أو Excel أو صورة.");
+      return;
+    }
 
-    setSubmittingDelivery(false);
+    if (submissionFile.size > 10 * 1024 * 1024) {
+      alert("حجم التقرير يتجاوز الحد المسموح وهو 10 MB.");
+      return;
+    }
 
-    if (success) {
-      closeDeliveryForm();
-      alert("تم إرسال تقرير التنفيذ للمدير بنجاح. أصبح التكليف بانتظار المراجعة.");
+    setSubmissionSaving(true);
+    try {
+      const nextNo = (submissionTarget.latest_submission?.submission_no ?? 0) + 1;
+      const { data: submission, error: submissionError } = await supabase
+        .from("institute_task_submissions")
+        .insert({
+          task_id: submissionTask.id,
+          target_id: submissionTarget.id,
+          institute_id: submissionTarget.institute_id,
+          submitted_by: profile.id,
+          submission_no: nextNo,
+          notes: submissionNotes.trim() || null,
+          status: "submitted",
+        })
+        .select(
+          "id, task_id, target_id, institute_id, submitted_by, submission_no, notes, status, director_note, submitted_at, reviewed_at, reviewed_by, created_at, updated_at"
+        )
+        .single();
+
+      if (submissionError) throw submissionError;
+      if (!submission) throw new Error("تعذر إنشاء سجل التقرير.");
+
+      const storagePath = `${submissionTarget.institute_id}/${submissionTask.id}/${submission.id}/${safeReportFileName(submissionFile.name)}`;
+      const { error: uploadError } = await supabase.storage
+        .from("task-reports")
+        .upload(storagePath, submissionFile, {
+          contentType: submissionFile.type || "application/octet-stream",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        await supabase.from("institute_task_submissions").delete().eq("id", submission.id);
+        throw uploadError;
+      }
+
+      const { data: attachment, error: attachmentError } = await supabase
+        .from("institute_task_submission_attachments")
+        .insert({
+          submission_id: submission.id,
+          file_name: submissionFile.name,
+          storage_path: storagePath,
+          mime_type: submissionFile.type || null,
+          file_size: submissionFile.size,
+        })
+        .select("id, submission_id, file_name, storage_path, mime_type, file_size, created_at")
+        .single();
+
+      if (attachmentError) {
+        await supabase.storage.from("task-reports").remove([storagePath]);
+        await supabase.from("institute_task_submissions").delete().eq("id", submission.id);
+        throw attachmentError;
+      }
+
+      const now = new Date().toISOString();
+      const latestSubmission: TaskSubmissionView = {
+        ...(submission as TaskSubmission),
+        attachments: [attachment as TaskAttachment],
+      };
+      const updatedTargets = submissionTask.targets.map((target) =>
+        target.id === submissionTarget.id
+          ? { ...target, status: "submitted" as const, responded_at: now, updated_at: now, latest_submission: latestSubmission }
+          : target
+      );
+      const overallStatus = getOverallTaskStatus(updatedTargets);
+
+      const { error: targetError } = await supabase
+        .from("institute_task_targets")
+        .update({ status: "submitted", responded_at: now, updated_at: now })
+        .eq("id", submissionTarget.id);
+      if (targetError) throw targetError;
+
+      const { error: taskError } = await supabase
+        .from("institute_tasks")
+        .update({ status: overallStatus, updated_at: now })
+        .eq("id", submissionTask.id);
+      if (taskError) throw taskError;
+
+      setTasks((current) =>
+        current.map((task) =>
+          task.id === submissionTask.id ? { ...task, status: overallStatus, targets: updatedTargets } : task
+        )
+      );
+
+      alert("تم رفع التقرير وإرساله إلى مدير الإدارة للمراجعة ✅");
+      closeSubmissionForm();
+    } catch (error: any) {
+      console.error("submitInstituteReport:", error);
+      alert(error?.message ?? "حدث خطأ أثناء إرسال التقرير.");
+    } finally {
+      setSubmissionSaving(false);
+    }
+  }
+
+  async function openReportFile(attachment: TaskAttachment) {
+    setOpeningAttachmentId(attachment.id);
+    try {
+      const { data, error } = await supabase.storage
+        .from("task-reports")
+        .createSignedUrl(attachment.storage_path, 300);
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error("تعذر إنشاء رابط التقرير.");
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (error: any) {
+      console.error("openReportFile:", error);
+      alert(error?.message ?? "تعذر فتح التقرير.");
+    } finally {
+      setOpeningAttachmentId(null);
+    }
+  }
+
+  function openReview(task: TaskView, target: TaskTarget) {
+    if (!isDirector || !target.latest_submission) return;
+    setReviewTask(task);
+    setReviewSubmission(target.latest_submission);
+    setReviewNote("");
+  }
+
+  function closeReview() {
+    if (reviewSaving) return;
+    setReviewTask(null);
+    setReviewSubmission(null);
+    setReviewNote("");
+  }
+
+  async function reviewTaskSubmission(action: "approved" | "returned") {
+    if (!profile || !reviewTask || !reviewSubmission) return;
+    if (action === "returned" && !reviewNote.trim()) {
+      alert("اكتب ملاحظة توضح المطلوب من المعهد قبل إعادة التقرير.");
+      return;
+    }
+
+    setReviewSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const { error: submissionError } = await supabase
+        .from("institute_task_submissions")
+        .update({
+          status: action,
+          director_note: action === "returned" ? reviewNote.trim() : null,
+          reviewed_at: now,
+          reviewed_by: profile.id,
+          updated_at: now,
+        })
+        .eq("id", reviewSubmission.id);
+      if (submissionError) throw submissionError;
+
+      const nextTargetStatus: TaskTarget["status"] = action === "approved" ? "completed" : "in_progress";
+      const { error: targetError } = await supabase
+        .from("institute_task_targets")
+        .update({ status: nextTargetStatus, updated_at: now })
+        .eq("id", reviewSubmission.target_id);
+      if (targetError) throw targetError;
+
+      const updatedTargets = reviewTask.targets.map((target) =>
+        target.id === reviewSubmission.target_id
+          ? {
+              ...target,
+              status: nextTargetStatus,
+              updated_at: now,
+              latest_submission: {
+                ...reviewSubmission,
+                status: action,
+                director_note: action === "returned" ? reviewNote.trim() : null,
+                reviewed_at: now,
+                reviewed_by: profile.id,
+              },
+            }
+          : target
+      );
+      const overallStatus = getOverallTaskStatus(updatedTargets);
+
+      const { error: taskError } = await supabase
+        .from("institute_tasks")
+        .update({ status: overallStatus, updated_at: now })
+        .eq("id", reviewTask.id);
+      if (taskError) throw taskError;
+
+      setTasks((current) =>
+        current.map((task) =>
+          task.id === reviewTask.id ? { ...task, status: overallStatus, targets: updatedTargets } : task
+        )
+      );
+
+      alert(action === "approved" ? "تم اعتماد التقرير وإغلاق مهمة المعهد ✅" : "تمت إعادة التقرير إلى المعهد لاستكماله وإعادة إرساله.");
+      closeReview();
+    } catch (error: any) {
+      console.error("reviewTaskSubmission:", error);
+      alert(error?.message ?? "حدث خطأ أثناء مراجعة التقرير.");
+    } finally {
+      setReviewSaving(false);
     }
   }
 
   function renderTargetAction(task: TaskView, target: TaskTarget) {
-    const overdue = isTargetOverdue(target, task.due_date);
     const busy = updatingTargetId === target.id;
 
     if (target.status === "completed") {
@@ -923,41 +1202,29 @@ export default function InstituteTasksPage() {
 
     if (isDirector) {
       if (target.status === "submitted") {
-        return (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => updateTargetStatus(task, target, "completed")}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {busy ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Check size={16} />
-            )}
-            اعتماد وإغلاق
-          </button>
-        );
+        if (target.latest_submission) {
+          return (
+            <button
+              type="button"
+              onClick={() => openReview(task, target)}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
+            >
+              <Eye size={16} />
+              مراجعة التقرير
+            </button>
+          );
+        }
+        return <div className="rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">تم التسليم — لا يوجد ملف تقرير</div>;
       }
 
       if (target.status === "in_progress") {
-        return (
-          <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
-            في انتظار تسليم المعهد
-          </div>
-        );
+        return <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">في انتظار تسليم المعهد</div>;
       }
 
-      return (
-        <div className="rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700">
-          في انتظار بدء التنفيذ من المعهد
-        </div>
-      );
+      return <div className="rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700">في انتظار بدء التنفيذ من المعهد</div>;
     }
 
-    if (profile?.institute_id !== target.institute_id) {
-      return null;
-    }
+    if (profile?.institute_id !== target.institute_id) return null;
 
     if (target.status === "pending" || target.status === "late") {
       return (
@@ -967,11 +1234,7 @@ export default function InstituteTasksPage() {
           onClick={() => updateTargetStatus(task, target, "in_progress")}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
         >
-          {busy ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <ArrowUp size={16} />
-          )}
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={16} />}
           بدء التنفيذ
         </button>
       );
@@ -981,26 +1244,17 @@ export default function InstituteTasksPage() {
       return (
         <button
           type="button"
-          disabled={busy}
-          onClick={() => openDeliveryForm(task, target)}
-          className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-60"
+          onClick={() => openSubmissionForm(task, target)}
+          className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-violet-700"
         >
-          {busy ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <Send size={16} />
-          )}
+          <Send size={16} />
           تسليم التقرير
         </button>
       );
     }
 
     if (target.status === "submitted") {
-      return (
-        <div className="rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">
-          تم التسليم — في انتظار اعتماد الإدارة
-        </div>
-      );
+      return <div className="rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700">تم إرسال التقرير — في انتظار مراجعة المدير</div>;
     }
 
     return null;
@@ -1455,6 +1709,61 @@ export default function InstituteTasksPage() {
                                           {target.response}
                                         </div>
                                       )}
+
+                                      {target.latest_submission && (
+                                        <div className="mt-3 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
+                                          <div className="mb-2 flex items-center justify-between gap-2">
+                                            <div className="text-sm font-bold text-violet-900">
+                                              تقرير التنفيذ رقم {target.latest_submission.submission_no}
+                                            </div>
+                                            <span className="text-xs text-violet-700">
+                                              {target.latest_submission.status === "submitted"
+                                                ? "بانتظار المراجعة"
+                                                : target.latest_submission.status === "returned"
+                                                  ? "أعيد للمعهد"
+                                                  : "تم الاعتماد"}
+                                            </span>
+                                          </div>
+
+                                          {target.latest_submission.notes && (
+                                            <p className="mb-3 text-sm leading-6 text-slate-600">
+                                              <strong className="text-slate-700">ملاحظات المعهد:</strong>{" "}
+                                              {target.latest_submission.notes}
+                                            </p>
+                                          )}
+
+                                          {target.latest_submission.director_note && (
+                                            <p className="mb-3 rounded-lg bg-orange-50 p-3 text-sm leading-6 text-orange-800">
+                                              <strong>ملاحظة المدير:</strong>{" "}
+                                              {target.latest_submission.director_note}
+                                            </p>
+                                          )}
+
+                                          <div className="space-y-2">
+                                            {target.latest_submission.attachments.map((attachment) => (
+                                              <button
+                                                key={attachment.id}
+                                                type="button"
+                                                onClick={() => openReportFile(attachment)}
+                                                disabled={openingAttachmentId === attachment.id}
+                                                className="flex w-full items-center justify-between gap-3 rounded-lg border border-violet-100 bg-white px-3 py-2 text-right text-sm text-violet-800 hover:bg-violet-50 disabled:opacity-60"
+                                              >
+                                                <span className="flex min-w-0 items-center gap-2">
+                                                  {openingAttachmentId === attachment.id ? (
+                                                    <Loader2 size={16} className="shrink-0 animate-spin" />
+                                                  ) : (
+                                                    <FileText size={16} className="shrink-0" />
+                                                  )}
+                                                  <span className="truncate">{attachment.file_name}</span>
+                                                </span>
+                                                <span className="shrink-0 text-xs text-slate-500">
+                                                  {formatReportFileSize(attachment.file_size)}
+                                                </span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
 
                                     <div className="shrink-0">
@@ -1476,98 +1785,90 @@ export default function InstituteTasksPage() {
         </div>
       </div>
 
-      {deliveryTask && deliveryTarget && isInstituteUser && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-          dir="rtl"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeDeliveryForm();
-          }}
-        >
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white p-5">
+      {submissionTarget && submissionTask && isInstituteUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" dir="rtl">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <div>
-                <div className="mb-2 flex items-center gap-2 text-violet-600">
-                  <Send size={20} />
-                  <span className="text-sm font-semibold">تسليم التكليف</span>
+                <h2 className="text-xl font-bold text-slate-900">تسليم تقرير التكليف</h2>
+                <p className="mt-1 text-sm text-slate-500">{submissionTask.title}</p>
+              </div>
+              <button type="button" onClick={closeSubmissionForm} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={20} /></button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              {submissionTarget.latest_submission?.status === "returned" && submissionTarget.latest_submission.director_note && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm leading-6 text-orange-900">
+                  <div className="mb-1 font-bold">ملاحظة مدير الإدارة:</div>
+                  {submissionTarget.latest_submission.director_note}
                 </div>
-                <h2 className="text-xl font-bold text-slate-900">
-                  إرسال تقرير التنفيذ للمدير
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  اكتب ما تم تنفيذه والنتيجة قبل إرسال التكليف للمراجعة والاعتماد.
-                </p>
+              )}
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">ملف التقرير</label>
+                <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" onChange={(event) => setSubmissionFile(event.target.files?.[0] ?? null)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm" />
+                <p className="mt-2 text-xs text-slate-500">PDF أو Word أو Excel أو صورة — الحد الأقصى 10 MB.</p>
+                {submissionFile && <div className="mt-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">الملف المختار: <strong>{submissionFile.name}</strong><span className="mr-2 text-xs text-slate-500">({formatReportFileSize(submissionFile.size)})</span></div>}
               </div>
 
-              <button
-                type="button"
-                onClick={closeDeliveryForm}
-                disabled={submittingDelivery}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
-              >
-                <X size={20} />
-              </button>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">ملاحظات المعهد</label>
+                <textarea value={submissionNotes} onChange={(event) => setSubmissionNotes(event.target.value)} rows={4} placeholder="اكتب أي ملاحظات أو توضيحات للمدير..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400" />
+              </div>
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">بعد الإرسال سيظهر التقرير لدى مدير الإدارة للمراجعة، ويمكنه اعتماده أو إعادته للمعهد.</div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+                <button type="button" onClick={closeSubmissionForm} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">إلغاء</button>
+                <button type="button" disabled={submissionSaving || !submissionFile} onClick={submitInstituteReport} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60">
+                  {submissionSaving ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                  إرسال التقرير للمدير
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reviewSubmission && reviewTask && isDirector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" dir="rtl">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">مراجعة تقرير المعهد</h2>
+                <p className="mt-1 text-sm text-slate-500">{reviewTask.title}</p>
+              </div>
+              <button type="button" onClick={closeReview} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={20} /></button>
             </div>
 
             <div className="space-y-5 p-5">
               <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
-                <div className="text-xs font-semibold text-violet-600">التكليف</div>
-                <div className="mt-1 font-bold text-slate-800">{deliveryTask.title}</div>
-                <div className="mt-2 text-sm text-slate-600">
-                  المعهد: <strong>{deliveryTarget.institute_name}</strong>
+                <div className="font-bold text-violet-900">{reviewTask.targets.find((item) => item.id === reviewSubmission.target_id)?.institute_name ?? "المعهد"}</div>
+                <div className="mt-1 text-xs text-violet-700">تسليم رقم {reviewSubmission.submission_no}</div>
+              </div>
+
+              {reviewSubmission.notes && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700"><div className="mb-1 font-bold">ملاحظات المعهد</div>{reviewSubmission.notes}</div>}
+
+              <div>
+                <div className="mb-2 text-sm font-bold text-slate-700">الملف المرفق</div>
+                <div className="space-y-2">
+                  {reviewSubmission.attachments.length ? reviewSubmission.attachments.map((attachment) => (
+                    <button key={attachment.id} type="button" onClick={() => openReportFile(attachment)} disabled={openingAttachmentId === attachment.id} className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-right text-sm hover:bg-slate-50 disabled:opacity-60">
+                      <span className="flex min-w-0 items-center gap-3">{openingAttachmentId === attachment.id ? <Loader2 size={18} className="shrink-0 animate-spin text-blue-600" /> : <FileText size={18} className="shrink-0 text-blue-600" />}<span className="truncate font-semibold text-slate-800">{attachment.file_name}</span></span>
+                      <span className="shrink-0 text-xs text-slate-500">{formatReportFileSize(attachment.file_size)}</span>
+                    </button>
+                  )) : <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">لا يوجد ملف مرفق.</div>}
                 </div>
-                {deliveryTask.description && (
-                  <div className="mt-3 rounded-lg bg-white/70 p-3 text-sm leading-6 text-slate-600">
-                    المطلوب: {deliveryTask.description}
-                  </div>
-                )}
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  تقرير التنفيذ والنتيجة <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={deliveryResponse}
-                  onChange={(event) => setDeliveryResponse(event.target.value)}
-                  rows={7}
-                  autoFocus
-                  placeholder="اكتب باختصار ما تم تنفيذه، وما هي النتيجة، وأي ملاحظات مهمة للمدير..."
-                  className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm leading-6 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                />
-                <div className="mt-2 text-xs text-slate-400">
-                  هذا التقرير سيظهر للمدير داخل تفاصيل التكليف عند المراجعة.
-                </div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">ملاحظة المدير</label>
+                <textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} rows={4} placeholder="عند الإعادة للمعهد اكتب ما المطلوب استكماله..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400" />
               </div>
 
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-                بعد الإرسال ستصبح الحالة <strong>تم التسليم — بانتظار اعتماد الإدارة</strong>،
-                ويمكن للمدير مراجعة التقرير واعتماد التكليف.
-              </div>
-
-              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={closeDeliveryForm}
-                  disabled={submittingDelivery}
-                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  إلغاء
-                </button>
-
-                <button
-                  type="button"
-                  disabled={submittingDelivery || !deliveryResponse.trim()}
-                  onClick={submitDelivery}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
-                >
-                  {submittingDelivery ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <Send size={18} />
-                  )}
-                  إرسال للمدير للمراجعة
-                </button>
+              <div className="flex flex-col gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+                <button type="button" disabled={reviewSaving} onClick={() => reviewTaskSubmission("returned")} className="inline-flex items-center justify-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-5 py-3 text-sm font-semibold text-orange-700 hover:bg-orange-100 disabled:opacity-60">{reviewSaving ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}إعادة للمعهد</button>
+                <button type="button" disabled={reviewSaving} onClick={() => reviewTaskSubmission("approved")} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">{reviewSaving ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}اعتماد وإغلاق</button>
               </div>
             </div>
           </div>
