@@ -1093,49 +1093,36 @@ export default function InstituteTasksPage() {
 
     try {
       if (!attachment.storage_path?.trim()) {
-        throw new Error("مسار ملف التقرير غير موجود في قاعدة البيانات.");
+        throw new Error("مسار التقرير غير موجود.");
       }
-
-      console.log("openReportFile:", {
-        attachmentId: attachment.id,
-        fileName: attachment.file_name,
-        storagePath: attachment.storage_path,
-      });
 
       const { data, error } = await supabase.storage
         .from("task-reports")
-        .createSignedUrl(attachment.storage_path, 600);
+        .download(attachment.storage_path);
 
       if (error) {
-        console.error("createSignedUrl error:", {
+        console.error("download report error:", {
           message: error.message,
           name: error.name,
-          status: (error as any).status,
-          statusCode: (error as any).statusCode,
+          attachmentId: attachment.id,
+          storagePath: attachment.storage_path,
         });
-
-        throw new Error(
-          error.message || "تعذر إنشاء رابط آمن لملف التقرير."
-        );
+        throw error;
       }
 
-      if (!data?.signedUrl) {
-        throw new Error("تعذر إنشاء رابط التقرير الآمن.");
+      if (!data) {
+        throw new Error("لم يتم العثور على ملف التقرير.");
       }
 
-      console.log("Signed URL created successfully.");
+      const blobUrl = URL.createObjectURL(data);
+      const opened = window.open(blobUrl, "_blank", "noopener,noreferrer");
 
-      const openedWindow = window.open(
-        data.signedUrl,
-        "_blank",
-        "noopener,noreferrer"
-      );
-
-      if (!openedWindow) {
-        throw new Error(
-          "تم إنشاء رابط التقرير، لكن المتصفح منع فتح نافذة جديدة. اسمحي بالنوافذ المنبثقة لهذا الموقع ثم حاولي مرة أخرى."
-        );
+      if (!opened) {
+        URL.revokeObjectURL(blobUrl);
+        throw new Error("المتصفح منع فتح التقرير في نافذة جديدة. اسمحي بالنوافذ المنبثقة للموقع ثم حاولي مرة أخرى.");
       }
+
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
     } catch (error: any) {
       console.error("openReportFile:", error);
       alert(error?.message ?? "تعذر فتح التقرير.");
