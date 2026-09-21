@@ -1090,13 +1090,52 @@ export default function InstituteTasksPage() {
 
   async function openReportFile(attachment: TaskAttachment) {
     setOpeningAttachmentId(attachment.id);
+
     try {
+      if (!attachment.storage_path?.trim()) {
+        throw new Error("مسار ملف التقرير غير موجود في قاعدة البيانات.");
+      }
+
+      console.log("openReportFile:", {
+        attachmentId: attachment.id,
+        fileName: attachment.file_name,
+        storagePath: attachment.storage_path,
+      });
+
       const { data, error } = await supabase.storage
         .from("task-reports")
-        .createSignedUrl(attachment.storage_path, 300);
-      if (error) throw error;
-      if (!data?.signedUrl) throw new Error("تعذر إنشاء رابط التقرير.");
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+        .createSignedUrl(attachment.storage_path, 600);
+
+      if (error) {
+        console.error("createSignedUrl error:", {
+          message: error.message,
+          name: error.name,
+          status: (error as any).status,
+          statusCode: (error as any).statusCode,
+        });
+
+        throw new Error(
+          error.message || "تعذر إنشاء رابط آمن لملف التقرير."
+        );
+      }
+
+      if (!data?.signedUrl) {
+        throw new Error("تعذر إنشاء رابط التقرير الآمن.");
+      }
+
+      console.log("Signed URL created successfully.");
+
+      const openedWindow = window.open(
+        data.signedUrl,
+        "_blank",
+        "noopener,noreferrer"
+      );
+
+      if (!openedWindow) {
+        throw new Error(
+          "تم إنشاء رابط التقرير، لكن المتصفح منع فتح نافذة جديدة. اسمحي بالنوافذ المنبثقة لهذا الموقع ثم حاولي مرة أخرى."
+        );
+      }
     } catch (error: any) {
       console.error("openReportFile:", error);
       alert(error?.message ?? "تعذر فتح التقرير.");
