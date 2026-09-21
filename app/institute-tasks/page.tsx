@@ -221,6 +221,11 @@ export default function InstituteTasksPage() {
   const [targetMode, setTargetMode] = useState<"all" | "selected" | "single">("single");
   const [selectedInstitutes, setSelectedInstitutes] = useState<string[]>([]);
 
+  const [deliveryTask, setDeliveryTask] = useState<TaskView | null>(null);
+  const [deliveryTarget, setDeliveryTarget] = useState<TaskTarget | null>(null);
+  const [deliveryResponse, setDeliveryResponse] = useState("");
+  const [submittingDelivery, setSubmittingDelivery] = useState(false);
+
   const [form, setForm] = useState({
     institute_id: "",
     title: "",
@@ -298,11 +303,9 @@ export default function InstituteTasksPage() {
       (task) => getOverallTaskStatus(task.targets) === "submitted"
     ).length;
 
-    const completed = visibleTasks.reduce(
-      (count, task) =>
-        count + task.targets.filter((target) => target.status === "completed").length,
-      0
-    );
+    const completed = visibleTasks.filter(
+      (task) => getOverallTaskStatus(task.targets) === "completed"
+    ).length;
 
     const urgent = visibleTasks.filter(
       (task) =>
@@ -761,24 +764,30 @@ export default function InstituteTasksPage() {
   async function updateTargetStatus(
     task: TaskView,
     target: TaskTarget,
-    status: TaskTarget["status"]
-  ) {
+    status: TaskTarget["status"],
+    response?: string | null
+  ): Promise<boolean> {
     if (target.id.startsWith("legacy-")) {
       alert("هذا تكليف قديم لا يحتوي على سجل متابعة للمعهد.");
-      return;
+      return false;
     }
 
-    if (!isDirector && !isInstituteUser) return;
+    if (!isDirector && !isInstituteUser) return false;
 
     if (
       isInstituteUser &&
       profile?.institute_id !== target.institute_id
     ) {
-      return;
+      return false;
     }
 
     if (isDirector && status !== "completed") {
-      return;
+      return false;
+    }
+
+    if (status === "submitted" && !response?.trim()) {
+      alert("اكتب تقرير التنفيذ قبل إرسال التكليف للمدير.");
+      return false;
     }
 
     setUpdatingTargetId(target.id);
@@ -791,6 +800,7 @@ export default function InstituteTasksPage() {
 
       if (status === "submitted") {
         updatePayload.responded_at = new Date().toISOString();
+        updatePayload.response = response?.trim() ?? null;
       }
 
       if (status === "completed") {
@@ -810,6 +820,10 @@ export default function InstituteTasksPage() {
           ? {
               ...item,
               status,
+              response:
+                updatePayload.response !== undefined
+                  ? updatePayload.response
+                  : item.response,
               responded_at:
                 updatePayload.responded_at ?? item.responded_at,
               updated_at: updatePayload.updated_at,
@@ -840,11 +854,57 @@ export default function InstituteTasksPage() {
             : item
         )
       );
+
+      return true;
     } catch (error: any) {
       console.error("updateTargetStatus error:", error);
       alert(error?.message ?? "حدث خطأ أثناء تحديث حالة التكليف");
+      return false;
     } finally {
       setUpdatingTargetId(null);
+    }
+  }
+
+  function openDeliveryForm(task: TaskView, target: TaskTarget) {
+    if (!isInstituteUser || profile?.institute_id !== target.institute_id) return;
+
+    setDeliveryTask(task);
+    setDeliveryTarget(target);
+    setDeliveryResponse(target.response ?? "");
+  }
+
+  function closeDeliveryForm() {
+    if (submittingDelivery) return;
+
+    setDeliveryTask(null);
+    setDeliveryTarget(null);
+    setDeliveryResponse("");
+  }
+
+  async function submitDelivery() {
+    if (!deliveryTask || !deliveryTarget) return;
+
+    const response = deliveryResponse.trim();
+
+    if (!response) {
+      alert("اكتب تقرير التنفيذ قبل إرسال التكليف للمدير.");
+      return;
+    }
+
+    setSubmittingDelivery(true);
+
+    const success = await updateTargetStatus(
+      deliveryTask,
+      deliveryTarget,
+      "submitted",
+      response
+    );
+
+    setSubmittingDelivery(false);
+
+    if (success) {
+      closeDeliveryForm();
+      alert("تم إرسال تقرير التنفيذ للمدير بنجاح. أصبح التكليف بانتظار المراجعة.");
     }
   }
 
@@ -922,7 +982,7 @@ export default function InstituteTasksPage() {
         <button
           type="button"
           disabled={busy}
-          onClick={() => updateTargetStatus(task, target, "submitted")}
+          onClick={() => openDeliveryForm(task, target)}
           className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-60"
         >
           {busy ? (
@@ -930,7 +990,7 @@ export default function InstituteTasksPage() {
           ) : (
             <Send size={16} />
           )}
-          تم التسليم
+          تسليم التقرير
         </button>
       );
     }
@@ -945,40 +1005,6 @@ export default function InstituteTasksPage() {
 
     return null;
   }
-
-  function getNeedsInterventionTargets(task: TaskView) {
-    return task.targets.filter((target) => {
-      if (target.status === "completed") return false;
-
-      const overdue = isTargetOverdue(target, task.due_date);
-      return target.status === "submitted" || overdue || task.priority === "urgent";
-    });
-  }
-
-  function getFollowUpTargets(task: TaskView) {
-    return task.targets.filter((target) => {
-      if (target.status === "completed") return false;
-
-      const overdue = isTargetOverdue(target, task.due_date);
-      const needsIntervention =
-        target.status === "submitted" || overdue || task.priority === "urgent";
-
-      if (needsIntervention) return false;
-      return target.status === "pending" || target.status === "in_progress" || target.status === "late";
-    });
-  }
-
-  const needsInterventionItems = useMemo(() => {
-    return visibleTasks.flatMap((task) =>
-      getNeedsInterventionTargets(task).map((target) => ({ task, target }))
-    );
-  }, [visibleTasks]);
-
-  const followUpItems = useMemo(() => {
-    return visibleTasks.flatMap((task) =>
-      getFollowUpTargets(task).map((target) => ({ task, target }))
-    );
-  }, [visibleTasks]);
 
   function taskNeedsAttention(task: TaskView) {
     const overall = getOverallTaskStatus(task.targets);
@@ -1124,89 +1150,6 @@ export default function InstituteTasksPage() {
               );
             })}
           </div>
-
-          {isDirector && needsInterventionItems.length > 0 && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm md:p-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2 text-red-700">
-                    <AlertCircle size={20} />
-                    <h2 className="font-bold">يحتاج تدخل المدير الآن</h2>
-                  </div>
-                  <p className="mt-1 text-sm text-red-600">
-                    حالات تحتاج قرارًا أو اعتمادًا أو تدخلًا من الإدارة.
-                  </p>
-                </div>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-red-700">
-                  {needsInterventionItems.length} حالة
-                </span>
-              </div>
-
-              <div className="grid gap-2">
-                {needsInterventionItems.map(({ task, target }) => {
-                  const overdue = isTargetOverdue(target, task.due_date);
-                  return (
-                    <button
-                      key={`${task.id}-${target.id}`}
-                      type="button"
-                      onClick={() => setExpandedTaskId(task.id)}
-                      className="flex w-full flex-col gap-2 rounded-xl border border-red-100 bg-white p-3 text-right transition hover:border-red-300 md:flex-row md:items-center md:justify-between"
-                    >
-                      <div>
-                        <div className="font-bold text-slate-800">{target.institute_name}</div>
-                        <div className="mt-1 text-xs text-slate-500">{task.title}</div>
-                      </div>
-                      <span className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">
-                        {target.status === "submitted"
-                          ? "بانتظار اعتماد المدير"
-                          : overdue
-                            ? "متأخر عن الموعد"
-                            : "تكليف عاجل"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {isDirector && followUpItems.length > 0 && (
-            <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm md:p-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2 text-orange-700">
-                    <Clock3 size={20} />
-                    <h2 className="font-bold">تحتاج متابعة</h2>
-                  </div>
-                  <p className="mt-1 text-sm text-orange-600">
-                    المعاهد التي لم تُكمل التكليفات الموجهة إليها بعد.
-                  </p>
-                </div>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-orange-700">
-                  {followUpItems.length} متابعة مفتوحة
-                </span>
-              </div>
-
-              <div className="grid gap-2">
-                {followUpItems.map(({ task, target }) => (
-                  <button
-                    key={`${task.id}-${target.id}`}
-                    type="button"
-                    onClick={() => setExpandedTaskId(task.id)}
-                    className="flex w-full flex-col gap-2 rounded-xl border border-orange-100 bg-white p-3 text-right transition hover:border-orange-300 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-800">{target.institute_name}</div>
-                      <div className="mt-1 text-xs text-slate-500">{task.title}</div>
-                    </div>
-                    <span className="rounded-full bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700">
-                      {target.status === "in_progress" ? "قيد التنفيذ" : "لم يبدأ"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {showArchivedTasks && isDirector && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
@@ -1532,6 +1475,104 @@ export default function InstituteTasksPage() {
           )}
         </div>
       </div>
+
+      {deliveryTask && deliveryTarget && isInstituteUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          dir="rtl"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeDeliveryForm();
+          }}
+        >
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white p-5">
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-violet-600">
+                  <Send size={20} />
+                  <span className="text-sm font-semibold">تسليم التكليف</span>
+                </div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  إرسال تقرير التنفيذ للمدير
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  اكتب ما تم تنفيذه والنتيجة قبل إرسال التكليف للمراجعة والاعتماد.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeDeliveryForm}
+                disabled={submittingDelivery}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
+                <div className="text-xs font-semibold text-violet-600">التكليف</div>
+                <div className="mt-1 font-bold text-slate-800">{deliveryTask.title}</div>
+                <div className="mt-2 text-sm text-slate-600">
+                  المعهد: <strong>{deliveryTarget.institute_name}</strong>
+                </div>
+                {deliveryTask.description && (
+                  <div className="mt-3 rounded-lg bg-white/70 p-3 text-sm leading-6 text-slate-600">
+                    المطلوب: {deliveryTask.description}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  تقرير التنفيذ والنتيجة <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={deliveryResponse}
+                  onChange={(event) => setDeliveryResponse(event.target.value)}
+                  rows={7}
+                  autoFocus
+                  placeholder="اكتب باختصار ما تم تنفيذه، وما هي النتيجة، وأي ملاحظات مهمة للمدير..."
+                  className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm leading-6 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                />
+                <div className="mt-2 text-xs text-slate-400">
+                  هذا التقرير سيظهر للمدير داخل تفاصيل التكليف عند المراجعة.
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                بعد الإرسال ستصبح الحالة <strong>تم التسليم — بانتظار اعتماد الإدارة</strong>،
+                ويمكن للمدير مراجعة التقرير واعتماد التكليف.
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeDeliveryForm}
+                  disabled={submittingDelivery}
+                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  إلغاء
+                </button>
+
+                <button
+                  type="button"
+                  disabled={submittingDelivery || !deliveryResponse.trim()}
+                  onClick={submitDelivery}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                >
+                  {submittingDelivery ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                  إرسال للمدير للمراجعة
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && isDirector && (
         <div
