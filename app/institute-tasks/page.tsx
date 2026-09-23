@@ -521,12 +521,11 @@ export default function InstituteTasksPage() {
 
       const instituteIds = instituteList.map((institute) => institute.id);
 
-      let targetQuery = supabase
-        .from("institute_task_targets")
-        .select(
-          "id, task_id, institute_id, status, response, responded_at, created_at, updated_at"
-        )
-        .order("created_at", { ascending: true });
+      const targetSelect =
+        "id, task_id, institute_id, status, response, responded_at, created_at, updated_at";
+
+      let targetData: any[] | null = null;
+      let targetError: any = null;
 
       if (!director) {
         if (!currentProfile.institute_id) {
@@ -534,15 +533,32 @@ export default function InstituteTasksPage() {
           return;
         }
 
-        targetQuery = targetQuery.eq(
-          "institute_id",
-          currentProfile.institute_id
-        );
-      } else if (instituteIds.length) {
-        targetQuery = targetQuery.in("institute_id", instituteIds);
-      }
+        const result = await supabase
+          .from("institute_task_targets")
+          .select(targetSelect)
+          .eq("institute_id", currentProfile.institute_id)
+          .order("created_at", { ascending: true });
 
-      const { data: targetData, error: targetError } = await targetQuery;
+        targetData = result.data;
+        targetError = result.error;
+      } else if (instituteIds.length) {
+        const result = await supabase
+          .from("institute_task_targets")
+          .select(targetSelect)
+          .in("institute_id", instituteIds)
+          .order("created_at", { ascending: true });
+
+        targetData = result.data;
+        targetError = result.error;
+      } else {
+        const result = await supabase
+          .from("institute_task_targets")
+          .select(targetSelect)
+          .order("created_at", { ascending: true });
+
+        targetData = result.data;
+        targetError = result.error;
+      }
 
       if (targetError) throw targetError;
 
