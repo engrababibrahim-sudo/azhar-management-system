@@ -1,3 +1,4 @@
+```tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -18,9 +19,6 @@ import {
   Search,
   Send,
   X,
-  History,
-  User,
-  CircleDot,
 } from "lucide-react";
 
 import AppShell from "../components/AppShell";
@@ -89,19 +87,6 @@ type InstituteRequest = {
     name: string;
     code?: string | null;
   } | null;
-};
-
-type RequestHistory = {
-  id: string;
-  request_id: string;
-  action_type: string;
-  old_status: RequestStatus | null;
-  new_status: RequestStatus | null;
-  note: string | null;
-  created_by: string | null;
-  created_at: string;
-  actor_name?: string | null;
-  actor_role?: Role | null;
 };
 
 const requestTypeOptions: {
@@ -242,78 +227,6 @@ function priorityClass(priority: Priority) {
   }
 }
 
-function historyActionLabel(actionType: string) {
-  switch (actionType) {
-    case "created":
-      return "إنشاء الطلب";
-
-    case "status_changed":
-      return "تغيير حالة الطلب";
-
-    case "director_response":
-      return "تحديث رد الإدارة";
-
-    case "due_date_changed":
-      return "تغيير موعد الاستحقاق";
-
-    case "updated":
-      return "تحديث الطلب";
-
-    default:
-      return "تحديث";
-  }
-}
-
-function historyActionClass(actionType: string) {
-  switch (actionType) {
-    case "created":
-      return "bg-blue-100 text-blue-700";
-
-    case "status_changed":
-      return "bg-amber-100 text-amber-700";
-
-    case "director_response":
-      return "bg-emerald-100 text-emerald-700";
-
-    case "due_date_changed":
-      return "bg-purple-100 text-purple-700";
-
-    default:
-      return "bg-slate-100 text-slate-700";
-  }
-}
-
-function roleLabel(role?: Role | null) {
-  switch (role) {
-    case "director":
-      return "مدير الإدارة";
-
-    case "super_admin":
-      return "مدير النظام";
-
-    case "sheikh":
-      return "شيخ المعهد";
-
-    case "deputy":
-      return "وكيل المعهد";
-
-    case "employee":
-      return "موظف";
-
-    case "teacher":
-      return "مدرس";
-
-    case "student":
-      return "طالب";
-
-    case "parent":
-      return "ولي أمر";
-
-    default:
-      return "مستخدم النظام";
-  }
-}
-
 export default function InstituteRequestsPage() {
   const [profile, setProfile] =
     useState<Profile | null>(null);
@@ -346,13 +259,6 @@ export default function InstituteRequestsPage() {
 
   const [selectedRequest, setSelectedRequest] =
     useState<InstituteRequest | null>(null);
-
-  const [history, setHistory] = useState<
-    RequestHistory[]
-  >([]);
-
-  const [historyLoading, setHistoryLoading] =
-    useState(false);
 
   const [form, setForm] = useState({
     title: "",
@@ -457,9 +363,15 @@ export default function InstituteRequestsPage() {
       }
 
       setInstitutes(
-        (institutesData ?? []) as Institute[]
+        (institutesData ??
+          []) as Institute[]
       );
 
+      /*
+       * مهم جدًا:
+       * استخدام Template Literal هنا لأن Supabase
+       * يحتاج نص select متعدد الأسطر.
+       */
       let requestQuery = supabase
         .from("institute_requests")
         .select(`
@@ -544,7 +456,8 @@ export default function InstituteRequestsPage() {
       }
 
       setRequests(
-        (requestsData ?? []) as unknown as InstituteRequest[]
+        (requestsData ??
+          []) as unknown as InstituteRequest[]
       );
     } catch (error) {
       console.error(
@@ -660,136 +573,18 @@ export default function InstituteRequestsPage() {
     resetCreateForm();
   }
 
-  async function loadHistory(
-    requestId: string
-  ) {
-    try {
-      setHistoryLoading(true);
-      setHistory([]);
-
-      const {
-        data: historyData,
-        error: historyError,
-      } = await supabase
-        .from("institute_request_history")
-        .select(`
-          id,
-          request_id,
-          action_type,
-          old_status,
-          new_status,
-          note,
-          created_by,
-          created_at
-        `)
-        .eq("request_id", requestId)
-        .order("created_at", {
-          ascending: false,
-        });
-
-      if (historyError) {
-        console.error(
-          "History error:",
-          historyError
-        );
-
-        return;
-      }
-
-      const historyRows =
-        (historyData ?? []) as RequestHistory[];
-
-      if (historyRows.length === 0) {
-        setHistory([]);
-        return;
-      }
-
-      const actorIds = Array.from(
-        new Set(
-          historyRows
-            .map(
-              (item) => item.created_by
-            )
-            .filter(
-              (id): id is string =>
-                Boolean(id)
-            )
-        )
-      );
-
-      if (actorIds.length === 0) {
-        setHistory(historyRows);
-        return;
-      }
-
-      const {
-        data: actorsData,
-        error: actorsError,
-      } = await supabase
-        .from("profiles")
-        .select(
-          "id, full_name, role"
-        )
-        .in("id", actorIds);
-
-      if (actorsError) {
-        console.error(
-          "History actors error:",
-          actorsError
-        );
-
-        setHistory(historyRows);
-        return;
-      }
-
-      const actorsMap = new Map<
-        string,
-        {
-          full_name: string | null;
-          role: Role;
-        }
-      >();
-
-      (
-        actorsData ?? []
-      ).forEach((actor) => {
-        actorsMap.set(actor.id, {
-          full_name:
-            actor.full_name,
-          role: actor.role as Role,
-        });
-      });
-
-      const enrichedHistory =
-        historyRows.map((item) => {
-          const actor =
-            item.created_by
-              ? actorsMap.get(
-                  item.created_by
-                )
-              : undefined;
-
-          return {
-            ...item,
-            actor_name:
-              actor?.full_name ??
-              null,
-            actor_role:
-              actor?.role ?? null,
-          };
-        });
-
-      setHistory(enrichedHistory);
-    } catch (error) {
-      console.error(
-        "Load history exception:",
-        error
-      );
-    } finally {
-      setHistoryLoading(false);
-    }
-  }
-
+  /*
+   * الإصلاح الأساسي:
+   * عند فتح الطلب نضع الحالة الحالية كما هي.
+   *
+   * لا يوجد هنا:
+   *
+   * request.status === "new"
+   *   ? "in_progress"
+   *   : request.status
+   *
+   * وبالتالي فتح الطلب لا يغير حالته.
+   */
   function openRequest(
     request: InstituteRequest
   ) {
@@ -801,14 +596,10 @@ export default function InstituteRequestsPage() {
         request.director_response ?? "",
       due_date: request.due_date ?? "",
     });
-
-    loadHistory(request.id);
   }
 
   function closeRequest() {
     setSelectedRequest(null);
-    setHistory([]);
-    setHistoryLoading(false);
 
     setDirectorForm({
       status: "new",
@@ -1675,7 +1466,7 @@ export default function InstituteRequestsPage() {
         {selectedRequest && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <div
-              className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
+              className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
               dir="rtl"
             >
               <div className="flex items-start justify-between border-b border-slate-200 p-5">
@@ -1769,161 +1560,6 @@ export default function InstituteRequestsPage() {
                       selectedRequest.description
                     }
                   </div>
-                </div>
-
-                {/* Timeline */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="mb-5 flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 text-base font-bold text-slate-900">
-                        <History className="h-5 w-5" />
-
-                        سجل متابعة الطلب
-                      </div>
-
-                      <p className="mt-1 text-sm text-slate-500">
-                        جميع الإجراءات والتحديثات التي تمت على هذا الطلب.
-                      </p>
-                    </div>
-
-                    {!historyLoading &&
-                      history.length > 0 && (
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                          {history.length} حدث
-                        </span>
-                      )}
-                  </div>
-
-                  {historyLoading ? (
-                    <div className="flex items-center justify-center py-8 text-sm text-slate-500">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-
-                        جاري تحميل سجل المتابعة...
-                      </div>
-                    </div>
-                  ) : history.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                      <History className="mx-auto h-8 w-8 text-slate-400" />
-
-                      <div className="mt-3 font-semibold text-slate-700">
-                        لا توجد أحداث مسجلة حتى الآن
-                      </div>
-
-                      <p className="mt-1 text-sm text-slate-500">
-                        سيتم تسجيل أي تغيير جديد على الطلب تلقائيًا.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <div className="absolute right-[15px] top-3 bottom-3 w-px bg-slate-200" />
-
-                      <div className="space-y-6">
-                        {history.map(
-                          (event) => (
-                            <div
-                              key={event.id}
-                              className="relative flex gap-4"
-                            >
-                              <div
-                                className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${historyActionClass(
-                                  event.action_type
-                                )}`}
-                              >
-                                {event.action_type ===
-                                "created" ? (
-                                  <FileText className="h-4 w-4" />
-                                ) : event.action_type ===
-                                  "status_changed" ? (
-                                  <CircleDot className="h-4 w-4" />
-                                ) : event.action_type ===
-                                  "director_response" ? (
-                                  <MessageSquare className="h-4 w-4" />
-                                ) : event.action_type ===
-                                  "due_date_changed" ? (
-                                  <CalendarDays className="h-4 w-4" />
-                                ) : (
-                                  <History className="h-4 w-4" />
-                                )}
-                              </div>
-
-                              <div className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                  <div>
-                                    <div className="font-semibold text-slate-900">
-                                      {historyActionLabel(
-                                        event.action_type
-                                      )}
-                                    </div>
-
-                                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                                      <span className="inline-flex items-center gap-1">
-                                        <User className="h-3.5 w-3.5" />
-
-                                        {event.actor_name ||
-                                          roleLabel(
-                                            event.actor_role
-                                          )}
-                                      </span>
-
-                                      {event.actor_role && (
-                                        <span>
-                                          {roleLabel(
-                                            event.actor_role
-                                          )}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <span className="shrink-0 text-xs text-slate-400">
-                                    {formatDateTime(
-                                      event.created_at
-                                    )}
-                                  </span>
-                                </div>
-
-                                {event.action_type ===
-                                  "status_changed" &&
-                                  event.old_status &&
-                                  event.new_status && (
-                                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                                      <span
-                                        className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusClass(
-                                          event.old_status
-                                        )}`}
-                                      >
-                                        {statusLabel(
-                                          event.old_status
-                                        )}
-                                      </span>
-
-                                      <ArrowLeft className="h-4 w-4 text-slate-400" />
-
-                                      <span
-                                        className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusClass(
-                                          event.new_status
-                                        )}`}
-                                      >
-                                        {statusLabel(
-                                          event.new_status
-                                        )}
-                                      </span>
-                                    </div>
-                                  )}
-
-                                {event.note && (
-                                  <div className="mt-3 rounded-xl border border-white bg-white p-3 text-sm leading-7 text-slate-700">
-                                    {event.note}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Existing response */}
@@ -2089,8 +1725,8 @@ export default function InstituteRequestsPage() {
 
                         <p className="mt-1 text-sm leading-6 text-blue-800">
                           يمكنك متابعة حالة الطلب ورد
-                          الإدارة وسجل المتابعة من هذه الصفحة.
-                          تعديل القرار الإداري متاح لمدير الإدارة فقط.
+                          الإدارة من هذه الصفحة. تعديل القرار
+                          الإداري متاح لمدير الإدارة فقط.
                         </p>
                       </div>
                     </div>
@@ -2150,3 +1786,4 @@ function InfoItem({
     </div>
   );
 }
+```
