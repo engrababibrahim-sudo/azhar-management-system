@@ -1638,29 +1638,6 @@ export default function InstituteTasksPage() {
             </div>
           )}
 
-          {isDirector && (
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600"><AlertCircle size={20} /></div>
-                  <div><div className="text-sm font-bold text-red-800">يحتاج انتباه المدير</div><div className="mt-1 text-2xl font-bold text-red-900">{directorAttentionTasks.length}</div><p className="mt-1 text-xs leading-5 text-red-700">تكليفات عاجلة أو متأخرة وتحتاج تدخلاً.</p></div>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600"><Clock3 size={20} /></div>
-                  <div><div className="text-sm font-bold text-amber-800">يحتاج متابعة</div><div className="mt-1 text-2xl font-bold text-amber-900">{directorFollowUpTasks.length}</div><p className="mt-1 text-xs leading-5 text-amber-700">تكليفات لم تبدأ أو ما زالت قيد التنفيذ.</p></div>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Send size={20} /></div>
-                  <div><div className="text-sm font-bold text-violet-800">تقارير بانتظار المراجعة</div><div className="mt-1 text-2xl font-bold text-violet-900">{directorReviewCount}</div><p className="mt-1 text-xs leading-5 text-violet-700">تقارير أرسلها المعهد ولم يعتمدها المدير بعد.</p></div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {isDirector && directorAttentionTasks.length > 0 && (
             <div className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm md:p-5">
               <div className="mb-3 flex items-center gap-2"><AlertCircle size={19} className="text-red-600" /><h2 className="font-bold text-slate-900">ما يحتاج انتباهك الآن</h2></div>
