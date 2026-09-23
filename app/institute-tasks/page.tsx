@@ -395,6 +395,46 @@ export default function InstituteTasksPage() {
     });
   }, [visibleTasks, isDirector]);
 
+  const directorInstituteStatus = useMemo(() => {
+    if (!isDirector) return [];
+
+    return institutes.map((institute) => {
+      const instituteTargets = visibleTasks.flatMap((task) =>
+        task.targets.filter((target) => target.institute_id === institute.id)
+      );
+
+      const completed = instituteTargets.filter(
+        (target) => target.status === "completed"
+      ).length;
+
+      const inProgress = instituteTargets.filter(
+        (target) => target.status === "in_progress"
+      ).length;
+
+      const overdue = instituteTargets.filter((target) =>
+        isTargetOverdue(
+          target,
+          visibleTasks.find((task) => task.id === target.task_id)?.due_date
+        )
+      ).length;
+
+      const reportsWaiting = instituteTargets.filter(
+        (target) =>
+          target.status === "submitted" &&
+          target.latest_submission?.status === "submitted"
+      ).length;
+
+      return {
+        ...institute,
+        total: instituteTargets.length,
+        completed,
+        inProgress,
+        overdue,
+        reportsWaiting,
+      };
+    });
+  }, [institutes, visibleTasks, isDirector]);
+
   function getStoredHiddenIds() {
     if (typeof window === "undefined") return [];
 
@@ -1476,6 +1516,93 @@ export default function InstituteTasksPage() {
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
               أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
               تنظيفها من العرض سابقًا. لا يوجد حذف من قاعدة البيانات.
+            </div>
+          )}
+
+          {isDirector && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm md:p-5">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-slate-800">
+                    <Users size={19} className="text-blue-600" />
+                    <h2 className="font-bold">حالة المعاهد</h2>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    ملخص سريع لحالة تنفيذ التكليفات في كل معهد، لتعرف أين تحتاج المتابعة أو التدخل.
+                  </p>
+                </div>
+                <div className="text-xs text-slate-400">
+                  {directorInstituteStatus.length} معاهد
+                </div>
+              </div>
+
+              {directorInstituteStatus.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  لا توجد معاهد ضمن الإدارة الحالية.
+                </div>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {directorInstituteStatus.map((institute) => (
+                    <div
+                      key={institute.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-bold text-slate-900">
+                            {institute.name}
+                          </div>
+                          {institute.code && (
+                            <div className="mt-1 text-xs text-slate-400">
+                              {institute.code}
+                            </div>
+                          )}
+                        </div>
+                        <div className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                          {institute.total} تكليف
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+                          <div className="text-xs text-emerald-700">مكتمل</div>
+                          <div className="mt-1 text-xl font-bold text-emerald-800">
+                            {institute.completed}
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+                          <div className="text-xs text-amber-700">قيد التنفيذ</div>
+                          <div className="mt-1 text-xl font-bold text-amber-800">
+                            {institute.inProgress}
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+                          <div className="text-xs text-red-700">متأخر</div>
+                          <div className="mt-1 text-xl font-bold text-red-800">
+                            {institute.overdue}
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-violet-100 bg-violet-50 px-3 py-2">
+                          <div className="text-xs text-violet-700">تقارير للمراجعة</div>
+                          <div className="mt-1 text-xl font-bold text-violet-800">
+                            {institute.reportsWaiting}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-xs">
+                        <span className="text-slate-500">إجمالي التكليفات الحالية</span>
+                        <span className="font-semibold text-slate-700">
+                          {institute.total}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
