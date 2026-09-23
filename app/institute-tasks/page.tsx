@@ -260,6 +260,7 @@ export default function InstituteTasksPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [instituteFilter, setInstituteFilter] = useState("all");
+  const [selectedInstituteStatusId, setSelectedInstituteStatusId] = useState<string | null>(null);
 
   const [targetMode, setTargetMode] = useState<"all" | "selected" | "single">("single");
   const [selectedInstitutes, setSelectedInstitutes] = useState<string[]>([]);
@@ -434,6 +435,21 @@ export default function InstituteTasksPage() {
       };
     });
   }, [institutes, visibleTasks, isDirector]);
+
+  const selectedInstituteStatus = useMemo(() => {
+    if (!isDirector || !selectedInstituteStatusId) return null;
+    return directorInstituteStatus.find((institute) => institute.id === selectedInstituteStatusId) ?? null;
+  }, [directorInstituteStatus, selectedInstituteStatusId, isDirector]);
+
+  const selectedInstituteTasks = useMemo(() => {
+    if (!selectedInstituteStatusId) return [];
+    return visibleTasks
+      .map((task) => ({
+        task,
+        target: task.targets.find((target) => target.institute_id === selectedInstituteStatusId),
+      }))
+      .filter((item) => Boolean(item.target));
+  }, [visibleTasks, selectedInstituteStatusId]);
 
   function getStoredHiddenIds() {
     if (typeof window === "undefined") return [];
@@ -1559,9 +1575,19 @@ export default function InstituteTasksPage() {
               ) : (
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {directorInstituteStatus.map((institute) => (
-                    <div
+                    <button
                       key={institute.id}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                      type="button"
+                      onClick={() =>
+                        setSelectedInstituteStatusId((current) =>
+                          current === institute.id ? null : institute.id
+                        )
+                      }
+                      className={`w-full rounded-xl border p-4 text-right transition hover:-translate-y-0.5 hover:shadow-sm ${
+                        selectedInstituteStatusId === institute.id
+                          ? "border-blue-300 bg-blue-50 ring-2 ring-blue-100"
+                          : "border-slate-200 bg-slate-50"
+                      }`}
                     >
                       <div className="mb-3 flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -1615,8 +1641,51 @@ export default function InstituteTasksPage() {
                           {institute.total}
                         </span>
                       </div>
-                    </div>
+                      <div className="mt-3 flex items-center justify-between text-xs font-semibold text-blue-700">
+                        <span>{selectedInstituteStatusId === institute.id ? "إخفاء التفاصيل" : "عرض تكليفات المعهد"}</span>
+                        {selectedInstituteStatusId === institute.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </div>
+                    </button>
                   ))}
+                </div>
+              )}
+
+              {selectedInstituteStatus && (
+                <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/50 p-4 md:p-5">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Users size={18} className="text-blue-600" />
+                        <h3 className="font-bold text-slate-900">تكليفات {selectedInstituteStatus.name}</h3>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">عرض حالة هذا المعهد فقط، مع الحفاظ على التكليف الجماعي كما هو.</p>
+                    </div>
+                    <button type="button" onClick={() => setSelectedInstituteStatusId(null)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                      <X size={15} />
+                      عرض كل المعاهد
+                    </button>
+                  </div>
+                  {selectedInstituteTasks.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-blue-200 bg-white px-4 py-6 text-center text-sm text-slate-500">لا توجد تكليفات لهذا المعهد حاليًا.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedInstituteTasks.map(({ task, target }) => {
+                        if (!target) return null;
+                        const overdue = isTargetOverdue(target, task.due_date);
+                        const targetLabel = overdue ? "متأخر" : target.status === "pending" ? "جديد" : target.status === "in_progress" ? "قيد التنفيذ" : target.status === "submitted" ? "تم التسليم" : "مكتمل";
+                        const targetClass = overdue ? "bg-red-100 text-red-700 border-red-200" : getStatusClass(target.status);
+                        return (
+                          <button key={`${task.id}-${target.id}`} type="button" onClick={() => setExpandedTaskId(task.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-right transition hover:border-blue-200 hover:shadow-sm">
+                            <div className="min-w-0">
+                              <div className="truncate font-semibold text-slate-900">{task.title}</div>
+                              <div className="mt-1 text-xs text-slate-500">الاستحقاق: {formatDate(task.due_date)}</div>
+                            </div>
+                            <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${targetClass}`}>{targetLabel}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
