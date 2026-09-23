@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -97,7 +96,7 @@ const requestTypeOptions: {
   { value: "need", label: "احتياج" },
   { value: "support", label: "دعم" },
   { value: "approval", label: "طلب اعتماد" },
-  { value: "report", label: "بلاغ" },
+  { value: "report", label: "تقرير" },
   { value: "other", label: "أخرى" },
 ];
 
@@ -119,13 +118,13 @@ const statusOptions: {
   { value: "in_progress", label: "قيد المعالجة" },
   {
     value: "needs_director_action",
-    label: "يحتاج تدخل المدير",
+    label: "تحتاج تدخل المدير",
   },
   { value: "resolved", label: "تم الحل" },
   { value: "closed", label: "مغلق" },
 ];
 
-function formatDate(value?: string | null) {
+function formatDate(value: string | null) {
   if (!value) return "—";
 
   return new Intl.DateTimeFormat("ar-EG", {
@@ -135,7 +134,7 @@ function formatDate(value?: string | null) {
   }).format(new Date(value));
 }
 
-function formatDateTime(value?: string | null) {
+function formatDateTime(value: string | null) {
   if (!value) return "—";
 
   return new Intl.DateTimeFormat("ar-EG", {
@@ -157,32 +156,33 @@ function isOverdue(request: InstituteRequest) {
     return false;
   }
 
-  return (
-    new Date(request.due_date).getTime() < Date.now()
-  );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const due = new Date(`${request.due_date}T00:00:00`);
+  due.setHours(0, 0, 0, 0);
+
+  return due < today;
 }
 
 function statusLabel(status: RequestStatus) {
   return (
-    statusOptions.find(
-      (item) => item.value === status
-    )?.label ?? status
+    statusOptions.find((item) => item.value === status)?.label ??
+    status
   );
 }
 
 function priorityLabel(priority: Priority) {
   return (
-    priorityOptions.find(
-      (item) => item.value === priority
-    )?.label ?? priority
+    priorityOptions.find((item) => item.value === priority)?.label ??
+    priority
   );
 }
 
 function typeLabel(type: RequestType) {
   return (
-    requestTypeOptions.find(
-      (item) => item.value === type
-    )?.label ?? type
+    requestTypeOptions.find((item) => item.value === type)?.label ??
+    type
   );
 }
 
@@ -220,24 +220,18 @@ function priorityClass(priority: Priority) {
       return "bg-amber-50 text-amber-700 border-amber-200";
 
     case "low":
-      return "bg-slate-50 text-slate-600 border-slate-200";
+      return "bg-slate-50 text-slate-700 border-slate-200";
 
     default:
-      return "bg-slate-50 text-slate-600 border-slate-200";
+      return "bg-slate-50 text-slate-700 border-slate-200";
   }
 }
 
 export default function InstituteRequestsPage() {
-  const [profile, setProfile] =
-    useState<Profile | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
 
-  const [institutes, setInstitutes] = useState<
-    Institute[]
-  >([]);
-
-  const [requests, setRequests] = useState<
-    InstituteRequest[]
-  >([]);
+  const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [requests, setRequests] = useState<InstituteRequest[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -245,17 +239,18 @@ export default function InstituteRequestsPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
 
-  const [statusFilter, setStatusFilter] =
-    useState<RequestStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    RequestStatus | "all"
+  >("all");
 
-  const [priorityFilter, setPriorityFilter] =
-    useState<Priority | "all">("all");
+  const [priorityFilter, setPriorityFilter] = useState<
+    Priority | "all"
+  >("all");
 
   const [instituteFilter, setInstituteFilter] =
     useState("all");
 
-  const [showCreate, setShowCreate] =
-    useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   const [selectedRequest, setSelectedRequest] =
     useState<InstituteRequest | null>(null);
@@ -268,12 +263,11 @@ export default function InstituteRequestsPage() {
     due_date: "",
   });
 
-  const [directorForm, setDirectorForm] =
-    useState({
-      status: "new" as RequestStatus,
-      director_response: "",
-      due_date: "",
-    });
+  const [directorForm, setDirectorForm] = useState({
+    status: "new" as RequestStatus,
+    director_response: "",
+    due_date: "",
+  });
 
   const isDirector =
     profile?.role === "director" ||
@@ -284,9 +278,7 @@ export default function InstituteRequestsPage() {
     profile?.role === "deputy" ||
     profile?.role === "employee";
 
-  async function loadData(
-    showRefresh = false
-  ) {
+  async function loadData(showRefresh = false) {
     try {
       if (showRefresh) {
         setRefreshing(true);
@@ -296,82 +288,61 @@ export default function InstituteRequestsPage() {
 
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError || !user) {
+      if (!user) {
         window.location.href =
           "/login?redirect=%2Finstitute-requests";
         return;
       }
 
-      const {
-        data: profileData,
-        error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select(
-          "id, role, full_name, institute_id, directorate_id"
-        )
-        .eq("id", user.id)
-        .single();
+      const { data: profileData, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select(
+            "id, role, full_name, institute_id, directorate_id"
+          )
+          .eq("id", user.id)
+          .single();
 
       if (profileError) {
-        console.error(
-          "Profile error:",
-          profileError
-        );
-
+        console.error(profileError);
         alert("تعذر تحميل بيانات المستخدم.");
         return;
       }
 
-      const currentProfile =
-        profileData as Profile;
+      const currentProfile = profileData as Profile;
 
       setProfile(currentProfile);
 
-      let instituteQuery = supabase
+      let institutesQuery = supabase
         .from("institutes")
-        .select(
-          "id, name, code, directorate_id"
-        )
+        .select("id, name, code, directorate_id")
         .order("name");
 
       if (
-        currentProfile.role !==
-          "super_admin" &&
+        currentProfile.role !== "super_admin" &&
         currentProfile.directorate_id
       ) {
-        instituteQuery =
-          instituteQuery.eq(
-            "directorate_id",
-            currentProfile.directorate_id
-          );
+        institutesQuery = institutesQuery.eq(
+          "directorate_id",
+          currentProfile.directorate_id
+        );
       }
 
       const {
         data: institutesData,
         error: institutesError,
-      } = await instituteQuery;
+      } = await institutesQuery;
 
       if (institutesError) {
-        console.error(
-          "Institutes error:",
-          institutesError
-        );
+        console.error(institutesError);
       }
 
       setInstitutes(
-        (institutesData ??
-          []) as Institute[]
+        (institutesData ?? []) as Institute[]
       );
 
-      /*
-       * مهم جدًا:
-       * استخدام Template Literal هنا لأن Supabase
-       * يحتاج نص select متعدد الأسطر.
-       */
       let requestQuery = supabase
         .from("institute_requests")
         .select(`
@@ -401,40 +372,27 @@ export default function InstituteRequestsPage() {
         });
 
       if (
-        currentProfile.role ===
-          "sheikh" ||
-        currentProfile.role ===
-          "deputy" ||
-        currentProfile.role ===
-          "employee"
+        currentProfile.role === "sheikh" ||
+        currentProfile.role === "deputy" ||
+        currentProfile.role === "employee"
       ) {
-        if (
+        if (!currentProfile.institute_id) {
+          setRequests([]);
+          return;
+        }
+
+        requestQuery = requestQuery.eq(
+          "institute_id",
           currentProfile.institute_id
-        ) {
-          requestQuery =
-            requestQuery.eq(
-              "institute_id",
-              currentProfile.institute_id
-            );
-        } else {
-          setRequests([]);
-          return;
-        }
+        );
       } else if (
-        currentProfile.role === "director"
+        currentProfile.role === "director" &&
+        currentProfile.directorate_id
       ) {
-        if (
+        requestQuery = requestQuery.eq(
+          "directorate_id",
           currentProfile.directorate_id
-        ) {
-          requestQuery =
-            requestQuery.eq(
-              "directorate_id",
-              currentProfile.directorate_id
-            );
-        } else {
-          setRequests([]);
-          return;
-        }
+        );
       }
 
       const {
@@ -443,31 +401,20 @@ export default function InstituteRequestsPage() {
       } = await requestQuery;
 
       if (requestsError) {
-        console.error(
-          "Requests error:",
-          requestsError
-        );
-
+        console.error(requestsError);
         alert(
-          `تعذر تحميل الطلبات:\n${requestsError.message}`
+          "تعذر تحميل طلبات المعاهد: " +
+            requestsError.message
         );
-
         return;
       }
 
       setRequests(
-        (requestsData ??
-          []) as unknown as InstituteRequest[]
+        (requestsData ?? []) as InstituteRequest[]
       );
     } catch (error) {
-      console.error(
-        "Load data error:",
-        error
-      );
-
-      alert(
-        "حدث خطأ أثناء تحميل البيانات."
-      );
+      console.error(error);
+      alert("حدث خطأ أثناء تحميل البيانات.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -479,15 +426,12 @@ export default function InstituteRequestsPage() {
   }, []);
 
   const filteredRequests = useMemo(() => {
-    const search =
-      searchTerm.trim().toLowerCase();
+    const search = searchTerm.trim().toLowerCase();
 
     return requests.filter((request) => {
       const matchesSearch =
         !search ||
-        request.title
-          .toLowerCase()
-          .includes(search) ||
+        request.title.toLowerCase().includes(search) ||
         request.description
           .toLowerCase()
           .includes(search) ||
@@ -505,8 +449,7 @@ export default function InstituteRequestsPage() {
 
       const matchesInstitute =
         instituteFilter === "all" ||
-        request.institute_id ===
-          instituteFilter;
+        request.institute_id === instituteFilter;
 
       return (
         matchesSearch &&
@@ -528,27 +471,26 @@ export default function InstituteRequestsPage() {
       total: requests.length,
 
       new: requests.filter(
-        (item) => item.status === "new"
+        (request) => request.status === "new"
       ).length,
 
       inProgress: requests.filter(
-        (item) =>
-          item.status === "in_progress"
+        (request) => request.status === "in_progress"
       ).length,
 
       needsDirector: requests.filter(
-        (item) =>
-          item.status ===
-          "needs_director_action"
+        (request) =>
+          request.status === "needs_director_action"
       ).length,
 
-      overdue: requests.filter((item) =>
-        isOverdue(item)
+      overdue: requests.filter((request) =>
+        isOverdue(request)
       ).length,
 
       resolved: requests.filter(
-        (item) =>
-          item.status === "resolved"
+        (request) =>
+          request.status === "resolved" ||
+          request.status === "closed"
       ).length,
     };
   }, [requests]);
@@ -563,31 +505,17 @@ export default function InstituteRequestsPage() {
     });
   }
 
-  function openCreateModal() {
-    resetCreateForm();
-    setShowCreate(true);
-  }
-
   function closeCreateModal() {
     setShowCreate(false);
     resetCreateForm();
   }
 
-  /*
-   * الإصلاح الأساسي:
-   * عند فتح الطلب نضع الحالة الحالية كما هي.
-   *
-   * لا يوجد هنا:
-   *
-   * request.status === "new"
-   *   ? "in_progress"
-   *   : request.status
-   *
-   * وبالتالي فتح الطلب لا يغير حالته.
-   */
-  function openRequest(
-    request: InstituteRequest
-  ) {
+  function openRequest(request: InstituteRequest) {
+    /*
+      مهم جدًا:
+      فتح الطلب لا يغير حالته.
+      نقرأ الحالة الحالية من الطلب نفسه.
+    */
     setSelectedRequest(request);
 
     setDirectorForm({
@@ -609,45 +537,34 @@ export default function InstituteRequestsPage() {
   }
 
   async function createRequest() {
-    if (!profile) {
-      alert(
-        "بيانات المستخدم غير متاحة."
-      );
-      return;
-    }
-
     if (!canCreate) {
       alert(
-        "ليس لديك صلاحية إنشاء طلب."
+        "ليس لديك صلاحية لإنشاء طلب جديد."
       );
       return;
     }
 
-    if (!profile.institute_id) {
+    if (!profile?.institute_id) {
       alert(
-        "لا يوجد معهد مرتبط بحسابك. يرجى مراجعة مدير النظام."
+        "لا يوجد معهد مرتبط بحساب المستخدم."
       );
       return;
     }
 
-    if (!profile.directorate_id) {
+    if (!profile?.directorate_id) {
       alert(
-        "لا توجد إدارة تعليمية مرتبطة بحسابك."
+        "لا توجد إدارة تعليمية مرتبطة بحساب المستخدم."
       );
       return;
     }
 
     if (!form.title.trim()) {
-      alert(
-        "برجاء كتابة عنوان الطلب."
-      );
+      alert("برجاء كتابة عنوان الطلب.");
       return;
     }
 
     if (!form.description.trim()) {
-      alert(
-        "برجاء كتابة تفاصيل الطلب."
-      );
+      alert("برجاء كتابة تفاصيل الطلب.");
       return;
     }
 
@@ -683,33 +600,27 @@ export default function InstituteRequestsPage() {
         });
 
       if (error) {
-        console.error(
-          "Create request error:",
-          error
-        );
+        console.error(error);
 
         alert(
-          `تعذر إنشاء الطلب:\n${error.message}`
+          "تعذر إنشاء الطلب: " +
+            error.message
         );
 
         return;
       }
 
       alert(
-        "تم إرسال الطلب بنجاح ✅"
+        "تم إرسال الطلب إلى مدير الإدارة بنجاح ✅"
       );
 
       closeCreateModal();
 
       await loadData(true);
     } catch (error) {
-      console.error(
-        "Create request exception:",
-        error
-      );
-
+      console.error(error);
       alert(
-        "حدث خطأ أثناء إرسال الطلب."
+        "حدث خطأ أثناء إنشاء الطلب."
       );
     } finally {
       setSaving(false);
@@ -717,88 +628,121 @@ export default function InstituteRequestsPage() {
   }
 
   async function updateRequest() {
-    if (!selectedRequest) {
-      return;
-    }
+    if (!selectedRequest) return;
 
     if (!isDirector) {
       alert(
         "تعديل حالة الطلب ورد الإدارة متاح لمدير الإدارة فقط."
       );
-
       return;
     }
 
+    const newStatus =
+      directorForm.status;
+
+    const newResponse =
+      directorForm.director_response.trim() ||
+      null;
+
+    const newDueDate =
+      directorForm.due_date || null;
+
     if (
-      (directorForm.status ===
-        "resolved" ||
-        directorForm.status ===
-          "closed") &&
-      !directorForm.director_response.trim()
+      (newStatus === "resolved" ||
+        newStatus === "closed") &&
+      !newResponse
     ) {
       alert(
         "برجاء كتابة رد الإدارة قبل تحويل الطلب إلى تم الحل أو مغلق."
       );
+      return;
+    }
 
+    /*
+      تحديد بيانات الحل فقط عند الانتقال
+      فعليًا إلى حالة تم الحل / مغلق.
+    */
+    const isNowResolved =
+      newStatus === "resolved" ||
+      newStatus === "closed";
+
+    const wasResolved =
+      selectedRequest.status === "resolved" ||
+      selectedRequest.status === "closed";
+
+    const newResolvedAt = isNowResolved
+      ? wasResolved
+        ? selectedRequest.resolved_at
+        : new Date().toISOString()
+      : null;
+
+    const newResolvedBy = isNowResolved
+      ? wasResolved
+        ? selectedRequest.resolved_by
+        : profile?.id ?? null
+      : null;
+
+    /*
+      أهم إصلاح:
+      لا نرسل UPDATE إلى Supabase
+      إذا لم يتغير أي شيء.
+      
+      هذا يمنع إنشاء سجلات متابعة وهمية
+      عند الضغط على حفظ بدون تعديل.
+    */
+    const hasChanges =
+      newStatus !== selectedRequest.status ||
+      newResponse !==
+        selectedRequest.director_response ||
+      newDueDate !== selectedRequest.due_date ||
+      newResolvedAt !==
+        selectedRequest.resolved_at ||
+      newResolvedBy !==
+        selectedRequest.resolved_by;
+
+    if (!hasChanges) {
+      alert(
+        "لا توجد تغييرات جديدة لحفظها."
+      );
       return;
     }
 
     try {
       setSaving(true);
 
-      const updateData: {
-        status: RequestStatus;
-        director_response:
-          | string
-          | null;
-        due_date: string | null;
-        updated_at: string;
-        resolved_at?: string | null;
-        resolved_by?: string | null;
-      } = {
-        status: directorForm.status,
+      const updateData = {
+        status: newStatus,
 
         director_response:
-          directorForm.director_response.trim() ||
-          null,
+          newResponse,
 
         due_date:
-          directorForm.due_date || null,
+          newDueDate,
 
         updated_at:
           new Date().toISOString(),
+
+        resolved_at:
+          newResolvedAt,
+
+        resolved_by:
+          newResolvedBy,
       };
-
-      if (
-        directorForm.status ===
-          "resolved" ||
-        directorForm.status ===
-          "closed"
-      ) {
-        updateData.resolved_at =
-          selectedRequest.resolved_at ??
-          new Date().toISOString();
-
-        updateData.resolved_by =
-          profile?.id ?? null;
-      } else {
-        updateData.resolved_at = null;
-        updateData.resolved_by = null;
-      }
 
       const { error } = await supabase
         .from("institute_requests")
         .update(updateData)
-        .eq("id", selectedRequest.id);
-
-      if (error) {
-        console.error(
-          "Update request error:",
-          error
+        .eq(
+          "id",
+          selectedRequest.id
         );
 
+      if (error) {
+        console.error(error);
+
         alert(
-          `تعذر حفظ تحديث الطلب:\n${error.message}`
+          "تعذر تحديث الطلب: " +
+            error.message
         );
 
         return;
@@ -812,471 +756,461 @@ export default function InstituteRequestsPage() {
 
       await loadData(true);
     } catch (error) {
-      console.error(
-        "Update request exception:",
-        error
-      );
+      console.error(error);
 
       alert(
-        "حدث خطأ أثناء حفظ تحديث الطلب."
+        "حدث خطأ أثناء تحديث الطلب."
       );
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) {
-    return (
-      <AppShell>
-        <div
-          className="flex min-h-[70vh] items-center justify-center"
-          dir="rtl"
-        >
-          <div className="flex flex-col items-center gap-3 text-slate-600">
-            <Loader2 className="h-8 w-8 animate-spin" />
-
-            <span>
-              جاري تحميل طلبات المعاهد...
-            </span>
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
-
   return (
     <AppShell>
       <div
         dir="rtl"
-        className="space-y-6 pb-10"
+        className="min-h-screen bg-slate-50"
       >
-        {/* Header */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
-              <FileText className="h-4 w-4" />
+        <div className="mx-auto max-w-7xl p-4 md:p-6 lg:p-8">
 
-              <span>
+          {/* Header */}
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
+                <Bell className="h-4 w-4" />
+
+                <span>
+                  منصة الإدارة والمتابعة المركزية
+                </span>
+              </div>
+
+              <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">
                 طلبات المعاهد
-              </span>
+              </h1>
+
+              <p className="mt-2 text-sm text-slate-500">
+                قناة مباشرة ومنظمة بين المعاهد
+                ومدير الإدارة للطلبات والمشكلات
+                والاحتياجات والمتابعة حتى الحل والإغلاق.
+              </p>
+
+              {profile && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="rounded-full bg-white px-3 py-1.5 font-medium text-slate-700 shadow-sm ring-1 ring-slate-200">
+                    {isDirector
+                      ? "مدير الإدارة التعليمية الأزهرية"
+                      : profile.role === "sheikh"
+                      ? "شيخ المعهد"
+                      : "مستخدم المعهد"}
+                  </span>
+                </div>
+              )}
             </div>
 
-            <h1 className="text-2xl font-bold text-slate-900">
-              طلبات المعاهد
-            </h1>
+            <div className="flex items-center gap-2">
 
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              قناة مباشرة ومنظمة بين المعاهد ومدير
-              الإدارة للطلبات والمشكلات والاحتياجات
-              والمتابعة حتى الحل والإغلاق.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                loadData(true)
-              }
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${
-                  refreshing
-                    ? "animate-spin"
-                    : ""
-                }`}
-              />
-
-              تحديث
-            </button>
-
-            {canCreate && (
               <button
                 type="button"
-                onClick={
-                  openCreateModal
-                }
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                onClick={() => loadData(true)}
+                disabled={refreshing}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Plus className="h-4 w-4" />
+                <RefreshCw
+                  className={`h-4 w-4 ${
+                    refreshing
+                      ? "animate-spin"
+                      : ""
+                  }`}
+                />
 
-                طلب جديد
+                تحديث
               </button>
-            )}
+
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowCreate(true)
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                >
+                  <Plus className="h-4 w-4" />
+
+                  طلب جديد
+                </button>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-          <StatCard
-            icon={
-              <FileText className="h-5 w-5" />
-            }
-            label="إجمالي الطلبات"
-            value={stats.total}
-          />
+          {/* Stats */}
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 
-          <StatCard
-            icon={
-              <Bell className="h-5 w-5" />
-            }
-            label="جديدة"
-            value={stats.new}
-          />
+            <StatCard
+              title="إجمالي الطلبات"
+              value={stats.total}
+              icon={
+                <FileText className="h-5 w-5" />
+              }
+            />
 
-          <StatCard
-            icon={
-              <Clock3 className="h-5 w-5" />
-            }
-            label="قيد المعالجة"
-            value={stats.inProgress}
-          />
+            <StatCard
+              title="جديدة"
+              value={stats.new}
+              icon={
+                <Bell className="h-5 w-5" />
+              }
+            />
 
-          <StatCard
-            icon={
-              <AlertCircle className="h-5 w-5" />
-            }
-            label="تحتاج تدخل المدير"
-            value={stats.needsDirector}
-          />
+            <StatCard
+              title="قيد المعالجة"
+              value={stats.inProgress}
+              icon={
+                <Clock3 className="h-5 w-5" />
+              }
+            />
 
-          <StatCard
-            icon={
-              <CalendarDays className="h-5 w-5" />
-            }
-            label="متأخرة"
-            value={stats.overdue}
-          />
+            <StatCard
+              title="تحتاج تدخل المدير"
+              value={stats.needsDirector}
+              icon={
+                <AlertCircle className="h-5 w-5" />
+              }
+            />
 
-          <StatCard
-            icon={
-              <CheckCircle2 className="h-5 w-5" />
-            }
-            label="تم الحل"
-            value={stats.resolved}
-          />
-        </div>
+            <StatCard
+              title="متأخرة"
+              value={stats.overdue}
+              icon={
+                <CalendarDays className="h-5 w-5" />
+              }
+            />
 
-        {/* Director warning */}
-        {isDirector &&
-          stats.needsDirector > 0 && (
-            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            <StatCard
+              title="تم الحل"
+              value={stats.resolved}
+              icon={
+                <CheckCircle2 className="h-5 w-5" />
+              }
+            />
+          </div>
 
-              <div>
-                <div className="font-semibold">
-                  توجد طلبات تحتاج تدخل المدير
-                </div>
+          {isDirector &&
+            stats.needsDirector > 0 && (
+              <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
 
-                <div className="mt-1 text-sm leading-6">
-                  يوجد{" "}
-                  {stats.needsDirector}{" "}
-                  طلب بحاجة إلى مراجعتك
-                  واتخاذ إجراء.
+                <div>
+                  <p className="font-semibold">
+                    توجد طلبات تحتاج تدخل المدير
+                  </p>
+
+                  <p className="mt-1 text-sm">
+                    يوجد حاليًا{" "}
+                    {stats.needsDirector}{" "}
+                    طلب يحتاج إلى إجراء من الإدارة.
+                  </p>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-        {/* Filters */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <Filter className="h-4 w-4" />
+          {/* Filters */}
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 
-            تصفية الطلبات
-          </div>
+            <div className="mb-4 flex items-center gap-2">
+              <Filter className="h-5 w-5 text-slate-500" />
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="relative">
-              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-
-              <input
-                value={searchTerm}
-                onChange={(e) =>
-                  setSearchTerm(
-                    e.target.value
-                  )
-                }
-                placeholder="بحث في الطلبات..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pr-10 pl-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white"
-              />
+              <h2 className="font-semibold text-slate-900">
+                البحث والتصفية
+              </h2>
             </div>
 
-            <select
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(
-                  e.target.value as
-                    | RequestStatus
-                    | "all"
-                )
-              }
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
-            >
-              <option value="all">
-                كل الحالات
-              </option>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
 
-              {statusOptions.map(
-                (option) => (
-                  <option
-                    key={option.value}
-                    value={
-                      option.value
-                    }
-                  >
-                    {option.label}
-                  </option>
-                )
-              )}
-            </select>
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
-            <select
-              value={priorityFilter}
-              onChange={(e) =>
-                setPriorityFilter(
-                  e.target.value as
-                    | Priority
-                    | "all"
-                )
-              }
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
-            >
-              <option value="all">
-                كل الأولويات
-              </option>
+                <input
+                  value={searchTerm}
+                  onChange={(event) =>
+                    setSearchTerm(
+                      event.target.value
+                    )
+                  }
+                  placeholder="بحث في الطلبات..."
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pr-10 pl-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                />
+              </div>
 
-              {priorityOptions.map(
-                (option) => (
-                  <option
-                    key={option.value}
-                    value={
-                      option.value
-                    }
-                  >
-                    {option.label}
-                  </option>
-                )
-              )}
-            </select>
-
-            {isDirector ? (
               <select
-                value={
-                  instituteFilter
-                }
-                onChange={(e) =>
-                  setInstituteFilter(
-                    e.target.value
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(
+                    event.target.value as
+                      | RequestStatus
+                      | "all"
                   )
                 }
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400"
               >
                 <option value="all">
-                  كل المعاهد
+                  كل الحالات
                 </option>
 
-                {institutes.map(
-                  (institute) => (
+                {statusOptions.map(
+                  (option) => (
                     <option
-                      key={institute.id}
-                      value={institute.id}
+                      key={option.value}
+                      value={option.value}
                     >
-                      {institute.name}
+                      {option.label}
                     </option>
                   )
                 )}
               </select>
+
+              <select
+                value={priorityFilter}
+                onChange={(event) =>
+                  setPriorityFilter(
+                    event.target.value as
+                      | Priority
+                      | "all"
+                  )
+                }
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+              >
+                <option value="all">
+                  كل الأولويات
+                </option>
+
+                {priorityOptions.map(
+                  (option) => (
+                    <option
+                      key={option.value}
+                      value={option.value}
+                    >
+                      {option.label}
+                    </option>
+                  )
+                )}
+              </select>
+
+              {isDirector ? (
+                <select
+                  value={instituteFilter}
+                  onChange={(event) =>
+                    setInstituteFilter(
+                      event.target.value
+                    )
+                  }
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                >
+                  <option value="all">
+                    كل المعاهد
+                  </option>
+
+                  {institutes.map(
+                    (institute) => (
+                      <option
+                        key={institute.id}
+                        value={institute.id}
+                      >
+                        {institute.name}
+                      </option>
+                    )
+                  )}
+                </select>
+              ) : (
+                <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600">
+                  <Building2 className="ml-2 h-4 w-4" />
+
+                  طلبات المعهد الحالي فقط
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Requests */}
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+            <div className="flex flex-col gap-3 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between">
+
+              <div>
+                <h2 className="font-bold text-slate-900">
+                  قائمة الطلبات
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  عرض {filteredRequests.length}{" "}
+                  من أصل {requests.length} طلب
+                </p>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="flex min-h-[300px] items-center justify-center">
+                <div className="flex items-center gap-3 text-slate-500">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+
+                  جاري تحميل الطلبات...
+                </div>
+              </div>
+            ) : filteredRequests.length === 0 ? (
+              <div className="flex min-h-[300px] flex-col items-center justify-center p-8 text-center">
+
+                <div className="mb-4 rounded-full bg-slate-100 p-4">
+                  <FileText className="h-8 w-8 text-slate-400" />
+                </div>
+
+                <h3 className="font-semibold text-slate-800">
+                  لا توجد طلبات
+                </h3>
+
+                <p className="mt-2 max-w-md text-sm text-slate-500">
+                  لا توجد طلبات مطابقة للبحث أو
+                  الفلاتر الحالية.
+                </p>
+              </div>
             ) : (
-              <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500">
-                طلبات المعهد الحالي فقط
+              <div className="divide-y divide-slate-100">
+
+                {filteredRequests.map(
+                  (request) => (
+                    <button
+                      key={request.id}
+                      type="button"
+                      onClick={() =>
+                        openRequest(request)
+                      }
+                      className="block w-full p-5 text-right transition hover:bg-slate-50"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+
+                        <div className="min-w-0 flex-1">
+
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+
+                            <h3 className="text-base font-bold text-slate-900">
+                              {request.title}
+                            </h3>
+
+                            <span
+                              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(
+                                request.status
+                              )}`}
+                            >
+                              {statusLabel(
+                                request.status
+                              )}
+                            </span>
+
+                            <span
+                              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${priorityClass(
+                                request.priority
+                              )}`}
+                            >
+                              {priorityLabel(
+                                request.priority
+                              )}
+                            </span>
+
+                            {isOverdue(
+                              request
+                            ) && (
+                              <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+                                متأخر
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="mb-3 line-clamp-2 text-sm leading-6 text-slate-600">
+                            {request.description}
+                          </p>
+
+                          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500">
+
+                            <span className="inline-flex items-center gap-1.5">
+                              <Building2 className="h-4 w-4" />
+
+                              {request.institute
+                                ?.name ??
+                                "غير محدد"}
+                            </span>
+
+                            <span className="inline-flex items-center gap-1.5">
+                              <FileText className="h-4 w-4" />
+
+                              {typeLabel(
+                                request.request_type
+                              )}
+                            </span>
+
+                            <span className="inline-flex items-center gap-1.5">
+                              <CalendarDays className="h-4 w-4" />
+
+                              {formatDateTime(
+                                request.created_at
+                              )}
+                            </span>
+
+                            {request.due_date && (
+                              <span className="inline-flex items-center gap-1.5">
+                                <Clock3 className="h-4 w-4" />
+
+                                المتابعة:{" "}
+                                {formatDate(
+                                  request.due_date
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-500">
+                          التفاصيل
+
+                          <ArrowLeft className="h-4 w-4" />
+                        </div>
+                      </div>
+                    </button>
+                  )
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Requests */}
-        {filteredRequests.length ===
-        0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-              <FileText className="h-7 w-7 text-slate-400" />
-            </div>
-
-            <h3 className="font-semibold text-slate-800">
-              لا توجد طلبات
-            </h3>
-
-            <p className="mt-2 text-sm text-slate-500">
-              لا توجد طلبات مطابقة للفلاتر
-              الحالية.
-            </p>
-
-            {canCreate && (
-              <button
-                type="button"
-                onClick={
-                  openCreateModal
-                }
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                <Plus className="h-4 w-4" />
-
-                إنشاء طلب جديد
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredRequests.map(
-              (request) => (
-                <div
-                  key={request.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-base font-bold text-slate-900">
-                          {request.title}
-                        </h2>
-
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${priorityClass(
-                            request.priority
-                          )}`}
-                        >
-                          {priorityLabel(
-                            request.priority
-                          )}
-                        </span>
-
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusClass(
-                            request.status
-                          )}`}
-                        >
-                          {statusLabel(
-                            request.status
-                          )}
-                        </span>
-
-                        {isOverdue(
-                          request
-                        ) && (
-                          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
-                            متأخر
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Building2 className="h-3.5 w-3.5" />
-
-                          {request.institute
-                            ?.name ??
-                            "—"}
-                        </span>
-
-                        <span>
-                          النوع:{" "}
-                          {typeLabel(
-                            request.request_type
-                          )}
-                        </span>
-
-                        <span>
-                          إنشاء:{" "}
-                          {formatDateTime(
-                            request.created_at
-                          )}
-                        </span>
-
-                        <span>
-                          آخر تحديث:{" "}
-                          {formatDateTime(
-                            request.updated_at
-                          )}
-                        </span>
-                      </div>
-
-                      <p className="mt-4 line-clamp-2 text-sm leading-6 text-slate-600">
-                        {
-                          request.description
-                        }
-                      </p>
-
-                      {request.director_response && (
-                        <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-                          <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-emerald-800">
-                            <MessageSquare className="h-3.5 w-3.5" />
-
-                            رد الإدارة
-                          </div>
-
-                          <p className="text-sm leading-6 text-emerald-900">
-                            {
-                              request.director_response
-                            }
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openRequest(
-                          request
-                        )
-                      }
-                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                    >
-                      عرض الطلب
-
-                      <ArrowLeft className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-        )}
-
         {/* Create Modal */}
         {showCreate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-            <div
-              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
-              dir="rtl"
-            >
-              <div className="flex items-center justify-between border-b border-slate-200 p-5">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+
+            <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+
+              <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white p-5">
+
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">
+                  <h2 className="text-xl font-bold text-slate-900">
                     إنشاء طلب جديد
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    سيتم إرسال الطلب مباشرة
-                    إلى مدير الإدارة.
+                    سيتم إرسال الطلب إلى مدير الإدارة.
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={
-                    closeCreateModal
-                  }
-                  className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  onClick={closeCreateModal}
+                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
               <div className="space-y-5 p-5">
+
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     عنوان الطلب
@@ -1284,46 +1218,20 @@ export default function InstituteRequestsPage() {
 
                   <input
                     value={form.title}
-                    onChange={(e) =>
-                      setForm(
-                        (prev) => ({
-                          ...prev,
-                          title: e.target
-                            .value,
-                        })
-                      )
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        title:
+                          event.target.value,
+                      }))
                     }
-                    placeholder="مثال: طلب حبر للطابعة"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-400"
+                    placeholder="مثال: طلب صيانة جهاز كمبيوتر"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                   />
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    تفاصيل الطلب
-                  </label>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
-                  <textarea
-                    value={
-                      form.description
-                    }
-                    onChange={(e) =>
-                      setForm(
-                        (prev) => ({
-                          ...prev,
-                          description:
-                            e.target
-                              .value,
-                        })
-                      )
-                    }
-                    rows={5}
-                    placeholder="اكتب تفاصيل الطلب أو المشكلة..."
-                    className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-400"
-                  />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
                       نوع الطلب
@@ -1333,31 +1241,25 @@ export default function InstituteRequestsPage() {
                       value={
                         form.request_type
                       }
-                      onChange={(e) =>
-                        setForm(
-                          (prev) => ({
-                            ...prev,
-                            request_type:
-                              e.target
-                                .value as RequestType,
-                          })
-                        )
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          request_type:
+                            event.target
+                              .value as RequestType,
+                        }))
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400"
                     >
                       {requestTypeOptions.map(
                         (option) => (
                           <option
-                            key={
-                              option.value
-                            }
+                            key={option.value}
                             value={
                               option.value
                             }
                           >
-                            {
-                              option.label
-                            }
+                            {option.label}
                           </option>
                         )
                       )}
@@ -1370,34 +1272,26 @@ export default function InstituteRequestsPage() {
                     </label>
 
                     <select
-                      value={
-                        form.priority
-                      }
-                      onChange={(e) =>
-                        setForm(
-                          (prev) => ({
-                            ...prev,
-                            priority:
-                              e.target
-                                .value as Priority,
-                          })
-                        )
+                      value={form.priority}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          priority:
+                            event.target
+                              .value as Priority,
+                        }))
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400"
                     >
                       {priorityOptions.map(
                         (option) => (
                           <option
-                            key={
-                              option.value
-                            }
+                            key={option.value}
                             value={
                               option.value
                             }
                           >
-                            {
-                              option.label
-                            }
+                            {option.label}
                           </option>
                         )
                       )}
@@ -1406,7 +1300,7 @@ export default function InstituteRequestsPage() {
 
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      تاريخ الاستحقاق
+                      تاريخ المتابعة
                     </label>
 
                     <input
@@ -1414,27 +1308,45 @@ export default function InstituteRequestsPage() {
                       value={
                         form.due_date
                       }
-                      onChange={(e) =>
-                        setForm(
-                          (prev) => ({
-                            ...prev,
-                            due_date:
-                              e.target
-                                .value,
-                          })
-                        )
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          due_date:
+                            event.target.value,
+                        }))
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400"
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    تفاصيل الطلب
+                  </label>
+
+                  <textarea
+                    value={
+                      form.description
+                    }
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        description:
+                          event.target.value,
+                      }))
+                    }
+                    rows={6}
+                    placeholder="اكتب تفاصيل المشكلة أو الاحتياج..."
+                    className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm leading-6 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  />
+                </div>
+
+                <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+
                   <button
                     type="button"
-                    onClick={
-                      closeCreateModal
-                    }
+                    onClick={closeCreateModal}
                     className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     إلغاء
@@ -1442,11 +1354,9 @@ export default function InstituteRequestsPage() {
 
                   <button
                     type="button"
-                    onClick={
-                      createRequest
-                    }
+                    onClick={createRequest}
                     disabled={saving}
-                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {saving ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -1464,16 +1374,18 @@ export default function InstituteRequestsPage() {
 
         {/* Details Modal */}
         {selectedRequest && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-            <div
-              className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
-              dir="rtl"
-            >
-              <div className="flex items-start justify-between border-b border-slate-200 p-5">
-                <div className="min-w-0">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+
+            <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+
+              <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-100 bg-white p-5">
+
+                <div className="min-w-0 pr-4">
+
                   <div className="mb-2 flex flex-wrap items-center gap-2">
+
                     <span
-                      className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusClass(
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(
                         selectedRequest.status
                       )}`}
                     >
@@ -1483,7 +1395,7 @@ export default function InstituteRequestsPage() {
                     </span>
 
                     <span
-                      className={`rounded-full border px-2.5 py-1 text-xs font-medium ${priorityClass(
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${priorityClass(
                         selectedRequest.priority
                       )}`}
                     >
@@ -1494,33 +1406,36 @@ export default function InstituteRequestsPage() {
                   </div>
 
                   <h2 className="text-xl font-bold text-slate-900">
-                    {
-                      selectedRequest.title
-                    }
+                    {selectedRequest.title}
                   </h2>
 
-                  <p className="mt-2 text-sm text-slate-500">
-                    {selectedRequest
-                      .institute
-                      ?.name ?? "—"}
-                  </p>
+                  <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                    <Building2 className="h-4 w-4" />
+
+                    {selectedRequest.institute
+                      ?.name ??
+                      "غير محدد"}
+                  </div>
                 </div>
 
                 <button
                   type="button"
-                  onClick={
-                    closeRequest
-                  }
-                  className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  onClick={closeRequest}
+                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
               <div className="space-y-6 p-5">
-                {/* Information */}
-                <div className="grid gap-4 md:grid-cols-2">
+
+                {/* Info */}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+
                   <InfoItem
+                    icon={
+                      <FileText className="h-4 w-4" />
+                    }
                     label="نوع الطلب"
                     value={typeLabel(
                       selectedRequest.request_type
@@ -1528,6 +1443,9 @@ export default function InstituteRequestsPage() {
                   />
 
                   <InfoItem
+                    icon={
+                      <CalendarDays className="h-4 w-4" />
+                    }
                     label="تاريخ الإنشاء"
                     value={formatDateTime(
                       selectedRequest.created_at
@@ -1535,14 +1453,10 @@ export default function InstituteRequestsPage() {
                   />
 
                   <InfoItem
-                    label="آخر تحديث"
-                    value={formatDateTime(
-                      selectedRequest.updated_at
-                    )}
-                  />
-
-                  <InfoItem
-                    label="تاريخ الاستحقاق"
+                    icon={
+                      <Clock3 className="h-4 w-4" />
+                    }
+                    label="تاريخ المتابعة"
                     value={formatDate(
                       selectedRequest.due_date
                     )}
@@ -1550,112 +1464,122 @@ export default function InstituteRequestsPage() {
                 </div>
 
                 {/* Description */}
-                <div>
-                  <div className="mb-2 text-sm font-semibold text-slate-800">
-                    تفاصيل الطلب
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+
+                  <div className="mb-3 flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5 text-slate-500" />
+
+                    <h3 className="font-bold text-slate-900">
+                      تفاصيل الطلب
+                    </h3>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-700">
-                    {
-                      selectedRequest.description
-                    }
-                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
+                    {selectedRequest.description}
+                  </p>
                 </div>
 
                 {/* Existing response */}
                 {selectedRequest.director_response && (
-                  <div>
-                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                      <MessageSquare className="h-4 w-4" />
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
 
-                      رد الإدارة الحالي
+                    <div className="mb-3 flex items-center gap-2 text-emerald-800">
+                      <CheckCircle2 className="h-5 w-5" />
+
+                      <h3 className="font-bold">
+                        رد الإدارة
+                      </h3>
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-7 text-emerald-900">
+                    <p className="whitespace-pre-wrap text-sm leading-7 text-emerald-900">
                       {
                         selectedRequest.director_response
                       }
-                    </div>
+                    </p>
                   </div>
                 )}
 
-                {/* Director */}
+                {/* Director controls */}
                 {isDirector ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+
                     <div className="mb-5">
-                      <h3 className="font-bold text-slate-900">
-                        متابعة المدير
+
+                      <h3 className="text-lg font-bold text-slate-900">
+                        متابعة الطلب
                       </h3>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        يمكنك تحديث حالة الطلب ورد
-                        الإدارة وتاريخ الاستحقاق.
+                        يمكنك تحديث حالة الطلب ورد الإدارة
+                        وتاريخ المتابعة.
                       </p>
                     </div>
 
                     <div className="space-y-5">
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-slate-700">
-                          حالة الطلب
-                        </label>
 
-                        <select
-                          value={
-                            directorForm.status
-                          }
-                          onChange={(e) =>
-                            setDirectorForm(
-                              (prev) => ({
-                                ...prev,
-                                status:
-                                  e.target
-                                    .value as RequestStatus,
-                              })
-                            )
-                          }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400"
-                        >
-                          {statusOptions.map(
-                            (option) => (
-                              <option
-                                key={
-                                  option.value
-                                }
-                                value={
-                                  option.value
-                                }
-                              >
-                                {
-                                  option.label
-                                }
-                              </option>
-                            )
-                          )}
-                        </select>
-                      </div>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-slate-700">
-                          تاريخ الاستحقاق
-                        </label>
+                        <div>
+                          <label className="mb-2 block text-sm font-semibold text-slate-700">
+                            حالة الطلب
+                          </label>
 
-                        <input
-                          type="date"
-                          value={
-                            directorForm.due_date
-                          }
-                          onChange={(e) =>
-                            setDirectorForm(
-                              (prev) => ({
-                                ...prev,
-                                due_date:
-                                  e.target
-                                    .value,
-                              })
-                            )
-                          }
-                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400"
-                        />
+                          <select
+                            value={
+                              directorForm.status
+                            }
+                            onChange={(event) =>
+                              setDirectorForm(
+                                (prev) => ({
+                                  ...prev,
+                                  status:
+                                    event.target
+                                      .value as RequestStatus,
+                                })
+                              )
+                            }
+                            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                          >
+                            {statusOptions.map(
+                              (option) => (
+                                <option
+                                  key={
+                                    option.value
+                                  }
+                                  value={
+                                    option.value
+                                  }
+                                >
+                                  {option.label}
+                                </option>
+                              )
+                            )}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-sm font-semibold text-slate-700">
+                            تاريخ المتابعة
+                          </label>
+
+                          <input
+                            type="date"
+                            value={
+                              directorForm.due_date
+                            }
+                            onChange={(event) =>
+                              setDirectorForm(
+                                (prev) => ({
+                                  ...prev,
+                                  due_date:
+                                    event.target
+                                      .value,
+                                })
+                              )
+                            }
+                            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                          />
+                        </div>
                       </div>
 
                       <div>
@@ -1667,40 +1591,37 @@ export default function InstituteRequestsPage() {
                           value={
                             directorForm.director_response
                           }
-                          onChange={(e) =>
+                          onChange={(event) =>
                             setDirectorForm(
                               (prev) => ({
                                 ...prev,
                                 director_response:
-                                  e.target
+                                  event.target
                                     .value,
                               })
                             )
                           }
                           rows={5}
                           placeholder="اكتب رد الإدارة أو الإجراء الذي تم اتخاذه..."
-                          className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-7 outline-none focus:border-slate-400"
+                          className="w-full resize-none rounded-xl border border-slate-200 px-3 py-3 text-sm leading-6 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                         />
                       </div>
 
-                      <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
+                      <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+
                         <button
                           type="button"
-                          onClick={
-                            closeRequest
-                          }
-                          className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                          onClick={closeRequest}
+                          className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                         >
                           إغلاق
                         </button>
 
                         <button
                           type="button"
-                          onClick={
-                            updateRequest
-                          }
+                          onClick={updateRequest}
                           disabled={saving}
-                          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {saving ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1708,25 +1629,27 @@ export default function InstituteRequestsPage() {
                             <CheckCircle2 className="h-4 w-4" />
                           )}
 
-                          حفظ تحديث الطلب
+                          حفظ التحديث
                         </button>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+
                     <div className="flex items-start gap-3">
-                      <MessageSquare className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+
+                      <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
 
                       <div>
-                        <div className="font-semibold text-blue-900">
+                        <h3 className="font-bold text-blue-900">
                           متابعة الطلب
-                        </div>
+                        </h3>
 
                         <p className="mt-1 text-sm leading-6 text-blue-800">
-                          يمكنك متابعة حالة الطلب ورد
-                          الإدارة من هذه الصفحة. تعديل القرار
-                          الإداري متاح لمدير الإدارة فقط.
+                          يتم متابعة الطلب من خلال
+                          إدارة المعهد ومدير الإدارة
+                          التعليمية.
                         </p>
                       </div>
                     </div>
@@ -1742,48 +1665,56 @@ export default function InstituteRequestsPage() {
 }
 
 function StatCard({
-  icon,
-  label,
+  title,
   value,
+  icon,
 }: {
-  icon: React.ReactNode;
-  label: string;
+  title: string;
   value: number;
+  icon: React.ReactNode;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-        {icon}
+
+      <div className="mb-3 flex items-center justify-between">
+
+        <span className="text-sm font-medium text-slate-500">
+          {title}
+        </span>
+
+        <div className="rounded-xl bg-slate-100 p-2 text-slate-600">
+          {icon}
+        </div>
       </div>
 
       <div className="text-2xl font-bold text-slate-900">
         {value}
-      </div>
-
-      <div className="mt-1 text-xs text-slate-500">
-        {label}
       </div>
     </div>
   );
 }
 
 function InfoItem({
+  icon,
   label,
   value,
 }: {
+  icon: React.ReactNode;
   label: string;
   value: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <div className="text-xs text-slate-500">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-500">
+        {icon}
+
         {label}
       </div>
 
-      <div className="mt-1 text-sm font-semibold text-slate-800">
+      <div className="text-sm font-semibold text-slate-800">
         {value}
       </div>
     </div>
   );
 }
-
