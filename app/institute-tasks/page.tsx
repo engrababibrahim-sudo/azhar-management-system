@@ -1638,25 +1638,6 @@ export default function InstituteTasksPage() {
             </div>
           )}
 
-          {isDirector && directorAttentionTasks.length > 0 && (
-            <div className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm md:p-5">
-              <div className="mb-3 flex items-center gap-2"><AlertCircle size={19} className="text-red-600" /><h2 className="font-bold text-slate-900">ما يحتاج انتباهك الآن</h2></div>
-              <div className="space-y-2">
-                {directorAttentionTasks.slice(0, 5).map((task) => {
-                  const counts = getTargetCounts(task.targets);
-                  const overdueCount = task.targets.filter((target) => isTargetOverdue(target, task.due_date)).length;
-                  return (
-                    <button key={task.id} type="button" onClick={() => setExpandedTaskId(task.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50/60 px-4 py-3 text-right transition hover:bg-red-50">
-                      <div className="min-w-0"><div className="truncate font-semibold text-slate-900">{task.title}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-600">{overdueCount > 0 && <span className="rounded-full bg-red-100 px-2 py-1 text-red-700">{overdueCount} متأخر</span>}{counts.pending > 0 && <span className="rounded-full bg-sky-100 px-2 py-1 text-sky-700">{counts.pending} جديد</span>}{counts.inProgress > 0 && <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-700">{counts.inProgress} قيد التنفيذ</span>}</div></div>
-                      <ChevronDown size={18} className="shrink-0 text-red-500" />
-                    </button>
-                  );
-                })}
-              </div>
-              {directorAttentionTasks.length > 5 && <p className="mt-3 text-xs text-slate-500">يوجد {directorAttentionTasks.length - 5} تكليفات أخرى تحتاج انتباهًا.</p>}
-            </div>
-          )}
-
           {showArchivedTasks && isDirector && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
               أنت الآن تعرض جميع التكليفات المحفوظة في قاعدة البيانات، بما فيها التكليفات التي تم
