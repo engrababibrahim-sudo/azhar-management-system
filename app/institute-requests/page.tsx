@@ -1,4 +1,4 @@
-```tsx
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -336,7 +336,7 @@ export default function InstituteRequestsPage() {
       let requestQuery = supabase
         .from("institute_requests")
         .select(
-          `
+    
             id,
             directorate_id,
             institute_id,
@@ -357,7 +357,7 @@ export default function InstituteRequestsPage() {
               name,
               code
             )
-          `
+        
         )
         .order("created_at", { ascending: false });
 
