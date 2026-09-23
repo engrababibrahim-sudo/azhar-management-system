@@ -56,7 +56,11 @@ type RequestType =
   | "report"
   | "other";
 
-type Priority = "low" | "medium" | "high" | "urgent";
+type Priority =
+  | "low"
+  | "medium"
+  | "high"
+  | "urgent";
 
 type RequestStatus =
   | "new"
@@ -81,6 +85,7 @@ type InstituteRequest = {
   resolved_by: string | null;
   created_at: string;
   updated_at: string;
+
   institute?: {
     id: string;
     name: string;
@@ -92,36 +97,78 @@ const requestTypeOptions: {
   value: RequestType;
   label: string;
 }[] = [
-  { value: "problem", label: "مشكلة" },
-  { value: "need", label: "احتياج" },
-  { value: "support", label: "دعم" },
-  { value: "approval", label: "طلب اعتماد" },
-  { value: "report", label: "تقرير" },
-  { value: "other", label: "أخرى" },
+  {
+    value: "problem",
+    label: "مشكلة",
+  },
+  {
+    value: "need",
+    label: "احتياج",
+  },
+  {
+    value: "support",
+    label: "دعم",
+  },
+  {
+    value: "approval",
+    label: "طلب اعتماد",
+  },
+  {
+    value: "report",
+    label: "تقرير",
+  },
+  {
+    value: "other",
+    label: "أخرى",
+  },
 ];
 
 const priorityOptions: {
   value: Priority;
   label: string;
 }[] = [
-  { value: "low", label: "منخفضة" },
-  { value: "medium", label: "متوسطة" },
-  { value: "high", label: "عالية" },
-  { value: "urgent", label: "عاجلة" },
+  {
+    value: "low",
+    label: "منخفضة",
+  },
+  {
+    value: "medium",
+    label: "متوسطة",
+  },
+  {
+    value: "high",
+    label: "عالية",
+  },
+  {
+    value: "urgent",
+    label: "عاجلة",
+  },
 ];
 
 const statusOptions: {
   value: RequestStatus;
   label: string;
 }[] = [
-  { value: "new", label: "جديد" },
-  { value: "in_progress", label: "قيد المعالجة" },
+  {
+    value: "new",
+    label: "جديد",
+  },
+  {
+    value: "in_progress",
+    label: "قيد المعالجة",
+  },
   {
     value: "needs_director_action",
     label: "تحتاج تدخل المدير",
   },
-  { value: "resolved", label: "تم الحل" },
-  { value: "closed", label: "مغلق" },
+  {
+    value: "resolved",
+    label: "تم الحل",
+  },
+  {
+    value: "closed",
+    label: "مغلق",
+  },
 ];
 
 function formatDate(value: string | null) {
@@ -157,9 +204,13 @@ function isOverdue(request: InstituteRequest) {
   }
 
   const today = new Date();
+
   today.setHours(0, 0, 0, 0);
 
-  const due = new Date(`${request.due_date}T00:00:00`);
+  const due = new Date(
+    `${request.due_date}T00:00:00`
+  );
+
   due.setHours(0, 0, 0, 0);
 
   return due < today;
@@ -167,22 +218,25 @@ function isOverdue(request: InstituteRequest) {
 
 function statusLabel(status: RequestStatus) {
   return (
-    statusOptions.find((item) => item.value === status)?.label ??
-    status
+    statusOptions.find(
+      (item) => item.value === status
+    )?.label ?? status
   );
 }
 
 function priorityLabel(priority: Priority) {
   return (
-    priorityOptions.find((item) => item.value === priority)?.label ??
-    priority
+    priorityOptions.find(
+      (item) => item.value === priority
+    )?.label ?? priority
   );
 }
 
 function typeLabel(type: RequestType) {
   return (
-    requestTypeOptions.find((item) => item.value === type)?.label ??
-    type
+    requestTypeOptions.find(
+      (item) => item.value === type
+    )?.label ?? type
   );
 }
 
@@ -228,29 +282,38 @@ function priorityClass(priority: Priority) {
 }
 
 export default function InstituteRequestsPage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
 
-  const [institutes, setInstitutes] = useState<Institute[]>([]);
-  const [requests, setRequests] = useState<InstituteRequest[]>([]);
+  const [institutes, setInstitutes] =
+    useState<Institute[]>([]);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [requests, setRequests] =
+    useState<InstituteRequest[]>([]);
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] =
+    useState(true);
 
-  const [statusFilter, setStatusFilter] = useState<
-    RequestStatus | "all"
-  >("all");
+  const [saving, setSaving] =
+    useState(false);
 
-  const [priorityFilter, setPriorityFilter] = useState<
-    Priority | "all"
-  >("all");
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [searchTerm, setSearchTerm] =
+    useState("");
+
+  const [statusFilter, setStatusFilter] =
+    useState<RequestStatus | "all">("all");
+
+  const [priorityFilter, setPriorityFilter] =
+    useState<Priority | "all">("all");
 
   const [instituteFilter, setInstituteFilter] =
     useState("all");
 
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] =
+    useState(false);
 
   const [selectedRequest, setSelectedRequest] =
     useState<InstituteRequest | null>(null);
@@ -263,11 +326,12 @@ export default function InstituteRequestsPage() {
     due_date: "",
   });
 
-  const [directorForm, setDirectorForm] = useState({
-    status: "new" as RequestStatus,
-    director_response: "",
-    due_date: "",
-  });
+  const [directorForm, setDirectorForm] =
+    useState({
+      status: "new" as RequestStatus,
+      director_response: "",
+      due_date: "",
+    });
 
   const isDirector =
     profile?.role === "director" ||
@@ -278,7 +342,9 @@ export default function InstituteRequestsPage() {
     profile?.role === "deputy" ||
     profile?.role === "employee";
 
-  async function loadData(showRefresh = false) {
+  async function loadData(
+    showRefresh = false
+  ) {
     try {
       if (showRefresh) {
         setRefreshing(true);
@@ -293,41 +359,53 @@ export default function InstituteRequestsPage() {
       if (!user) {
         window.location.href =
           "/login?redirect=%2Finstitute-requests";
+
         return;
       }
 
-      const { data: profileData, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select(
-            "id, role, full_name, institute_id, directorate_id"
-          )
-          .eq("id", user.id)
-          .single();
+      const {
+        data: profileData,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select(
+          "id, role, full_name, institute_id, directorate_id"
+        )
+        .eq("id", user.id)
+        .single();
 
       if (profileError) {
         console.error(profileError);
-        alert("تعذر تحميل بيانات المستخدم.");
+
+        alert(
+          "تعذر تحميل بيانات المستخدم."
+        );
+
         return;
       }
 
-      const currentProfile = profileData as Profile;
+      const currentProfile =
+        profileData as Profile;
 
       setProfile(currentProfile);
 
       let institutesQuery = supabase
         .from("institutes")
-        .select("id, name, code, directorate_id")
+        .select(
+          "id, name, code, directorate_id"
+        )
         .order("name");
 
       if (
-        currentProfile.role !== "super_admin" &&
+        currentProfile.role !==
+          "super_admin" &&
         currentProfile.directorate_id
       ) {
-        institutesQuery = institutesQuery.eq(
-          "directorate_id",
-          currentProfile.directorate_id
-        );
+        institutesQuery =
+          institutesQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
+          );
       }
 
       const {
@@ -340,7 +418,8 @@ export default function InstituteRequestsPage() {
       }
 
       setInstitutes(
-        (institutesData ?? []) as Institute[]
+        (institutesData ??
+          []) as Institute[]
       );
 
       let requestQuery = supabase
@@ -372,27 +451,33 @@ export default function InstituteRequestsPage() {
         });
 
       if (
-        currentProfile.role === "sheikh" ||
-        currentProfile.role === "deputy" ||
-        currentProfile.role === "employee"
+        currentProfile.role ===
+          "sheikh" ||
+        currentProfile.role ===
+          "deputy" ||
+        currentProfile.role ===
+          "employee"
       ) {
         if (!currentProfile.institute_id) {
           setRequests([]);
           return;
         }
 
-        requestQuery = requestQuery.eq(
-          "institute_id",
-          currentProfile.institute_id
-        );
+        requestQuery =
+          requestQuery.eq(
+            "institute_id",
+            currentProfile.institute_id
+          );
       } else if (
-        currentProfile.role === "director" &&
+        currentProfile.role ===
+          "director" &&
         currentProfile.directorate_id
       ) {
-        requestQuery = requestQuery.eq(
-          "directorate_id",
-          currentProfile.directorate_id
-        );
+        requestQuery =
+          requestQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
+          );
       }
 
       const {
@@ -402,19 +487,46 @@ export default function InstituteRequestsPage() {
 
       if (requestsError) {
         console.error(requestsError);
+
         alert(
           "تعذر تحميل طلبات المعاهد: " +
             requestsError.message
         );
+
         return;
       }
 
-      setRequests(
-        (requestsData ?? []) as InstituteRequest[]
-      );
+      /*
+       * Supabase قد يعيد الـ relation
+       * كـ array حتى لو كان الطلب مرتبطًا
+       * بمعهد واحد.
+       *
+       * نقوم بتطبيع البيانات هنا حتى تبقى
+       * الصفحة تتعامل مع institute كـ object.
+       */
+      const normalizedRequests: InstituteRequest[] =
+        (requestsData ?? []).map(
+          (request: any) => ({
+            ...request,
+
+            institute:
+              Array.isArray(
+                request.institute
+              )
+                ? request.institute[0] ??
+                  null
+                : request.institute ??
+                  null,
+          })
+        );
+
+      setRequests(normalizedRequests);
     } catch (error) {
       console.error(error);
-      alert("حدث خطأ أثناء تحميل البيانات.");
+
+      alert(
+        "حدث خطأ أثناء تحميل البيانات."
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -426,12 +538,15 @@ export default function InstituteRequestsPage() {
   }, []);
 
   const filteredRequests = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase();
+    const search =
+      searchTerm.trim().toLowerCase();
 
     return requests.filter((request) => {
       const matchesSearch =
         !search ||
-        request.title.toLowerCase().includes(search) ||
+        request.title
+          .toLowerCase()
+          .includes(search) ||
         request.description
           .toLowerCase()
           .includes(search) ||
@@ -445,11 +560,13 @@ export default function InstituteRequestsPage() {
 
       const matchesPriority =
         priorityFilter === "all" ||
-        request.priority === priorityFilter;
+        request.priority ===
+          priorityFilter;
 
       const matchesInstitute =
         instituteFilter === "all" ||
-        request.institute_id === instituteFilter;
+        request.institute_id ===
+          instituteFilter;
 
       return (
         matchesSearch &&
@@ -471,26 +588,33 @@ export default function InstituteRequestsPage() {
       total: requests.length,
 
       new: requests.filter(
-        (request) => request.status === "new"
+        (request) =>
+          request.status === "new"
       ).length,
 
       inProgress: requests.filter(
-        (request) => request.status === "in_progress"
+        (request) =>
+          request.status ===
+          "in_progress"
       ).length,
 
       needsDirector: requests.filter(
         (request) =>
-          request.status === "needs_director_action"
+          request.status ===
+          "needs_director_action"
       ).length,
 
-      overdue: requests.filter((request) =>
-        isOverdue(request)
+      overdue: requests.filter(
+        (request) =>
+          isOverdue(request)
       ).length,
 
       resolved: requests.filter(
         (request) =>
-          request.status === "resolved" ||
-          request.status === "closed"
+          request.status ===
+            "resolved" ||
+          request.status ===
+            "closed"
       ).length,
     };
   }, [requests]);
@@ -510,19 +634,23 @@ export default function InstituteRequestsPage() {
     resetCreateForm();
   }
 
-  function openRequest(request: InstituteRequest) {
+  function openRequest(
+    request: InstituteRequest
+  ) {
     /*
-      مهم جدًا:
-      فتح الطلب لا يغير حالته.
-      نقرأ الحالة الحالية من الطلب نفسه.
-    */
+     * فتح الطلب لا يغير حالته.
+     */
     setSelectedRequest(request);
 
     setDirectorForm({
       status: request.status,
+
       director_response:
-        request.director_response ?? "",
-      due_date: request.due_date ?? "",
+        request.director_response ??
+        "",
+
+      due_date:
+        request.due_date ?? "",
     });
   }
 
@@ -541,6 +669,7 @@ export default function InstituteRequestsPage() {
       alert(
         "ليس لديك صلاحية لإنشاء طلب جديد."
       );
+
       return;
     }
 
@@ -548,6 +677,7 @@ export default function InstituteRequestsPage() {
       alert(
         "لا يوجد معهد مرتبط بحساب المستخدم."
       );
+
       return;
     }
 
@@ -555,49 +685,59 @@ export default function InstituteRequestsPage() {
       alert(
         "لا توجد إدارة تعليمية مرتبطة بحساب المستخدم."
       );
+
       return;
     }
 
     if (!form.title.trim()) {
-      alert("برجاء كتابة عنوان الطلب.");
+      alert(
+        "برجاء كتابة عنوان الطلب."
+      );
+
       return;
     }
 
     if (!form.description.trim()) {
-      alert("برجاء كتابة تفاصيل الطلب.");
+      alert(
+        "برجاء كتابة تفاصيل الطلب."
+      );
+
       return;
     }
 
     try {
       setSaving(true);
 
-      const { error } = await supabase
-        .from("institute_requests")
-        .insert({
-          directorate_id:
-            profile.directorate_id,
+      const { error } =
+        await supabase
+          .from("institute_requests")
+          .insert({
+            directorate_id:
+              profile.directorate_id,
 
-          institute_id:
-            profile.institute_id,
+            institute_id:
+              profile.institute_id,
 
-          created_by: profile.id,
+            created_by:
+              profile.id,
 
-          title: form.title.trim(),
+            title:
+              form.title.trim(),
 
-          description:
-            form.description.trim(),
+            description:
+              form.description.trim(),
 
-          request_type:
-            form.request_type,
+            request_type:
+              form.request_type,
 
-          priority:
-            form.priority,
+            priority:
+              form.priority,
 
-          status: "new",
+            status: "new",
 
-          due_date:
-            form.due_date || null,
-        });
+            due_date:
+              form.due_date || null,
+          });
 
       if (error) {
         console.error(error);
@@ -619,6 +759,7 @@ export default function InstituteRequestsPage() {
       await loadData(true);
     } catch (error) {
       console.error(error);
+
       alert(
         "حدث خطأ أثناء إنشاء الطلب."
       );
@@ -634,6 +775,7 @@ export default function InstituteRequestsPage() {
       alert(
         "تعديل حالة الطلب ورد الإدارة متاح لمدير الإدارة فقط."
       );
+
       return;
     }
 
@@ -655,46 +797,45 @@ export default function InstituteRequestsPage() {
       alert(
         "برجاء كتابة رد الإدارة قبل تحويل الطلب إلى تم الحل أو مغلق."
       );
+
       return;
     }
 
-    /*
-      تحديد بيانات الحل فقط عند الانتقال
-      فعليًا إلى حالة تم الحل / مغلق.
-    */
     const isNowResolved =
       newStatus === "resolved" ||
       newStatus === "closed";
 
     const wasResolved =
-      selectedRequest.status === "resolved" ||
-      selectedRequest.status === "closed";
+      selectedRequest.status ===
+        "resolved" ||
+      selectedRequest.status ===
+        "closed";
 
-    const newResolvedAt = isNowResolved
-      ? wasResolved
-        ? selectedRequest.resolved_at
-        : new Date().toISOString()
-      : null;
+    const newResolvedAt =
+      isNowResolved
+        ? wasResolved
+          ? selectedRequest.resolved_at
+          : new Date().toISOString()
+        : null;
 
-    const newResolvedBy = isNowResolved
-      ? wasResolved
-        ? selectedRequest.resolved_by
-        : profile?.id ?? null
-      : null;
+    const newResolvedBy =
+      isNowResolved
+        ? wasResolved
+          ? selectedRequest.resolved_by
+          : profile?.id ?? null
+        : null;
 
     /*
-      أهم إصلاح:
-      لا نرسل UPDATE إلى Supabase
-      إذا لم يتغير أي شيء.
-      
-      هذا يمنع إنشاء سجلات متابعة وهمية
-      عند الضغط على حفظ بدون تعديل.
-    */
+     * لا يتم تنفيذ UPDATE إذا لم توجد
+     * أي تغييرات فعلية.
+     */
     const hasChanges =
-      newStatus !== selectedRequest.status ||
+      newStatus !==
+        selectedRequest.status ||
       newResponse !==
         selectedRequest.director_response ||
-      newDueDate !== selectedRequest.due_date ||
+      newDueDate !==
+        selectedRequest.due_date ||
       newResolvedAt !==
         selectedRequest.resolved_at ||
       newResolvedBy !==
@@ -704,6 +845,7 @@ export default function InstituteRequestsPage() {
       alert(
         "لا توجد تغييرات جديدة لحفظها."
       );
+
       return;
     }
 
@@ -729,13 +871,14 @@ export default function InstituteRequestsPage() {
           newResolvedBy,
       };
 
-      const { error } = await supabase
-        .from("institute_requests")
-        .update(updateData)
-        .eq(
-          "id",
-          selectedRequest.id
-        );
+      const { error } =
+        await supabase
+          .from("institute_requests")
+          .update(updateData)
+          .eq(
+            "id",
+            selectedRequest.id
+          );
 
       if (error) {
         console.error(error);
@@ -801,7 +944,8 @@ export default function InstituteRequestsPage() {
                   <span className="rounded-full bg-white px-3 py-1.5 font-medium text-slate-700 shadow-sm ring-1 ring-slate-200">
                     {isDirector
                       ? "مدير الإدارة التعليمية الأزهرية"
-                      : profile.role === "sheikh"
+                      : profile.role ===
+                        "sheikh"
                       ? "شيخ المعهد"
                       : "مستخدم المعهد"}
                   </span>
@@ -813,7 +957,9 @@ export default function InstituteRequestsPage() {
 
               <button
                 type="button"
-                onClick={() => loadData(true)}
+                onClick={() =>
+                  loadData(true)
+                }
                 disabled={refreshing}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -899,6 +1045,7 @@ export default function InstituteRequestsPage() {
           {isDirector &&
             stats.needsDirector > 0 && (
               <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
+
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
 
                 <div>
@@ -947,7 +1094,8 @@ export default function InstituteRequestsPage() {
                 value={statusFilter}
                 onChange={(event) =>
                   setStatusFilter(
-                    event.target.value as
+                    event.target
+                      .value as
                       | RequestStatus
                       | "all"
                   )
@@ -962,7 +1110,9 @@ export default function InstituteRequestsPage() {
                   (option) => (
                     <option
                       key={option.value}
-                      value={option.value}
+                      value={
+                        option.value
+                      }
                     >
                       {option.label}
                     </option>
@@ -974,7 +1124,8 @@ export default function InstituteRequestsPage() {
                 value={priorityFilter}
                 onChange={(event) =>
                   setPriorityFilter(
-                    event.target.value as
+                    event.target
+                      .value as
                       | Priority
                       | "all"
                   )
@@ -989,7 +1140,9 @@ export default function InstituteRequestsPage() {
                   (option) => (
                     <option
                       key={option.value}
-                      value={option.value}
+                      value={
+                        option.value
+                      }
                     >
                       {option.label}
                     </option>
@@ -999,7 +1152,9 @@ export default function InstituteRequestsPage() {
 
               {isDirector ? (
                 <select
-                  value={instituteFilter}
+                  value={
+                    instituteFilter
+                  }
                   onChange={(event) =>
                     setInstituteFilter(
                       event.target.value
@@ -1014,8 +1169,12 @@ export default function InstituteRequestsPage() {
                   {institutes.map(
                     (institute) => (
                       <option
-                        key={institute.id}
-                        value={institute.id}
+                        key={
+                          institute.id
+                        }
+                        value={
+                          institute.id
+                        }
                       >
                         {institute.name}
                       </option>
@@ -1043,21 +1202,29 @@ export default function InstituteRequestsPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  عرض {filteredRequests.length}{" "}
-                  من أصل {requests.length} طلب
+                  عرض{" "}
+                  {
+                    filteredRequests.length
+                  }{" "}
+                  من أصل{" "}
+                  {requests.length}{" "}
+                  طلب
                 </p>
               </div>
             </div>
 
             {loading ? (
               <div className="flex min-h-[300px] items-center justify-center">
+
                 <div className="flex items-center gap-3 text-slate-500">
+
                   <Loader2 className="h-5 w-5 animate-spin" />
 
                   جاري تحميل الطلبات...
                 </div>
               </div>
-            ) : filteredRequests.length === 0 ? (
+            ) : filteredRequests.length ===
+              0 ? (
               <div className="flex min-h-[300px] flex-col items-center justify-center p-8 text-center">
 
                 <div className="mb-4 rounded-full bg-slate-100 p-4">
@@ -1082,7 +1249,9 @@ export default function InstituteRequestsPage() {
                       key={request.id}
                       type="button"
                       onClick={() =>
-                        openRequest(request)
+                        openRequest(
+                          request
+                        )
                       }
                       className="block w-full p-5 text-right transition hover:bg-slate-50"
                     >
@@ -1126,7 +1295,9 @@ export default function InstituteRequestsPage() {
                           </div>
 
                           <p className="mb-3 line-clamp-2 text-sm leading-6 text-slate-600">
-                            {request.description}
+                            {
+                              request.description
+                            }
                           </p>
 
                           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500">
@@ -1134,7 +1305,8 @@ export default function InstituteRequestsPage() {
                             <span className="inline-flex items-center gap-1.5">
                               <Building2 className="h-4 w-4" />
 
-                              {request.institute
+                              {request
+                                .institute
                                 ?.name ??
                                 "غير محدد"}
                             </span>
@@ -1202,7 +1374,9 @@ export default function InstituteRequestsPage() {
 
                 <button
                   type="button"
-                  onClick={closeCreateModal}
+                  onClick={
+                    closeCreateModal
+                  }
                   className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                 >
                   <X className="h-5 w-5" />
@@ -1219,11 +1393,14 @@ export default function InstituteRequestsPage() {
                   <input
                     value={form.title}
                     onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        title:
-                          event.target.value,
-                      }))
+                      setForm(
+                        (prev) => ({
+                          ...prev,
+                          title:
+                            event.target
+                              .value,
+                        })
+                      )
                     }
                     placeholder="مثال: طلب صيانة جهاز كمبيوتر"
                     className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
@@ -1242,24 +1419,30 @@ export default function InstituteRequestsPage() {
                         form.request_type
                       }
                       onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          request_type:
-                            event.target
-                              .value as RequestType,
-                        }))
+                        setForm(
+                          (prev) => ({
+                            ...prev,
+                            request_type:
+                              event.target
+                                .value as RequestType,
+                          })
+                        )
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400"
                     >
                       {requestTypeOptions.map(
                         (option) => (
                           <option
-                            key={option.value}
+                            key={
+                              option.value
+                            }
                             value={
                               option.value
                             }
                           >
-                            {option.label}
+                            {
+                              option.label
+                            }
                           </option>
                         )
                       )}
@@ -1272,26 +1455,34 @@ export default function InstituteRequestsPage() {
                     </label>
 
                     <select
-                      value={form.priority}
+                      value={
+                        form.priority
+                      }
                       onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          priority:
-                            event.target
-                              .value as Priority,
-                        }))
+                        setForm(
+                          (prev) => ({
+                            ...prev,
+                            priority:
+                              event.target
+                                .value as Priority,
+                          })
+                        )
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400"
                     >
                       {priorityOptions.map(
                         (option) => (
                           <option
-                            key={option.value}
+                            key={
+                              option.value
+                            }
                             value={
                               option.value
                             }
                           >
-                            {option.label}
+                            {
+                              option.label
+                            }
                           </option>
                         )
                       )}
@@ -1309,11 +1500,14 @@ export default function InstituteRequestsPage() {
                         form.due_date
                       }
                       onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          due_date:
-                            event.target.value,
-                        }))
+                        setForm(
+                          (prev) => ({
+                            ...prev,
+                            due_date:
+                              event.target
+                                .value,
+                          })
+                        )
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400"
                     />
@@ -1330,11 +1524,14 @@ export default function InstituteRequestsPage() {
                       form.description
                     }
                     onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        description:
-                          event.target.value,
-                      }))
+                      setForm(
+                        (prev) => ({
+                          ...prev,
+                          description:
+                            event.target
+                              .value,
+                        })
+                      )
                     }
                     rows={6}
                     placeholder="اكتب تفاصيل المشكلة أو الاحتياج..."
@@ -1346,7 +1543,9 @@ export default function InstituteRequestsPage() {
 
                   <button
                     type="button"
-                    onClick={closeCreateModal}
+                    onClick={
+                      closeCreateModal
+                    }
                     className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     إلغاء
@@ -1354,7 +1553,9 @@ export default function InstituteRequestsPage() {
 
                   <button
                     type="button"
-                    onClick={createRequest}
+                    onClick={
+                      createRequest
+                    }
                     disabled={saving}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -1406,13 +1607,16 @@ export default function InstituteRequestsPage() {
                   </div>
 
                   <h2 className="text-xl font-bold text-slate-900">
-                    {selectedRequest.title}
+                    {
+                      selectedRequest.title
+                    }
                   </h2>
 
                   <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
                     <Building2 className="h-4 w-4" />
 
-                    {selectedRequest.institute
+                    {selectedRequest
+                      .institute
                       ?.name ??
                       "غير محدد"}
                   </div>
@@ -1420,7 +1624,9 @@ export default function InstituteRequestsPage() {
 
                 <button
                   type="button"
-                  onClick={closeRequest}
+                  onClick={
+                    closeRequest
+                  }
                   className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                 >
                   <X className="h-5 w-5" />
@@ -1475,7 +1681,9 @@ export default function InstituteRequestsPage() {
                   </div>
 
                   <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
-                    {selectedRequest.description}
+                    {
+                      selectedRequest.description
+                    }
                   </p>
                 </div>
 
@@ -1533,7 +1741,8 @@ export default function InstituteRequestsPage() {
                                 (prev) => ({
                                   ...prev,
                                   status:
-                                    event.target
+                                    event
+                                      .target
                                       .value as RequestStatus,
                                 })
                               )
@@ -1550,7 +1759,9 @@ export default function InstituteRequestsPage() {
                                     option.value
                                   }
                                 >
-                                  {option.label}
+                                  {
+                                    option.label
+                                  }
                                 </option>
                               )
                             )}
@@ -1572,7 +1783,8 @@ export default function InstituteRequestsPage() {
                                 (prev) => ({
                                   ...prev,
                                   due_date:
-                                    event.target
+                                    event
+                                      .target
                                       .value,
                                 })
                               )
@@ -1596,7 +1808,8 @@ export default function InstituteRequestsPage() {
                               (prev) => ({
                                 ...prev,
                                 director_response:
-                                  event.target
+                                  event
+                                    .target
                                     .value,
                               })
                             )
@@ -1611,7 +1824,9 @@ export default function InstituteRequestsPage() {
 
                         <button
                           type="button"
-                          onClick={closeRequest}
+                          onClick={
+                            closeRequest
+                          }
                           className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                         >
                           إغلاق
@@ -1619,7 +1834,9 @@ export default function InstituteRequestsPage() {
 
                         <button
                           type="button"
-                          onClick={updateRequest}
+                          onClick={
+                            updateRequest
+                          }
                           disabled={saving}
                           className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                         >
