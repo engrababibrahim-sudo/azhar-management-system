@@ -370,6 +370,31 @@ export default function InstituteTasksPage() {
     };
   }, [visibleTasks]);
 
+  const directorAttentionTasks = useMemo(() => {
+    if (!isDirector) return [];
+    return visibleTasks.filter((task) => {
+      const overall = getOverallTaskStatus(task.targets);
+      if (overall === "completed") return false;
+      return task.priority === "urgent" || task.targets.some((target) => isTargetOverdue(target, task.due_date));
+    });
+  }, [visibleTasks, isDirector]);
+
+  const directorReviewCount = useMemo(() => {
+    if (!isDirector) return 0;
+    return visibleTasks.reduce((count, task) => count + task.targets.filter((target) => target.status === "submitted" && target.latest_submission?.status === "submitted").length, 0);
+  }, [visibleTasks, isDirector]);
+
+  const directorFollowUpTasks = useMemo(() => {
+    if (!isDirector) return [];
+    return visibleTasks.filter((task) => {
+      const overall = getOverallTaskStatus(task.targets);
+      if (overall === "completed") return false;
+      const needsAttention = task.priority === "urgent" || task.targets.some((target) => isTargetOverdue(target, task.due_date));
+      if (needsAttention) return false;
+      return task.targets.some((target) => target.status === "pending" || target.status === "in_progress");
+    });
+  }, [visibleTasks, isDirector]);
+
   function getStoredHiddenIds() {
     if (typeof window === "undefined") return [];
 
@@ -497,21 +522,11 @@ export default function InstituteTasksPage() {
           )
           .order("created_at", { ascending: false });
 
-        // Director visibility is based on the institutes that belong to the
-        // director's directorate. This also keeps older tasks visible when
-        // their directorate_id is missing or was created before the current
-        // directorate linkage was enforced.
-        if (taskIds.length) {
-          taskQuery = taskQuery.in("id", taskIds);
-        } else if (currentProfile.directorate_id) {
+        if (currentProfile.directorate_id) {
           taskQuery = taskQuery.eq(
             "directorate_id",
             currentProfile.directorate_id
           );
-        } else {
-          taskData = [];
-          setTasks([]);
-          return;
         }
 
         const { data, error } = await taskQuery;
@@ -1414,6 +1429,48 @@ export default function InstituteTasksPage() {
               );
             })}
           </div>
+
+          {isDirector && (
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600"><AlertCircle size={20} /></div>
+                  <div><div className="text-sm font-bold text-red-800">يحتاج انتباه المدير</div><div className="mt-1 text-2xl font-bold text-red-900">{directorAttentionTasks.length}</div><p className="mt-1 text-xs leading-5 text-red-700">تكليفات عاجلة أو متأخرة وتحتاج تدخلاً.</p></div>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600"><Clock3 size={20} /></div>
+                  <div><div className="text-sm font-bold text-amber-800">يحتاج متابعة</div><div className="mt-1 text-2xl font-bold text-amber-900">{directorFollowUpTasks.length}</div><p className="mt-1 text-xs leading-5 text-amber-700">تكليفات لم تبدأ أو ما زالت قيد التنفيذ.</p></div>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Send size={20} /></div>
+                  <div><div className="text-sm font-bold text-violet-800">تقارير بانتظار المراجعة</div><div className="mt-1 text-2xl font-bold text-violet-900">{directorReviewCount}</div><p className="mt-1 text-xs leading-5 text-violet-700">تقارير أرسلها المعهد ولم يعتمدها المدير بعد.</p></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isDirector && directorAttentionTasks.length > 0 && (
+            <div className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm md:p-5">
+              <div className="mb-3 flex items-center gap-2"><AlertCircle size={19} className="text-red-600" /><h2 className="font-bold text-slate-900">ما يحتاج انتباهك الآن</h2></div>
+              <div className="space-y-2">
+                {directorAttentionTasks.slice(0, 5).map((task) => {
+                  const counts = getTargetCounts(task.targets);
+                  const overdueCount = task.targets.filter((target) => isTargetOverdue(target, task.due_date)).length;
+                  return (
+                    <button key={task.id} type="button" onClick={() => setExpandedTaskId(task.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50/60 px-4 py-3 text-right transition hover:bg-red-50">
+                      <div className="min-w-0"><div className="truncate font-semibold text-slate-900">{task.title}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-600">{overdueCount > 0 && <span className="rounded-full bg-red-100 px-2 py-1 text-red-700">{overdueCount} متأخر</span>}{counts.pending > 0 && <span className="rounded-full bg-sky-100 px-2 py-1 text-sky-700">{counts.pending} جديد</span>}{counts.inProgress > 0 && <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-700">{counts.inProgress} قيد التنفيذ</span>}</div></div>
+                      <ChevronDown size={18} className="shrink-0 text-red-500" />
+                    </button>
+                  );
+                })}
+              </div>
+              {directorAttentionTasks.length > 5 && <p className="mt-3 text-xs text-slate-500">يوجد {directorAttentionTasks.length - 5} تكليفات أخرى تحتاج انتباهًا.</p>}
+            </div>
+          )}
 
           {showArchivedTasks && isDirector && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
