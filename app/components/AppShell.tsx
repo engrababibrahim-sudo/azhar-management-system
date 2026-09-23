@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -10,6 +8,7 @@ GraduationCap,
 ClipboardCheck,
 BarChart3,
 ListTodo,
+MessageSquarePlus,
 Megaphone,
 MessageSquareWarning,
 Upload,
@@ -77,6 +76,11 @@ href: "/institute-tasks",
 icon: ListTodo,
 },
 {
+label: "طلبات المعاهد",
+href: "/institute-requests",
+icon: MessageSquarePlus,
+},
+{
 label: "الإعلانات",
 href: "/announcements",
 icon: Megaphone,
@@ -124,7 +128,6 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 useEffect(() => {
 let mounted = true;
 
-
 async function loadProfile() {
   try {
     const {
@@ -165,6 +168,7 @@ async function loadProfile() {
     }
   } catch (error) {
     console.error("Unexpected profile error:", error);
+
     if (mounted) {
       setRole(null);
       setFullName("المستخدم");
@@ -182,7 +186,6 @@ return () => {
   mounted = false;
 };
 
-
 }, []);
 
 useEffect(() => {
@@ -194,13 +197,11 @@ if (!item.roles || item.roles.length === 0) {
 return true;
 }
 
-
 if (!role) {
   return false;
 }
 
 return item.roles.includes(role);
-
 
 });
 
@@ -209,21 +210,22 @@ if (href === "/") {
 return pathname === "/";
 }
 
-
 return pathname === href || pathname.startsWith(href + "/");
-
 
 }
 
-return ( <div className="min-h-screen bg-slate-100" dir="rtl">
-{/* Mobile Header */} <div className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm lg:hidden">
+return (
+<div className="min-h-screen bg-slate-100" dir="rtl">
+{/* Mobile Header */}
+<div className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm lg:hidden">
 <button
 type="button"
 onClick={() => setMobileMenuOpen(true)}
 className="rounded-xl p-2 text-slate-700 transition hover:bg-slate-100"
 aria-label="فتح القائمة"
-> <Menu size={24} /> </button>
-
+>
+<Menu size={24} />
+</button>
 
     <div className="text-center">
       <div className="text-sm font-bold text-slate-900">
@@ -336,6 +338,7 @@ aria-label="فتح القائمة"
   </main>
 </div>
 
-
 );
 }
+
+بعد اللصق:
