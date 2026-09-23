@@ -1095,8 +1095,7 @@ export default function InstituteTasksPage() {
   }
 
   async function submitInstituteReport() {
-    if (!profile || !submissionTask || !submissionTarget || !submissionFile) {
-      alert("اختر ملف التقرير أولاً.");
+    if (!profile || !submissionTask || !submissionTarget) {
       return;
     }
 
@@ -1110,14 +1109,16 @@ export default function InstituteTasksPage() {
       "image/png",
     ]);
 
-    if (!allowedTypes.has(submissionFile.type) && !submissionFile.type.startsWith("image/")) {
-      alert("نوع الملف غير مسموح. استخدم PDF أو Word أو Excel أو صورة.");
-      return;
-    }
+    if (submissionFile) {
+      if (!allowedTypes.has(submissionFile.type) && !submissionFile.type.startsWith("image/")) {
+        alert("نوع الملف غير مسموح. استخدم PDF أو Word أو Excel أو صورة.");
+        return;
+      }
 
-    if (submissionFile.size > 10 * 1024 * 1024) {
-      alert("حجم التقرير يتجاوز الحد المسموح وهو 10 MB.");
-      return;
+      if (submissionFile.size > 10 * 1024 * 1024) {
+        alert("حجم التقرير يتجاوز الحد المسموح وهو 10 MB.");
+        return;
+      }
     }
 
     setSubmissionSaving(true);
@@ -1142,41 +1143,47 @@ export default function InstituteTasksPage() {
       if (submissionError) throw submissionError;
       if (!submission) throw new Error("تعذر إنشاء سجل التقرير.");
 
-      const storagePath = `${submissionTarget.institute_id}/${submissionTask.id}/${submission.id}/${safeReportFileName(submissionFile.name)}`;
-      const { error: uploadError } = await supabase.storage
-        .from("task-reports")
-        .upload(storagePath, submissionFile, {
-          contentType: submissionFile.type || "application/octet-stream",
-          upsert: false,
-        });
+      let attachment: TaskAttachment | null = null;
 
-      if (uploadError) {
-        await supabase.from("institute_task_submissions").delete().eq("id", submission.id);
-        throw uploadError;
-      }
+      if (submissionFile) {
+        const storagePath = `${submissionTarget.institute_id}/${submissionTask.id}/${submission.id}/${safeReportFileName(submissionFile.name)}`;
+        const { error: uploadError } = await supabase.storage
+          .from("task-reports")
+          .upload(storagePath, submissionFile, {
+            contentType: submissionFile.type || "application/octet-stream",
+            upsert: false,
+          });
 
-      const { data: attachment, error: attachmentError } = await supabase
-        .from("institute_task_submission_attachments")
-        .insert({
-          submission_id: submission.id,
-          file_name: submissionFile.name,
-          storage_path: storagePath,
-          mime_type: submissionFile.type || null,
-          file_size: submissionFile.size,
-        })
-        .select("id, submission_id, file_name, storage_path, mime_type, file_size, created_at")
-        .single();
+        if (uploadError) {
+          await supabase.from("institute_task_submissions").delete().eq("id", submission.id);
+          throw uploadError;
+        }
 
-      if (attachmentError) {
-        await supabase.storage.from("task-reports").remove([storagePath]);
-        await supabase.from("institute_task_submissions").delete().eq("id", submission.id);
-        throw attachmentError;
+        const { data: attachmentData, error: attachmentError } = await supabase
+          .from("institute_task_submission_attachments")
+          .insert({
+            submission_id: submission.id,
+            file_name: submissionFile.name,
+            storage_path: storagePath,
+            mime_type: submissionFile.type || null,
+            file_size: submissionFile.size,
+          })
+          .select("id, submission_id, file_name, storage_path, mime_type, file_size, created_at")
+          .single();
+
+        if (attachmentError) {
+          await supabase.storage.from("task-reports").remove([storagePath]);
+          await supabase.from("institute_task_submissions").delete().eq("id", submission.id);
+          throw attachmentError;
+        }
+
+        attachment = attachmentData as TaskAttachment;
       }
 
       const now = new Date().toISOString();
       const latestSubmission: TaskSubmissionView = {
         ...(submission as TaskSubmission),
-        attachments: [attachment as TaskAttachment],
+        attachments: attachment ? [attachment] : [],
       };
       const updatedTargets = submissionTask.targets.map((target) =>
         target.id === submissionTarget.id
@@ -1203,7 +1210,7 @@ export default function InstituteTasksPage() {
         )
       );
 
-      alert("تم رفع التقرير وإرساله إلى مدير الإدارة للمراجعة ✅");
+      alert(submissionFile ? "تم إرسال التسليم مع الملف إلى مدير الإدارة للمراجعة ✅" : "تم إرسال التسليم إلى مدير الإدارة للمراجعة بدون مرفق ✅");
       closeSubmissionForm();
     } catch (error: any) {
       console.error("submitInstituteReport:", error);
@@ -2178,9 +2185,9 @@ export default function InstituteTasksPage() {
               )}
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">ملف التقرير</label>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">إرفاق ملف التقرير <span className="font-normal text-slate-400">(اختياري)</span></label>
                 <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" onChange={(event) => setSubmissionFile(event.target.files?.[0] ?? null)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm" />
-                <p className="mt-2 text-xs text-slate-500">PDF أو Word أو Excel أو صورة — الحد الأقصى 10 MB.</p>
+                <p className="mt-2 text-xs text-slate-500">PDF أو Word أو Excel أو صورة — الحد الأقصى 10 MB. يمكنك الإرسال بدون ملف.</p>
                 {submissionFile && <div className="mt-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">الملف المختار: <strong>{submissionFile.name}</strong><span className="mr-2 text-xs text-slate-500">({formatReportFileSize(submissionFile.size)})</span></div>}
               </div>
 
@@ -2193,7 +2200,7 @@ export default function InstituteTasksPage() {
 
               <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
                 <button type="button" onClick={closeSubmissionForm} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">إلغاء</button>
-                <button type="button" disabled={submissionSaving || !submissionFile} onClick={submitInstituteReport} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60">
+                <button type="button" disabled={submissionSaving} onClick={submitInstituteReport} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60">
                   {submissionSaving ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                   إرسال التقرير للمدير
                 </button>
