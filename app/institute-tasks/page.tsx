@@ -396,6 +396,34 @@ export default function InstituteTasksPage() {
     });
   }, [visibleTasks, isDirector]);
 
+  const directorUpcomingTasks = useMemo(() => {
+    if (!isDirector) return [];
+
+    const now = new Date();
+    const end = new Date(now);
+    end.setDate(end.getDate() + 7);
+
+    return visibleTasks
+      .filter((task) => {
+        const overall = getOverallTaskStatus(task.targets);
+        if (overall === "completed" || !task.due_date) return false;
+
+        const due = new Date(`${task.due_date}T23:59:59`);
+        if (Number.isNaN(due.getTime())) return false;
+
+        const overdue = task.targets.some((target) =>
+          isTargetOverdue(target, task.due_date)
+        );
+
+        return !overdue && due >= now && due <= end;
+      })
+      .sort((a, b) => {
+        const da = a.due_date ? new Date(`${a.due_date}T23:59:59`).getTime() : Infinity;
+        const db = b.due_date ? new Date(`${b.due_date}T23:59:59`).getTime() : Infinity;
+        return da - db;
+      });
+  }, [visibleTasks, isDirector]);
+
   const directorInstituteStatus = useMemo(() => {
     if (!isDirector) return [];
 
@@ -1501,6 +1529,114 @@ export default function InstituteTasksPage() {
               );
             })}
           </div>
+
+          {isDirector && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+              <div className="mb-4">
+                <div className="flex items-center gap-2">
+                  <Clock3 size={19} className="text-blue-600" />
+                  <h2 className="font-bold text-slate-900">لوحة المدير الآن</h2>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  اختصار سريع لما يحتاج قرارًا أو متابعة الآن، بدل البحث داخل جميع التكليفات.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <button
+                  type="button"
+                  onClick={() => directorAttentionTasks[0] && setExpandedTaskId(directorAttentionTasks[0].id)}
+                  className="rounded-2xl border border-red-200 bg-red-50 p-4 text-right transition hover:-translate-y-0.5 hover:shadow-sm"
+                >
+                  <div className="text-xs font-semibold text-red-700">يحتاج تدخلك الآن</div>
+                  <div className="mt-1 text-3xl font-bold text-red-900">{directorAttentionTasks.length}</div>
+                  <div className="mt-1 text-xs text-red-700">متأخر أو عاجل</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => directorFollowUpTasks[0] && setExpandedTaskId(directorFollowUpTasks[0].id)}
+                  className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-right transition hover:-translate-y-0.5 hover:shadow-sm"
+                >
+                  <div className="text-xs font-semibold text-amber-700">يحتاج متابعة</div>
+                  <div className="mt-1 text-3xl font-bold text-amber-900">{directorFollowUpTasks.length}</div>
+                  <div className="mt-1 text-xs text-amber-700">لم يبدأ أو قيد التنفيذ</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const first = visibleTasks.find((task) =>
+                      task.targets.some(
+                        (target) =>
+                          target.status === "submitted" &&
+                          target.latest_submission?.status === "submitted"
+                      )
+                    );
+                    if (first) setExpandedTaskId(first.id);
+                  }}
+                  className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-right transition hover:-translate-y-0.5 hover:shadow-sm"
+                >
+                  <div className="text-xs font-semibold text-violet-700">تقارير للمراجعة</div>
+                  <div className="mt-1 text-3xl font-bold text-violet-900">{directorReviewCount}</div>
+                  <div className="mt-1 text-xs text-violet-700">بانتظار اعتماد المدير</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => directorUpcomingTasks[0] && setExpandedTaskId(directorUpcomingTasks[0].id)}
+                  className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-right transition hover:-translate-y-0.5 hover:shadow-sm"
+                >
+                  <div className="text-xs font-semibold text-blue-700">مواعيد خلال 7 أيام</div>
+                  <div className="mt-1 text-3xl font-bold text-blue-900">{directorUpcomingTasks.length}</div>
+                  <div className="mt-1 text-xs text-blue-700">قبل أن تتحول لمتأخر</div>
+                </button>
+              </div>
+
+              {(directorAttentionTasks.length > 0 || directorUpcomingTasks.length > 0) && (
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  {directorAttentionTasks.slice(0, 3).map((task) => {
+                    const overdueCount = task.targets.filter((target) =>
+                      isTargetOverdue(target, task.due_date)
+                    ).length;
+                    return (
+                      <button
+                        key={`smart-attention-${task.id}`}
+                        type="button"
+                        onClick={() => setExpandedTaskId(task.id)}
+                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50/60 px-4 py-3 text-right transition hover:bg-red-50"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-slate-900">{task.title}</div>
+                          <div className="mt-1 text-xs text-red-700">
+                            {overdueCount > 0 ? `${overdueCount} حالة متأخرة` : "يحتاج تدخل المدير"}
+                          </div>
+                        </div>
+                        <ChevronDown size={18} className="shrink-0 text-red-500" />
+                      </button>
+                    );
+                  })}
+
+                  {directorUpcomingTasks.slice(0, 3).map((task) => (
+                    <button
+                      key={`smart-upcoming-${task.id}`}
+                      type="button"
+                      onClick={() => setExpandedTaskId(task.id)}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-right transition hover:bg-blue-50"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-slate-900">{task.title}</div>
+                        <div className="mt-1 text-xs text-blue-700">
+                          الاستحقاق: {task.due_date ? formatDate(task.due_date) : "بدون موعد"}
+                        </div>
+                      </div>
+                      <ChevronDown size={18} className="shrink-0 text-blue-500" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {isDirector && (
             <div className="grid gap-4 md:grid-cols-3">
