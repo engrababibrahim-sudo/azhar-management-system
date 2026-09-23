@@ -157,27 +157,32 @@ function isOverdue(request: InstituteRequest) {
     return false;
   }
 
-  return new Date(request.due_date).getTime() < Date.now();
+  return (
+    new Date(request.due_date).getTime() < Date.now()
+  );
 }
 
 function statusLabel(status: RequestStatus) {
   return (
-    statusOptions.find((item) => item.value === status)?.label ??
-    status
+    statusOptions.find(
+      (item) => item.value === status
+    )?.label ?? status
   );
 }
 
 function priorityLabel(priority: Priority) {
   return (
-    priorityOptions.find((item) => item.value === priority)?.label ??
-    priority
+    priorityOptions.find(
+      (item) => item.value === priority
+    )?.label ?? priority
   );
 }
 
 function typeLabel(type: RequestType) {
   return (
-    requestTypeOptions.find((item) => item.value === type)?.label ??
-    type
+    requestTypeOptions.find(
+      (item) => item.value === type
+    )?.label ?? type
   );
 }
 
@@ -223,24 +228,35 @@ function priorityClass(priority: Priority) {
 }
 
 export default function InstituteRequestsPage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [institutes, setInstitutes] = useState<Institute[]>([]);
-  const [requests, setRequests] = useState<InstituteRequest[]>([]);
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
+
+  const [institutes, setInstitutes] = useState<
+    Institute[]
+  >([]);
+
+  const [requests, setRequests] = useState<
+    InstituteRequest[]
+  >([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    RequestStatus | "all"
-  >("all");
-  const [priorityFilter, setPriorityFilter] = useState<
-    Priority | "all"
-  >("all");
-  const [instituteFilter, setInstituteFilter] = useState("all");
 
-  const [showCreate, setShowCreate] = useState(false);
+  const [statusFilter, setStatusFilter] =
+    useState<RequestStatus | "all">("all");
+
+  const [priorityFilter, setPriorityFilter] =
+    useState<Priority | "all">("all");
+
+  const [instituteFilter, setInstituteFilter] =
+    useState("all");
+
+  const [showCreate, setShowCreate] =
+    useState(false);
+
   const [selectedRequest, setSelectedRequest] =
     useState<InstituteRequest | null>(null);
 
@@ -252,11 +268,12 @@ export default function InstituteRequestsPage() {
     due_date: "",
   });
 
-  const [directorForm, setDirectorForm] = useState({
-    status: "new" as RequestStatus,
-    director_response: "",
-    due_date: "",
-  });
+  const [directorForm, setDirectorForm] =
+    useState({
+      status: "new" as RequestStatus,
+      director_response: "",
+      due_date: "",
+    });
 
   const isDirector =
     profile?.role === "director" ||
@@ -267,7 +284,9 @@ export default function InstituteRequestsPage() {
     profile?.role === "deputy" ||
     profile?.role === "employee";
 
-  async function loadData(showRefresh = false) {
+  async function loadData(
+    showRefresh = false
+  ) {
     try {
       if (showRefresh) {
         setRefreshing(true);
@@ -286,37 +305,49 @@ export default function InstituteRequestsPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select(
-            "id, role, full_name, institute_id, directorate_id"
-          )
-          .eq("id", user.id)
-          .single();
+      const {
+        data: profileData,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select(
+          "id, role, full_name, institute_id, directorate_id"
+        )
+        .eq("id", user.id)
+        .single();
 
       if (profileError) {
-        console.error("Profile error:", profileError);
+        console.error(
+          "Profile error:",
+          profileError
+        );
+
         alert("تعذر تحميل بيانات المستخدم.");
         return;
       }
 
-      const currentProfile = profileData as Profile;
+      const currentProfile =
+        profileData as Profile;
+
       setProfile(currentProfile);
 
       let instituteQuery = supabase
         .from("institutes")
-        .select("id, name, code, directorate_id")
+        .select(
+          "id, name, code, directorate_id"
+        )
         .order("name");
 
       if (
-        currentProfile.role !== "super_admin" &&
+        currentProfile.role !==
+          "super_admin" &&
         currentProfile.directorate_id
       ) {
-        instituteQuery = instituteQuery.eq(
-          "directorate_id",
-          currentProfile.directorate_id
-        );
+        instituteQuery =
+          instituteQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
+          );
       }
 
       const {
@@ -331,46 +362,60 @@ export default function InstituteRequestsPage() {
         );
       }
 
-      setInstitutes((institutesData ?? []) as Institute[]);
+      setInstitutes(
+        (institutesData ??
+          []) as Institute[]
+      );
 
+      /*
+       * مهم جدًا:
+       * استخدام Template Literal هنا لأن Supabase
+       * يحتاج نص select متعدد الأسطر.
+       */
       let requestQuery = supabase
         .from("institute_requests")
-        .select(
-    
+        .select(`
+          id,
+          directorate_id,
+          institute_id,
+          created_by,
+          title,
+          description,
+          request_type,
+          priority,
+          status,
+          due_date,
+          director_response,
+          resolved_at,
+          resolved_by,
+          created_at,
+          updated_at,
+          institute:institutes (
             id,
-            directorate_id,
-            institute_id,
-            created_by,
-            title,
-            description,
-            request_type,
-            priority,
-            status,
-            due_date,
-            director_response,
-            resolved_at,
-            resolved_by,
-            created_at,
-            updated_at,
-            institute:institutes (
-              id,
-              name,
-              code
-            )
-        
-        )
-        .order("created_at", { ascending: false });
+            name,
+            code
+          )
+        `)
+        .order("created_at", {
+          ascending: false,
+        });
 
       if (
-        currentProfile.role === "sheikh" ||
-        currentProfile.role === "deputy" ||
-        currentProfile.role === "employee"
+        currentProfile.role ===
+          "sheikh" ||
+        currentProfile.role ===
+          "deputy" ||
+        currentProfile.role ===
+          "employee"
       ) {
-        if (currentProfile.institute_id) {
-          requestQuery = requestQuery.eq(
-            "institute_id",
-            currentProfile.institute_id
-          );
+        if (
+          currentProfile.institute_id
+        ) {
+          requestQuery =
+            requestQuery.eq(
+              "institute_id",
+              currentProfile.institute_id
+            );
         } else {
           setRequests([]);
           return;
@@ -378,11 +423,14 @@ export default function InstituteRequestsPage() {
       } else if (
         currentProfile.role === "director"
       ) {
-        if (currentProfile.directorate_id) {
-          requestQuery = requestQuery.eq(
-            "directorate_id",
-            currentProfile.directorate_id
-          );
+        if (
+          currentProfile.directorate_id
+        ) {
+          requestQuery =
+            requestQuery.eq(
+              "directorate_id",
+              currentProfile.directorate_id
+            );
         } else {
           setRequests([]);
           return;
@@ -399,18 +447,27 @@ export default function InstituteRequestsPage() {
           "Requests error:",
           requestsError
         );
+
         alert(
-          `تعذر تحميل الطلبات: ${requestsError.message}`
+          `تعذر تحميل الطلبات:\n${requestsError.message}`
         );
+
         return;
       }
 
       setRequests(
-        (requestsData ?? []) as unknown as InstituteRequest[]
+        (requestsData ??
+          []) as unknown as InstituteRequest[]
       );
     } catch (error) {
-      console.error("Load data error:", error);
-      alert("حدث خطأ أثناء تحميل البيانات.");
+      console.error(
+        "Load data error:",
+        error
+      );
+
+      alert(
+        "حدث خطأ أثناء تحميل البيانات."
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -422,13 +479,18 @@ export default function InstituteRequestsPage() {
   }, []);
 
   const filteredRequests = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase();
+    const search =
+      searchTerm.trim().toLowerCase();
 
     return requests.filter((request) => {
       const matchesSearch =
         !search ||
-        request.title.toLowerCase().includes(search) ||
-        request.description.toLowerCase().includes(search) ||
+        request.title
+          .toLowerCase()
+          .includes(search) ||
+        request.description
+          .toLowerCase()
+          .includes(search) ||
         request.institute?.name
           ?.toLowerCase()
           .includes(search);
@@ -443,7 +505,8 @@ export default function InstituteRequestsPage() {
 
       const matchesInstitute =
         instituteFilter === "all" ||
-        request.institute_id === instituteFilter;
+        request.institute_id ===
+          instituteFilter;
 
       return (
         matchesSearch &&
@@ -469,12 +532,14 @@ export default function InstituteRequestsPage() {
       ).length,
 
       inProgress: requests.filter(
-        (item) => item.status === "in_progress"
+        (item) =>
+          item.status === "in_progress"
       ).length,
 
       needsDirector: requests.filter(
         (item) =>
-          item.status === "needs_director_action"
+          item.status ===
+          "needs_director_action"
       ).length,
 
       overdue: requests.filter((item) =>
@@ -482,7 +547,8 @@ export default function InstituteRequestsPage() {
       ).length,
 
       resolved: requests.filter(
-        (item) => item.status === "resolved"
+        (item) =>
+          item.status === "resolved"
       ).length,
     };
   }, [requests]);
@@ -507,14 +573,23 @@ export default function InstituteRequestsPage() {
     resetCreateForm();
   }
 
-  function openRequest(request: InstituteRequest) {
+  /*
+   * الإصلاح الأساسي:
+   * عند فتح الطلب نضع الحالة الحالية كما هي.
+   *
+   * لا يوجد هنا:
+   *
+   * request.status === "new"
+   *   ? "in_progress"
+   *   : request.status
+   *
+   * وبالتالي فتح الطلب لا يغير حالته.
+   */
+  function openRequest(
+    request: InstituteRequest
+  ) {
     setSelectedRequest(request);
 
-    /*
-     * مهم:
-     * عند فتح الطلب لا نقوم بتحويل "جديد" إلى "قيد المعالجة".
-     * يتم عرض الحالة الحالية كما هي تمامًا من قاعدة البيانات.
-     */
     setDirectorForm({
       status: request.status,
       director_response:
@@ -535,12 +610,16 @@ export default function InstituteRequestsPage() {
 
   async function createRequest() {
     if (!profile) {
-      alert("بيانات المستخدم غير متاحة.");
+      alert(
+        "بيانات المستخدم غير متاحة."
+      );
       return;
     }
 
     if (!canCreate) {
-      alert("ليس لديك صلاحية إنشاء طلب.");
+      alert(
+        "ليس لديك صلاحية إنشاء طلب."
+      );
       return;
     }
 
@@ -559,12 +638,16 @@ export default function InstituteRequestsPage() {
     }
 
     if (!form.title.trim()) {
-      alert("برجاء كتابة عنوان الطلب.");
+      alert(
+        "برجاء كتابة عنوان الطلب."
+      );
       return;
     }
 
     if (!form.description.trim()) {
-      alert("برجاء كتابة تفاصيل الطلب.");
+      alert(
+        "برجاء كتابة تفاصيل الطلب."
+      );
       return;
     }
 
@@ -574,58 +657,89 @@ export default function InstituteRequestsPage() {
       const { error } = await supabase
         .from("institute_requests")
         .insert({
-          directorate_id: profile.directorate_id,
-          institute_id: profile.institute_id,
+          directorate_id:
+            profile.directorate_id,
+
+          institute_id:
+            profile.institute_id,
+
           created_by: profile.id,
+
           title: form.title.trim(),
-          description: form.description.trim(),
-          request_type: form.request_type,
-          priority: form.priority,
+
+          description:
+            form.description.trim(),
+
+          request_type:
+            form.request_type,
+
+          priority:
+            form.priority,
+
           status: "new",
-          due_date: form.due_date || null,
+
+          due_date:
+            form.due_date || null,
         });
 
       if (error) {
-        console.error("Create request error:", error);
+        console.error(
+          "Create request error:",
+          error
+        );
+
         alert(
           `تعذر إنشاء الطلب:\n${error.message}`
         );
+
         return;
       }
 
-      alert("تم إرسال الطلب بنجاح ✅");
+      alert(
+        "تم إرسال الطلب بنجاح ✅"
+      );
 
       closeCreateModal();
+
       await loadData(true);
     } catch (error) {
       console.error(
         "Create request exception:",
         error
       );
-      alert("حدث خطأ أثناء إرسال الطلب.");
+
+      alert(
+        "حدث خطأ أثناء إرسال الطلب."
+      );
     } finally {
       setSaving(false);
     }
   }
 
   async function updateRequest() {
-    if (!selectedRequest) return;
+    if (!selectedRequest) {
+      return;
+    }
 
     if (!isDirector) {
       alert(
         "تعديل حالة الطلب ورد الإدارة متاح لمدير الإدارة فقط."
       );
+
       return;
     }
 
     if (
-      (directorForm.status === "resolved" ||
-        directorForm.status === "closed") &&
+      (directorForm.status ===
+        "resolved" ||
+        directorForm.status ===
+          "closed") &&
       !directorForm.director_response.trim()
     ) {
       alert(
         "برجاء كتابة رد الإدارة قبل تحويل الطلب إلى تم الحل أو مغلق."
       );
+
       return;
     }
 
@@ -634,29 +748,39 @@ export default function InstituteRequestsPage() {
 
       const updateData: {
         status: RequestStatus;
-        director_response: string | null;
+        director_response:
+          | string
+          | null;
         due_date: string | null;
         updated_at: string;
         resolved_at?: string | null;
         resolved_by?: string | null;
       } = {
         status: directorForm.status,
+
         director_response:
-          directorForm.director_response.trim() || null,
+          directorForm.director_response.trim() ||
+          null,
+
         due_date:
           directorForm.due_date || null,
-        updated_at: new Date().toISOString(),
+
+        updated_at:
+          new Date().toISOString(),
       };
 
       if (
-        directorForm.status === "resolved" ||
-        directorForm.status === "closed"
+        directorForm.status ===
+          "resolved" ||
+        directorForm.status ===
+          "closed"
       ) {
         updateData.resolved_at =
           selectedRequest.resolved_at ??
           new Date().toISOString();
 
-        updateData.resolved_by = profile?.id ?? null;
+        updateData.resolved_by =
+          profile?.id ?? null;
       } else {
         updateData.resolved_at = null;
         updateData.resolved_by = null;
@@ -680,9 +804,12 @@ export default function InstituteRequestsPage() {
         return;
       }
 
-      alert("تم حفظ تحديث الطلب بنجاح ✅");
+      alert(
+        "تم حفظ تحديث الطلب بنجاح ✅"
+      );
 
       closeRequest();
+
       await loadData(true);
     } catch (error) {
       console.error(
@@ -690,7 +817,9 @@ export default function InstituteRequestsPage() {
         error
       );
 
-      alert("حدث خطأ أثناء حفظ تحديث الطلب.");
+      alert(
+        "حدث خطأ أثناء حفظ تحديث الطلب."
+      );
     } finally {
       setSaving(false);
     }
@@ -705,7 +834,10 @@ export default function InstituteRequestsPage() {
         >
           <div className="flex flex-col items-center gap-3 text-slate-600">
             <Loader2 className="h-8 w-8 animate-spin" />
-            <span>جاري تحميل طلبات المعاهد...</span>
+
+            <span>
+              جاري تحميل طلبات المعاهد...
+            </span>
           </div>
         </div>
       </AppShell>
@@ -723,7 +855,10 @@ export default function InstituteRequestsPage() {
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
               <FileText className="h-4 w-4" />
-              <span>طلبات المعاهد</span>
+
+              <span>
+                طلبات المعاهد
+              </span>
             </div>
 
             <h1 className="text-2xl font-bold text-slate-900">
@@ -731,34 +866,42 @@ export default function InstituteRequestsPage() {
             </h1>
 
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              قناة مباشرة ومنظمة بين المعاهد ومدير الإدارة
-              للطلبات والمشكلات والاحتياجات والمتابعة حتى
-              الحل والإغلاق.
+              قناة مباشرة ومنظمة بين المعاهد ومدير
+              الإدارة للطلبات والمشكلات والاحتياجات
+              والمتابعة حتى الحل والإغلاق.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => loadData(true)}
+              onClick={() =>
+                loadData(true)
+              }
               disabled={refreshing}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw
                 className={`h-4 w-4 ${
-                  refreshing ? "animate-spin" : ""
+                  refreshing
+                    ? "animate-spin"
+                    : ""
                 }`}
               />
+
               تحديث
             </button>
 
             {canCreate && (
               <button
                 type="button"
-                onClick={openCreateModal}
+                onClick={
+                  openCreateModal
+                }
                 className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
               >
                 <Plus className="h-4 w-4" />
+
                 طلب جديد
               </button>
             )}
@@ -768,66 +911,80 @@ export default function InstituteRequestsPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
           <StatCard
-            icon={<FileText className="h-5 w-5" />}
+            icon={
+              <FileText className="h-5 w-5" />
+            }
             label="إجمالي الطلبات"
             value={stats.total}
           />
 
           <StatCard
-            icon={<Bell className="h-5 w-5" />}
+            icon={
+              <Bell className="h-5 w-5" />
+            }
             label="جديدة"
             value={stats.new}
           />
 
           <StatCard
-            icon={<Clock3 className="h-5 w-5" />}
+            icon={
+              <Clock3 className="h-5 w-5" />
+            }
             label="قيد المعالجة"
             value={stats.inProgress}
           />
 
           <StatCard
-            icon={<AlertCircle className="h-5 w-5" />}
+            icon={
+              <AlertCircle className="h-5 w-5" />
+            }
             label="تحتاج تدخل المدير"
             value={stats.needsDirector}
           />
 
           <StatCard
-            icon={<CalendarDays className="h-5 w-5" />}
+            icon={
+              <CalendarDays className="h-5 w-5" />
+            }
             label="متأخرة"
             value={stats.overdue}
           />
 
           <StatCard
-            icon={<CheckCircle2 className="h-5 w-5" />}
+            icon={
+              <CheckCircle2 className="h-5 w-5" />
+            }
             label="تم الحل"
             value={stats.resolved}
           />
         </div>
 
         {/* Director warning */}
-        {isDirector && stats.needsDirector > 0 && (
-          <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
-            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+        {isDirector &&
+          stats.needsDirector > 0 && (
+            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
 
-            <div>
-              <div className="font-semibold">
-                توجد طلبات تحتاج تدخل المدير
-              </div>
+              <div>
+                <div className="font-semibold">
+                  توجد طلبات تحتاج تدخل المدير
+                </div>
 
-              <div className="mt-1 text-sm leading-6">
-                يوجد {stats.needsDirector} طلب
-                {stats.needsDirector === 1
-                  ? ""
-                  : "ات"} بحاجة إلى مراجعتك واتخاذ إجراء.
+                <div className="mt-1 text-sm leading-6">
+                  يوجد{" "}
+                  {stats.needsDirector}{" "}
+                  طلب بحاجة إلى مراجعتك
+                  واتخاذ إجراء.
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Filters */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
             <Filter className="h-4 w-4" />
+
             تصفية الطلبات
           </div>
 
@@ -838,7 +995,9 @@ export default function InstituteRequestsPage() {
               <input
                 value={searchTerm}
                 onChange={(e) =>
-                  setSearchTerm(e.target.value)
+                  setSearchTerm(
+                    e.target.value
+                  )
                 }
                 placeholder="بحث في الطلبات..."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pr-10 pl-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white"
@@ -860,14 +1019,18 @@ export default function InstituteRequestsPage() {
                 كل الحالات
               </option>
 
-              {statusOptions.map((option) => (
-                <option
-                  key={option.value}
-                  value={option.value}
-                >
-                  {option.label}
-                </option>
-              ))}
+              {statusOptions.map(
+                (option) => (
+                  <option
+                    key={option.value}
+                    value={
+                      option.value
+                    }
+                  >
+                    {option.label}
+                  </option>
+                )
+              )}
             </select>
 
             <select
@@ -885,21 +1048,29 @@ export default function InstituteRequestsPage() {
                 كل الأولويات
               </option>
 
-              {priorityOptions.map((option) => (
-                <option
-                  key={option.value}
-                  value={option.value}
-                >
-                  {option.label}
-                </option>
-              ))}
+              {priorityOptions.map(
+                (option) => (
+                  <option
+                    key={option.value}
+                    value={
+                      option.value
+                    }
+                  >
+                    {option.label}
+                  </option>
+                )
+              )}
             </select>
 
             {isDirector ? (
               <select
-                value={instituteFilter}
+                value={
+                  instituteFilter
+                }
                 onChange={(e) =>
-                  setInstituteFilter(e.target.value)
+                  setInstituteFilter(
+                    e.target.value
+                  )
                 }
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
               >
@@ -907,14 +1078,16 @@ export default function InstituteRequestsPage() {
                   كل المعاهد
                 </option>
 
-                {institutes.map((institute) => (
-                  <option
-                    key={institute.id}
-                    value={institute.id}
-                  >
-                    {institute.name}
-                  </option>
-                ))}
+                {institutes.map(
+                  (institute) => (
+                    <option
+                      key={institute.id}
+                      value={institute.id}
+                    >
+                      {institute.name}
+                    </option>
+                  )
+                )}
               </select>
             ) : (
               <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500">
@@ -925,7 +1098,8 @@ export default function InstituteRequestsPage() {
         </div>
 
         {/* Requests */}
-        {filteredRequests.length === 0 ? (
+        {filteredRequests.length ===
+        0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
               <FileText className="h-7 w-7 text-slate-400" />
@@ -936,121 +1110,139 @@ export default function InstituteRequestsPage() {
             </h3>
 
             <p className="mt-2 text-sm text-slate-500">
-              لا توجد طلبات مطابقة للفلاتر الحالية.
+              لا توجد طلبات مطابقة للفلاتر
+              الحالية.
             </p>
 
             {canCreate && (
               <button
                 type="button"
-                onClick={openCreateModal}
+                onClick={
+                  openCreateModal
+                }
                 className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
               >
                 <Plus className="h-4 w-4" />
+
                 إنشاء طلب جديد
               </button>
             )}
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredRequests.map((request) => (
-              <div
-                key={request.id}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-bold text-slate-900">
-                        {request.title}
-                      </h2>
+            {filteredRequests.map(
+              (request) => (
+                <div
+                  key={request.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-bold text-slate-900">
+                          {request.title}
+                        </h2>
 
-                      <span
-                        className={`rounded-full border px-2.5 py-1 text-xs font-medium ${priorityClass(
-                          request.priority
-                        )}`}
-                      >
-                        {priorityLabel(
-                          request.priority
-                        )}
-                      </span>
-
-                      <span
-                        className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusClass(
-                          request.status
-                        )}`}
-                      >
-                        {statusLabel(
-                          request.status
-                        )}
-                      </span>
-
-                      {isOverdue(request) && (
-                        <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
-                          متأخر
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${priorityClass(
+                            request.priority
+                          )}`}
+                        >
+                          {priorityLabel(
+                            request.priority
+                          )}
                         </span>
+
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusClass(
+                            request.status
+                          )}`}
+                        >
+                          {statusLabel(
+                            request.status
+                          )}
+                        </span>
+
+                        {isOverdue(
+                          request
+                        ) && (
+                          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+                            متأخر
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5" />
+
+                          {request.institute
+                            ?.name ??
+                            "—"}
+                        </span>
+
+                        <span>
+                          النوع:{" "}
+                          {typeLabel(
+                            request.request_type
+                          )}
+                        </span>
+
+                        <span>
+                          إنشاء:{" "}
+                          {formatDateTime(
+                            request.created_at
+                          )}
+                        </span>
+
+                        <span>
+                          آخر تحديث:{" "}
+                          {formatDateTime(
+                            request.updated_at
+                          )}
+                        </span>
+                      </div>
+
+                      <p className="mt-4 line-clamp-2 text-sm leading-6 text-slate-600">
+                        {
+                          request.description
+                        }
+                      </p>
+
+                      {request.director_response && (
+                        <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
+                          <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-emerald-800">
+                            <MessageSquare className="h-3.5 w-3.5" />
+
+                            رد الإدارة
+                          </div>
+
+                          <p className="text-sm leading-6 text-emerald-900">
+                            {
+                              request.director_response
+                            }
+                          </p>
+                        </div>
                       )}
                     </div>
 
-                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
-                      <span className="inline-flex items-center gap-1.5">
-                        <Building2 className="h-3.5 w-3.5" />
-                        {request.institute?.name ??
-                          "—"}
-                      </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openRequest(
+                          request
+                        )
+                      }
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      عرض الطلب
 
-                      <span>
-                        النوع:{" "}
-                        {typeLabel(
-                          request.request_type
-                        )}
-                      </span>
-
-                      <span>
-                        إنشاء:{" "}
-                        {formatDateTime(
-                          request.created_at
-                        )}
-                      </span>
-
-                      <span>
-                        آخر تحديث:{" "}
-                        {formatDateTime(
-                          request.updated_at
-                        )}
-                      </span>
-                    </div>
-
-                    <p className="mt-4 line-clamp-2 text-sm leading-6 text-slate-600">
-                      {request.description}
-                    </p>
-
-                    {request.director_response && (
-                      <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-                        <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-emerald-800">
-                          <MessageSquare className="h-3.5 w-3.5" />
-                          رد الإدارة
-                        </div>
-
-                        <p className="text-sm leading-6 text-emerald-900">
-                          {request.director_response}
-                        </p>
-                      </div>
-                    )}
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openRequest(request)
-                    }
-                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    عرض الطلب
-                    <ArrowLeft className="h-4 w-4" />
-                  </button>
                 </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
         )}
 
@@ -1068,14 +1260,16 @@ export default function InstituteRequestsPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    سيتم إرسال الطلب مباشرة إلى مدير
-                    الإدارة.
+                    سيتم إرسال الطلب مباشرة
+                    إلى مدير الإدارة.
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={closeCreateModal}
+                  onClick={
+                    closeCreateModal
+                  }
                   className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 >
                   <X className="h-5 w-5" />
@@ -1091,10 +1285,13 @@ export default function InstituteRequestsPage() {
                   <input
                     value={form.title}
                     onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        title: e.target.value,
-                      }))
+                      setForm(
+                        (prev) => ({
+                          ...prev,
+                          title: e.target
+                            .value,
+                        })
+                      )
                     }
                     placeholder="مثال: طلب حبر للطابعة"
                     className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-400"
@@ -1107,13 +1304,18 @@ export default function InstituteRequestsPage() {
                   </label>
 
                   <textarea
-                    value={form.description}
+                    value={
+                      form.description
+                    }
                     onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        description:
-                          e.target.value,
-                      }))
+                      setForm(
+                        (prev) => ({
+                          ...prev,
+                          description:
+                            e.target
+                              .value,
+                        })
+                      )
                     }
                     rows={5}
                     placeholder="اكتب تفاصيل الطلب أو المشكلة..."
@@ -1128,24 +1330,34 @@ export default function InstituteRequestsPage() {
                     </label>
 
                     <select
-                      value={form.request_type}
+                      value={
+                        form.request_type
+                      }
                       onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          request_type:
-                            e.target
-                              .value as RequestType,
-                        }))
+                        setForm(
+                          (prev) => ({
+                            ...prev,
+                            request_type:
+                              e.target
+                                .value as RequestType,
+                          })
+                        )
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400"
                     >
                       {requestTypeOptions.map(
                         (option) => (
                           <option
-                            key={option.value}
-                            value={option.value}
+                            key={
+                              option.value
+                            }
+                            value={
+                              option.value
+                            }
                           >
-                            {option.label}
+                            {
+                              option.label
+                            }
                           </option>
                         )
                       )}
@@ -1158,24 +1370,34 @@ export default function InstituteRequestsPage() {
                     </label>
 
                     <select
-                      value={form.priority}
+                      value={
+                        form.priority
+                      }
                       onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          priority:
-                            e.target
-                              .value as Priority,
-                        }))
+                        setForm(
+                          (prev) => ({
+                            ...prev,
+                            priority:
+                              e.target
+                                .value as Priority,
+                          })
+                        )
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400"
                     >
                       {priorityOptions.map(
                         (option) => (
                           <option
-                            key={option.value}
-                            value={option.value}
+                            key={
+                              option.value
+                            }
+                            value={
+                              option.value
+                            }
                           >
-                            {option.label}
+                            {
+                              option.label
+                            }
                           </option>
                         )
                       )}
@@ -1189,13 +1411,18 @@ export default function InstituteRequestsPage() {
 
                     <input
                       type="date"
-                      value={form.due_date}
+                      value={
+                        form.due_date
+                      }
                       onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          due_date:
-                            e.target.value,
-                        }))
+                        setForm(
+                          (prev) => ({
+                            ...prev,
+                            due_date:
+                              e.target
+                                .value,
+                          })
+                        )
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-slate-400"
                     />
@@ -1205,7 +1432,9 @@ export default function InstituteRequestsPage() {
                 <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
                   <button
                     type="button"
-                    onClick={closeCreateModal}
+                    onClick={
+                      closeCreateModal
+                    }
                     className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     إلغاء
@@ -1213,7 +1442,9 @@ export default function InstituteRequestsPage() {
 
                   <button
                     type="button"
-                    onClick={createRequest}
+                    onClick={
+                      createRequest
+                    }
                     disabled={saving}
                     className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -1231,7 +1462,7 @@ export default function InstituteRequestsPage() {
           </div>
         )}
 
-        {/* Request Details Modal */}
+        {/* Details Modal */}
         {selectedRequest && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <div
@@ -1263,18 +1494,23 @@ export default function InstituteRequestsPage() {
                   </div>
 
                   <h2 className="text-xl font-bold text-slate-900">
-                    {selectedRequest.title}
+                    {
+                      selectedRequest.title
+                    }
                   </h2>
 
                   <p className="mt-2 text-sm text-slate-500">
-                    {selectedRequest.institute?.name ??
-                      "—"}
+                    {selectedRequest
+                      .institute
+                      ?.name ?? "—"}
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={closeRequest}
+                  onClick={
+                    closeRequest
+                  }
                   className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 >
                   <X className="h-5 w-5" />
@@ -1282,7 +1518,7 @@ export default function InstituteRequestsPage() {
               </div>
 
               <div className="space-y-6 p-5">
-                {/* Request info */}
+                {/* Information */}
                 <div className="grid gap-4 md:grid-cols-2">
                   <InfoItem
                     label="نوع الطلب"
@@ -1320,7 +1556,9 @@ export default function InstituteRequestsPage() {
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-700">
-                    {selectedRequest.description}
+                    {
+                      selectedRequest.description
+                    }
                   </div>
                 </div>
 
@@ -1329,6 +1567,7 @@ export default function InstituteRequestsPage() {
                   <div>
                     <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
                       <MessageSquare className="h-4 w-4" />
+
                       رد الإدارة الحالي
                     </div>
 
@@ -1340,7 +1579,7 @@ export default function InstituteRequestsPage() {
                   </div>
                 )}
 
-                {/* Director controls */}
+                {/* Director */}
                 {isDirector ? (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                     <div className="mb-5">
@@ -1349,8 +1588,8 @@ export default function InstituteRequestsPage() {
                       </h3>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        يمكنك تحديث حالة الطلب والرد
-                        وتاريخ الاستحقاق.
+                        يمكنك تحديث حالة الطلب ورد
+                        الإدارة وتاريخ الاستحقاق.
                       </p>
                     </div>
 
@@ -1379,10 +1618,16 @@ export default function InstituteRequestsPage() {
                           {statusOptions.map(
                             (option) => (
                               <option
-                                key={option.value}
-                                value={option.value}
+                                key={
+                                  option.value
+                                }
+                                value={
+                                  option.value
+                                }
                               >
-                                {option.label}
+                                {
+                                  option.label
+                                }
                               </option>
                             )
                           )}
@@ -1404,7 +1649,8 @@ export default function InstituteRequestsPage() {
                               (prev) => ({
                                 ...prev,
                                 due_date:
-                                  e.target.value,
+                                  e.target
+                                    .value,
                               })
                             )
                           }
@@ -1426,7 +1672,8 @@ export default function InstituteRequestsPage() {
                               (prev) => ({
                                 ...prev,
                                 director_response:
-                                  e.target.value,
+                                  e.target
+                                    .value,
                               })
                             )
                           }
@@ -1439,7 +1686,9 @@ export default function InstituteRequestsPage() {
                       <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
                         <button
                           type="button"
-                          onClick={closeRequest}
+                          onClick={
+                            closeRequest
+                          }
                           className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                         >
                           إغلاق
@@ -1447,7 +1696,9 @@ export default function InstituteRequestsPage() {
 
                         <button
                           type="button"
-                          onClick={updateRequest}
+                          onClick={
+                            updateRequest
+                          }
                           disabled={saving}
                           className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                         >
