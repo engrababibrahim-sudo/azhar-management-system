@@ -1,22 +1,19 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
 import {
-  Upload,
-  Download,
-  FileSpreadsheet,
-  CheckCircle2,
-  AlertCircle,
+  Search,
+  Plus,
   RefreshCw,
   Users,
+  Mail,
+  Phone,
+  BookOpen,
   GraduationCap,
-  X,
 } from "lucide-react";
-import * as XLSX from "xlsx";
 import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
-
-type ImportType = "students" | "teachers";
 
 type Profile = {
   id: string;
@@ -32,48 +29,55 @@ type Institute = {
   code: string;
 };
 
-type TeacherRow = {
-  teacher_code: string;
+type Teacher = {
+  id: string;
+  institute_id: string;
   full_name: string;
-  phone: string;
-  email: string;
-  specialization: string;
-  qualification: string;
+  teacher_code: string | null;
+  phone: string | null;
+  email: string | null;
+  specialization: string | null;
+  qualification: string | null;
   is_active: boolean;
+  created_at: string;
 };
 
-type ValidationRow = {
-  rowNumber: number;
-  errors: string[];
-};
-
-export default function ImportPage() {
+export default function TeachersPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+
   const [selectedInstitute, setSelectedInstitute] = useState("");
-
-  const [importType, setImportType] =
-    useState<ImportType>("students");
-
-  const [fileName, setFileName] = useState("");
-  const [teacherRows, setTeacherRows] = useState<TeacherRow[]>([]);
-  const [validationErrors, setValidationErrors] =
-    useState<ValidationRow[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [loadingTeachers, setLoadingTeachers] = useState(false);
 
-  const [importedCount, setImportedCount] = useState(0);
-  const [skippedCount, setSkippedCount] = useState(0);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const [fullName, setFullName] = useState("");
+  const [teacherCode, setTeacherCode] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [specialization, setSpecialization] = useState("");
+  const [qualification, setQualification] = useState("");
+
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     loadProfile();
   }, []);
 
+  useEffect(() => {
+    if (profile) {
+      loadTeachers();
+    }
+  }, [profile, selectedInstitute]);
+
   async function loadProfile() {
     setLoading(true);
+    setMessage("");
 
     try {
       const {
@@ -100,6 +104,10 @@ export default function ImportPage() {
 
       setProfile(data);
 
+      /*
+       * شيخ / نائب / موظف:
+       * يرى مدرسين المعهد المرتبط بحسابه فقط.
+       */
       if (
         data.role === "sheikh" ||
         data.role === "deputy" ||
@@ -121,6 +129,10 @@ export default function ImportPage() {
         setInstitutes([institute]);
         setSelectedInstitute(institute.id);
       } else {
+        /*
+         * المدير / super_admin:
+         * يرى المعاهد التابعة للإدارة التعليمية.
+         */
         let query = supabase
           .from("institutes")
           .select("id, name, code")
@@ -136,8 +148,10 @@ export default function ImportPage() {
           );
         }
 
-        const { data: instituteData, error: institutesError } =
-          await query;
+        const {
+          data: instituteData,
+          error: institutesError,
+        } = await query;
 
         if (institutesError) throw institutesError;
 
@@ -149,437 +163,205 @@ export default function ImportPage() {
       }
     } catch (error) {
       console.error(error);
-      setMessage("حدث خطأ أثناء تحميل بيانات المستخدم.");
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "حدث خطأ أثناء تحميل بيانات المستخدم."
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  function resetImport() {
-    setFileName("");
-    setTeacherRows([]);
-    setValidationErrors([]);
-    setImportedCount(0);
-    setSkippedCount(0);
+  async function loadTeachers() {
+    if (!profile) return;
+
+    setLoadingTeachers(true);
     setMessage("");
-  }
-
-  function getField(
-    row: Record<string, unknown>,
-    names: string[]
-  ) {
-    for (const name of names) {
-      if (
-        row[name] !== undefined &&
-        row[name] !== null &&
-        String(row[name]).trim() !== ""
-      ) {
-        return String(row[name]).trim();
-      }
-    }
-
-    return "";
-  }
-
-  function normalizeBoolean(value: string) {
-    const text = value.trim().toLowerCase();
-
-    if (
-      text === "غير نشط" ||
-      text === "غيرنشط" ||
-      text === "inactive" ||
-      text === "false" ||
-      text === "0"
-    ) {
-      return false;
-    }
-
-    return true;
-  }
-
-  function mapTeacherRow(
-    row: Record<string, unknown>
-  ): TeacherRow {
-    return {
-      teacher_code: getField(row, [
-        "كود المعلم",
-        "كود المدرس",
-        "teacher_code",
-        "Teacher Code",
-      ]),
-
-      full_name: getField(row, [
-        "اسم المعلم",
-        "اسم المدرس",
-        "full_name",
-        "Full Name",
-      ]),
-
-      phone: getField(row, [
-        "الهاتف",
-        "رقم الهاتف",
-        "هاتف",
-        "phone",
-        "Phone",
-      ]),
-
-      email: getField(row, [
-        "البريد الإلكتروني",
-        "البريد الالكتروني",
-        "الإيميل",
-        "email",
-        "Email",
-      ]),
-
-      specialization: getField(row, [
-        "التخصص",
-        "تخصص",
-        "specialization",
-        "Specialization",
-      ]),
-
-      qualification: getField(row, [
-        "المؤهل",
-        "المؤهل الدراسي",
-        "qualification",
-        "Qualification",
-      ]),
-
-      is_active: normalizeBoolean(
-        getField(row, [
-          "الحالة",
-          "حالة المعلم",
-          "is_active",
-          "Status",
-        ]) || "نشط"
-      ),
-    };
-  }
-
-  function validateTeacherRow(
-    row: TeacherRow,
-    rowNumber: number
-  ) {
-    const errors: string[] = [];
-
-    if (!row.full_name.trim()) {
-      errors.push("اسم المعلم مطلوب");
-    }
-
-    if (row.email && !row.email.includes("@")) {
-      errors.push("البريد الإلكتروني غير صحيح");
-    }
-
-    return {
-      rowNumber,
-      errors,
-    };
-  }
-
-  async function handleTeacherFile(
-    file: File
-  ) {
-    setProcessing(true);
-    setMessage("");
-    setTeacherRows([]);
-    setValidationErrors([]);
-    setImportedCount(0);
-    setSkippedCount(0);
 
     try {
-      const buffer = await file.arrayBuffer();
+      let query = supabase
+        .from("teachers")
+        .select(
+          "id, institute_id, full_name, teacher_code, phone, email, specialization, qualification, is_active, created_at"
+        )
+        .order("created_at", {
+          ascending: false,
+        });
 
-      const workbook = XLSX.read(buffer, {
-        type: "array",
-      });
-
-      const sheetName = workbook.SheetNames[0];
-
-      if (!sheetName) {
-        throw new Error("ملف Excel لا يحتوي على ورقة بيانات.");
-      }
-
-      const worksheet = workbook.Sheets[sheetName];
-
-      const rawRows = XLSX.utils.sheet_to_json<
-        Record<string, unknown>
-      >(worksheet, {
-        defval: "",
-      });
-
-      if (rawRows.length === 0) {
-        throw new Error("ملف Excel فارغ.");
-      }
-
-      const mappedRows = rawRows.map(mapTeacherRow);
-
-      const errors: ValidationRow[] = [];
-
-      mappedRows.forEach((row, index) => {
-        const validation = validateTeacherRow(
-          row,
-          index + 2
-        );
-
-        if (validation.errors.length > 0) {
-          errors.push(validation);
+      /*
+       * شيخ / نائب / موظف:
+       * يتم تقييد النتائج بمعهد الحساب.
+       */
+      if (
+        profile.role === "sheikh" ||
+        profile.role === "deputy" ||
+        profile.role === "employee"
+      ) {
+        if (!profile.institute_id) {
+          setTeachers([]);
+          return;
         }
-      });
 
-      const seenCodes = new Set<string>();
-
-      mappedRows.forEach((row, index) => {
-        if (!row.teacher_code) return;
-
-        const code = row.teacher_code.toLowerCase();
-
-        if (seenCodes.has(code)) {
-          const existing = errors.find(
-            (x) => x.rowNumber === index + 2
-          );
-
-          if (existing) {
-            existing.errors.push(
-              "كود المعلم مكرر داخل الملف"
+        query = query.eq(
+          "institute_id",
+          profile.institute_id
+        );
+      } else if (selectedInstitute) {
+        /*
+         * المدير:
+         * عند اختيار معهد، يعرض مدرسين هذا المعهد.
+         */
+        query = query.eq(
+          "institute_id",
+          selectedInstitute
+        );
+      } else if (
+        profile.role !== "super_admin" &&
+        profile.directorate_id
+      ) {
+        /*
+         * المدير بدون اختيار معهد:
+         * نحتاج الحصول على المعاهد التابعة للإدارة أولًا.
+         */
+        const { data: directorateInstitutes, error } =
+          await supabase
+            .from("institutes")
+            .select("id")
+            .eq(
+              "directorate_id",
+              profile.directorate_id
             );
-          } else {
-            errors.push({
-              rowNumber: index + 2,
-              errors: ["كود المعلم مكرر داخل الملف"],
-            });
-          }
+
+        if (error) throw error;
+
+        const instituteIds =
+          directorateInstitutes?.map(
+            (item) => item.id
+          ) || [];
+
+        if (instituteIds.length === 0) {
+          setTeachers([]);
+          return;
         }
 
-        seenCodes.add(code);
-      });
-
-      setTeacherRows(mappedRows);
-      setValidationErrors(errors);
-      setFileName(file.name);
-
-      if (errors.length > 0) {
-        setMessage(
-          `تم تحميل الملف، ولكن يوجد ${errors.length} صف يحتاج إلى مراجعة.`
-        );
-      } else {
-        setMessage(
-          `تمت قراءة ${mappedRows.length} مدرس بنجاح، والبيانات جاهزة للاستيراد.`
+        query = query.in(
+          "institute_id",
+          instituteIds
         );
       }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      setTeachers(data || []);
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        "حدث خطأ أثناء تحميل بيانات المدرسين."
+      );
+    } finally {
+      setLoadingTeachers(false);
+    }
+  }
+
+  function resetForm() {
+    setFullName("");
+    setTeacherCode("");
+    setPhone("");
+    setEmail("");
+    setSpecialization("");
+    setQualification("");
+  }
+
+  async function addTeacher() {
+    if (!selectedInstitute) {
+      alert("من فضلك اختاري المعهد أولًا.");
+      return;
+    }
+
+    if (!fullName.trim()) {
+      alert("اسم المعلم مطلوب.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const { error } = await supabase
+        .from("teachers")
+        .insert({
+          institute_id: selectedInstitute,
+          full_name: fullName.trim(),
+          teacher_code:
+            teacherCode.trim() || null,
+          phone: phone.trim() || null,
+          email: email.trim() || null,
+          specialization:
+            specialization.trim() || null,
+          qualification:
+            qualification.trim() || null,
+          is_active: true,
+        });
+
+      if (error) throw error;
+
+      setShowAddModal(false);
+      resetForm();
+
+      await loadTeachers();
+
+      setMessage("تم إضافة المدرس بنجاح.");
     } catch (error) {
       console.error(error);
 
       setMessage(
         error instanceof Error
           ? error.message
-          : "حدث خطأ أثناء قراءة ملف Excel."
+          : "حدث خطأ أثناء إضافة المدرس."
       );
     } finally {
-      setProcessing(false);
+      setSaving(false);
     }
   }
 
-  async function handleFile(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
-    const file = event.target.files?.[0];
+  const filteredTeachers = teachers.filter(
+    (teacher) => {
+      const search = searchTerm
+        .trim()
+        .toLowerCase();
 
-    if (!file) return;
+      if (!search) return true;
 
-    const extension = file.name
-      .split(".")
-      .pop()
-      ?.toLowerCase();
-
-    if (extension !== "xlsx" && extension !== "xls") {
-      alert("من فضلك اختاري ملف Excel بصيغة XLSX أو XLS.");
-      return;
-    }
-
-    if (importType === "teachers") {
-      await handleTeacherFile(file);
-    } else {
-      alert(
-        "استيراد الطلاب الحالي يعمل كما هو. اختاري المدرسين لتجربة استيراد المدرسين."
+      return (
+        teacher.full_name
+          ?.toLowerCase()
+          .includes(search) ||
+        teacher.teacher_code
+          ?.toLowerCase()
+          .includes(search) ||
+        teacher.phone
+          ?.toLowerCase()
+          .includes(search) ||
+        teacher.email
+          ?.toLowerCase()
+          .includes(search) ||
+        teacher.specialization
+          ?.toLowerCase()
+          .includes(search)
       );
     }
+  );
 
-    event.target.value = "";
-  }
-
-  function downloadTeacherTemplate() {
-    const rows = [
-      {
-        "كود المعلم": "TCH-001",
-        "اسم المعلم": "محمد أحمد علي",
-        "الهاتف": "01011112222",
-        "البريد الإلكتروني": "teacher1@example.com",
-        "التخصص": "اللغة العربية",
-        "المؤهل": "ليسانس لغة عربية",
-        "الحالة": "نشط",
-      },
-      {
-        "كود المعلم": "TCH-002",
-        "اسم المعلم": "سارة محمود حسن",
-        "الهاتف": "01122223333",
-        "البريد الإلكتروني": "teacher2@example.com",
-        "التخصص": "الرياضيات",
-        "المؤهل": "ليسانس رياضيات",
-        "الحالة": "نشط",
-      },
-      {
-        "كود المعلم": "TCH-003",
-        "اسم المعلم": "أحمد خالد إبراهيم",
-        "الهاتف": "01233334444",
-        "البريد الإلكتروني": "teacher3@example.com",
-        "التخصص": "العلوم",
-        "المؤهل": "ماجستير علوم",
-        "الحالة": "نشط",
-      },
-    ];
-
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-
-    const workbook = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      "بيانات المدرسين"
-    );
-
-    worksheet["!cols"] = [
-      { wch: 18 },
-      { wch: 28 },
-      { wch: 16 },
-      { wch: 30 },
-      { wch: 25 },
-      { wch: 28 },
-      { wch: 14 },
-    ];
-
-    XLSX.writeFile(
-      workbook,
-      "نموذج_استيراد_المدرسين.xlsx"
-    );
-  }
-
-  async function importTeachers() {
-    if (!selectedInstitute) {
-      alert("من فضلك اختاري المعهد أولًا.");
-      return;
-    }
-
-    if (teacherRows.length === 0) {
-      alert("لا توجد بيانات مدرسين للاستيراد.");
-      return;
-    }
-
-    const invalidRows = validationErrors.length;
-
-    if (invalidRows > 0) {
-      alert(
-        "يوجد أخطاء في الملف. يرجى تصحيحها قبل الاستيراد."
-      );
-      return;
-    }
-
-    setImporting(true);
-    setImportedCount(0);
-    setSkippedCount(0);
-    setMessage("");
-
-    try {
-      const codes = teacherRows
-        .map((row) => row.teacher_code)
-        .filter(Boolean);
-
-      let existingTeachers: {
-        teacher_code: string | null;
-      }[] = [];
-
-      if (codes.length > 0) {
-        const { data, error } = await supabase
-          .from("teachers")
-          .select("teacher_code")
-          .eq("institute_id", selectedInstitute)
-          .in("teacher_code", codes);
-
-        if (error) throw error;
-
-        existingTeachers = data || [];
-      }
-
-      const existingCodes = new Set(
-        existingTeachers
-          .map((teacher) =>
-            teacher.teacher_code?.toLowerCase()
-          )
-          .filter(Boolean)
-      );
-
-      const rowsToInsert = teacherRows.filter(
-        (row) =>
-          !row.teacher_code ||
-          !existingCodes.has(
-            row.teacher_code.toLowerCase()
-          )
-      );
-
-      const skipped =
-        teacherRows.length - rowsToInsert.length;
-
-      if (rowsToInsert.length === 0) {
-        setSkippedCount(skipped);
-        setMessage(
-          "كل المدرسين الموجودين في الملف موجودون بالفعل في هذا المعهد."
-        );
-        return;
-      }
-
-      const payload = rowsToInsert.map((teacher) => ({
-        institute_id: selectedInstitute,
-        full_name: teacher.full_name.trim(),
-        teacher_code:
-          teacher.teacher_code.trim() || null,
-        phone: teacher.phone.trim() || null,
-        email: teacher.email.trim() || null,
-        specialization:
-          teacher.specialization.trim() || null,
-        qualification:
-          teacher.qualification.trim() || null,
-        is_active: teacher.is_active,
-      }));
-
-      const { error } = await supabase
-        .from("teachers")
-        .insert(payload);
-
-      if (error) {
-        console.error(
-          "TEACHERS IMPORT ERROR:",
-          error
-        );
-
-        throw error;
-      }
-
-      setImportedCount(rowsToInsert.length);
-      setSkippedCount(skipped);
-
-      setMessage(
-        `تم استيراد ${rowsToInsert.length} مدرس بنجاح.`
-      );
-    } catch (error) {
-      console.error(error);
-
-      setMessage(
-        "حدث خطأ أثناء استيراد المدرسين. راجعي صلاحيات قاعدة البيانات أو بيانات الملف."
-      );
-    } finally {
-      setImporting(false);
-    }
-  }
+  const selectedInstituteName =
+    institutes.find(
+      (institute) =>
+        institute.id === selectedInstitute
+    )?.name || "";
 
   if (loading) {
     return (
@@ -594,7 +376,7 @@ export default function ImportPage() {
           />
 
           <p className="text-slate-600">
-            جاري تحميل شاشة الاستيراد...
+            جاري تحميل بيانات المدرسين...
           </p>
         </div>
       </main>
@@ -608,106 +390,93 @@ export default function ImportPage() {
         className="min-h-screen bg-slate-100 text-slate-900"
       >
         <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold">
-              استيراد البيانات
-            </h1>
 
-            <p className="text-slate-500 mt-2">
-              استيراد بيانات الطلاب أو المدرسين من ملفات Excel
-            </p>
-          </div>
-
-          {/* اختيار نوع البيانات */}
-          <div className="bg-white rounded-2xl border shadow-sm p-6 mb-6">
-            <h2 className="text-lg font-bold mb-5">
-              اختر نوع البيانات
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button
-                onClick={() => {
-                  setImportType("students");
-                  resetImport();
-                }}
-                className={`rounded-2xl border-2 p-6 text-right transition ${
-                  importType === "students"
-                    ? "border-slate-900 bg-slate-50"
-                    : "border-slate-200 hover:border-slate-400"
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-blue-100 p-3 rounded-xl">
-                    <GraduationCap
-                      size={30}
-                      className="text-blue-700"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="font-bold text-lg">
-                      استيراد الطلاب
-                    </div>
-
-                    <div className="text-sm text-slate-500 mt-1">
-                      استيراد بيانات الطلاب من Excel
-                    </div>
-                  </div>
+          {/* العنوان */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-8">
+            <div>
+              <div className="flex items-center gap-3">
+                <div className="bg-green-100 text-green-700 p-3 rounded-2xl">
+                  <GraduationCap size={30} />
                 </div>
+
+                <div>
+                  <h1 className="text-3xl font-bold">
+                    المدرسون
+                  </h1>
+
+                  <p className="text-slate-500 mt-1">
+                    إدارة ومتابعة بيانات المدرسين
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={loadTeachers}
+                disabled={loadingTeachers}
+                className="bg-white border border-slate-200 px-5 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-50"
+              >
+                <RefreshCw
+                  size={18}
+                  className={
+                    loadingTeachers
+                      ? "animate-spin"
+                      : ""
+                  }
+                />
+
+                تحديث
               </button>
 
-              <button
-                onClick={() => {
-                  setImportType("teachers");
-                  resetImport();
-                }}
-                className={`rounded-2xl border-2 p-6 text-right transition ${
-                  importType === "teachers"
-                    ? "border-slate-900 bg-slate-50"
-                    : "border-slate-200 hover:border-slate-400"
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-green-100 p-3 rounded-xl">
-                    <Users
-                      size={30}
-                      className="text-green-700"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="font-bold text-lg">
-                      استيراد المدرسين
-                    </div>
-
-                    <div className="text-sm text-slate-500 mt-1">
-                      استيراد بيانات المدرسين من Excel
-                    </div>
-                  </div>
-                </div>
-              </button>
+              {(profile?.role === "sheikh" ||
+                profile?.role === "deputy" ||
+                profile?.role === "employee" ||
+                profile?.role === "director" ||
+                profile?.role === "super_admin") && (
+                <button
+                  onClick={() => {
+                    resetForm();
+                    setShowAddModal(true);
+                  }}
+                  className="bg-slate-900 text-white px-5 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-800"
+                >
+                  <Plus size={19} />
+                  إضافة مدرس
+                </button>
+              )}
             </div>
           </div>
 
-          {/* قسم المدرسين */}
-          {importType === "teachers" && (
-            <>
-              {/* اختيار المعهد */}
+          {/* رسالة */}
+          {message && (
+            <div className="bg-green-50 border border-green-200 text-green-800 rounded-2xl p-4 mb-6">
+              {message}
+            </div>
+          )}
+
+          {/* اختيار المعهد للمدير */}
+          {profile &&
+            (profile.role === "director" ||
+              profile.role === "super_admin") && (
               <div className="bg-white rounded-2xl border shadow-sm p-6 mb-6">
                 <label className="block font-bold mb-3">
-                  المعهد الذي سيتم إضافة المدرسين إليه
+                  المعهد
                 </label>
 
                 <select
                   value={selectedInstitute}
-                  onChange={(e) =>
-                    setSelectedInstitute(e.target.value)
+                  onChange={(event) =>
+                    setSelectedInstitute(
+                      event.target.value
+                    )
                   }
-                  disabled={institutes.length <= 1}
-                  className="w-full border rounded-xl px-4 py-3 bg-white"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-white"
                 >
                   <option value="">
-                    اختر المعهد
+                    {profile.role === "super_admin"
+                      ? "جميع المعاهد"
+                      : "جميع معاهد الإدارة"}
                   </option>
 
                   {institutes.map((institute) => (
@@ -715,351 +484,440 @@ export default function ImportPage() {
                       key={institute.id}
                       value={institute.id}
                     >
-                      {institute.name} - {institute.code}
+                      {institute.name} -{" "}
+                      {institute.code}
                     </option>
                   ))}
                 </select>
-              </div>
 
-              {/* نموذج Excel */}
-              <div className="bg-white rounded-2xl border shadow-sm p-6 mb-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-bold">
-                      نموذج Excel للمدرسين
-                    </h2>
-
-                    <p className="text-sm text-slate-500 mt-2">
-                      استخدمي النموذج الجاهز لضمان توافق الأعمدة.
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={downloadTeacherTemplate}
-                    className="bg-slate-900 text-white px-5 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-800"
-                  >
-                    <Download size={19} />
-                    تحميل نموذج المدرسين
-                  </button>
-                </div>
-
-                <div className="mt-5 bg-slate-50 rounded-xl p-4 text-sm">
-                  <strong>الأعمدة المطلوبة:</strong>
-
-                  <div className="mt-2 text-slate-600">
-                    كود المعلم، اسم المعلم، الهاتف، البريد
-                    الإلكتروني، التخصص، المؤهل، الحالة
-                  </div>
-                </div>
-              </div>
-
-              {/* رفع الملف */}
-              <div className="bg-white rounded-2xl border shadow-sm p-6 mb-6">
-                <h2 className="text-lg font-bold mb-4">
-                  رفع ملف المدرسين
-                </h2>
-
-                <label className="border-2 border-dashed border-slate-300 rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50">
-                  <FileSpreadsheet
-                    size={48}
-                    className="text-green-600 mb-4"
-                  />
-
-                  <span className="font-semibold">
-                    اضغطي لاختيار ملف Excel
-                  </span>
-
-                  <span className="text-sm text-slate-500 mt-2">
-                    XLSX أو XLS
-                  </span>
-
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={handleFile}
-                    className="hidden"
-                  />
-                </label>
-
-                {fileName && (
-                  <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle2
-                        className="text-green-600"
-                        size={22}
-                      />
-
-                      <span>{fileName}</span>
-                    </div>
-
-                    <button
-                      onClick={resetImport}
-                      className="p-2 hover:bg-green-100 rounded-lg"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                )}
-
-                {processing && (
-                  <div className="mt-5 flex items-center justify-center gap-3 text-slate-600">
-                    <RefreshCw
-                      size={20}
-                      className="animate-spin"
-                    />
-
-                    جاري قراءة ملف Excel...
-                  </div>
+                {!selectedInstitute && (
+                  <p className="text-sm text-slate-500 mt-2">
+                    يتم عرض المدرسين حسب نطاق صلاحيات الحساب.
+                  </p>
                 )}
               </div>
+            )}
 
-              {/* الرسالة */}
-              {message && (
-                <div
-                  className={`rounded-2xl p-5 mb-6 border ${
-                    message.includes("نجاح") ||
-                    message.includes("جاهزة")
-                      ? "bg-green-50 border-green-200 text-green-800"
-                      : "bg-amber-50 border-amber-200 text-amber-800"
-                  }`}
-                >
-                  {message}
+          {/* معلومات المعهد */}
+          {selectedInstituteName && (
+            <div className="bg-white rounded-2xl border shadow-sm p-5 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-100 text-blue-700 p-3 rounded-xl">
+                  <Users size={22} />
                 </div>
-              )}
 
-              {/* الإحصائيات */}
-              {teacherRows.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-                  <div className="bg-white rounded-2xl border p-6">
-                    <p className="text-sm text-slate-500">
-                      إجمالي الصفوف
-                    </p>
+                <div>
+                  <p className="text-sm text-slate-500">
+                    المعهد الحالي
+                  </p>
 
-                    <p className="text-3xl font-bold mt-2">
-                      {teacherRows.length}
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl border p-6">
-                    <p className="text-sm text-slate-500">
-                      صفوف سليمة
-                    </p>
-
-                    <p className="text-3xl font-bold mt-2 text-green-600">
-                      {teacherRows.length -
-                        validationErrors.length}
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl border p-6">
-                    <p className="text-sm text-slate-500">
-                      صفوف بها أخطاء
-                    </p>
-
-                    <p className="text-3xl font-bold mt-2 text-red-600">
-                      {validationErrors.length}
-                    </p>
-                  </div>
+                  <p className="font-bold text-lg">
+                    {selectedInstituteName}
+                  </p>
                 </div>
-              )}
-
-              {/* الأخطاء */}
-              {validationErrors.length > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <AlertCircle
-                      className="text-red-600"
-                      size={24}
-                    />
-
-                    <h2 className="font-bold text-red-800">
-                      أخطاء تحتاج إلى مراجعة
-                    </h2>
-                  </div>
-
-                  <div className="space-y-2">
-                    {validationErrors.map(
-                      (error, index) => (
-                        <div
-                          key={index}
-                          className="text-sm text-red-700"
-                        >
-                          الصف {error.rowNumber}:{" "}
-                          {error.errors.join(" - ")}
-                        </div>
-                      )
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Preview */}
-              {teacherRows.length > 0 && (
-                <div className="bg-white rounded-2xl border shadow-sm overflow-hidden mb-6">
-                  <div className="p-6 border-b">
-                    <h2 className="text-lg font-bold">
-                      معاينة المدرسين قبل الاستيراد
-                    </h2>
-
-                    <p className="text-sm text-slate-500 mt-1">
-                      راجعي البيانات قبل الضغط على زر الاستيراد.
-                    </p>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-right">
-                      <thead className="bg-slate-50 border-b">
-                        <tr>
-                          <th className="p-4">الكود</th>
-                          <th className="p-4">اسم المعلم</th>
-                          <th className="p-4">الهاتف</th>
-                          <th className="p-4">
-                            البريد الإلكتروني
-                          </th>
-                          <th className="p-4">التخصص</th>
-                          <th className="p-4">المؤهل</th>
-                          <th className="p-4">الحالة</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {teacherRows.map(
-                          (teacher, index) => (
-                            <tr
-                              key={index}
-                              className="border-b last:border-b-0"
-                            >
-                              <td className="p-4">
-                                {teacher.teacher_code || "-"}
-                              </td>
-
-                              <td className="p-4 font-semibold">
-                                {teacher.full_name}
-                              </td>
-
-                              <td className="p-4">
-                                {teacher.phone || "-"}
-                              </td>
-
-                              <td className="p-4">
-                                {teacher.email || "-"}
-                              </td>
-
-                              <td className="p-4">
-                                {teacher.specialization || "-"}
-                              </td>
-
-                              <td className="p-4">
-                                {teacher.qualification || "-"}
-                              </td>
-
-                              <td className="p-4">
-                                {teacher.is_active ? (
-                                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs">
-                                    نشط
-                                  </span>
-                                ) : (
-                                  <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs">
-                                    غير نشط
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* زر الاستيراد */}
-              {teacherRows.length > 0 && (
-                <div className="bg-white rounded-2xl border shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div>
-                    <p className="font-bold">
-                      جاهز لاستيراد المدرسين
-                    </p>
-
-                    <p className="text-sm text-slate-500 mt-1">
-                      سيتم إضافة المدرسين إلى المعهد المحدد فقط.
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={importTeachers}
-                    disabled={
-                      importing ||
-                      validationErrors.length > 0 ||
-                      !selectedInstitute
-                    }
-                    className="bg-green-600 text-white px-7 py-3 rounded-xl font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {importing ? (
-                      <>
-                        <RefreshCw
-                          size={19}
-                          className="animate-spin"
-                        />
-                        جاري الاستيراد...
-                      </>
-                    ) : (
-                      <>
-                        <Upload size={19} />
-                        استيراد المدرسين
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* نتيجة الاستيراد */}
-              {(importedCount > 0 || skippedCount > 0) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
-                  <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
-                    <p className="text-sm text-green-700">
-                      تم استيرادهم بنجاح
-                    </p>
-
-                    <p className="text-3xl font-bold text-green-700 mt-2">
-                      {importedCount}
-                    </p>
-                  </div>
-
-                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
-                    <p className="text-sm text-amber-700">
-                      تم تخطيهم لأنهم موجودون بالفعل
-                    </p>
-
-                    <p className="text-3xl font-bold text-amber-700 mt-2">
-                      {skippedCount}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* الطلاب */}
-          {importType === "students" && (
-            <div className="bg-white rounded-2xl border shadow-sm p-8 text-center">
-              <GraduationCap
-                size={55}
-                className="mx-auto mb-4 text-blue-600"
-              />
-
-              <h2 className="text-xl font-bold">
-                استيراد الطلاب
-              </h2>
-
-              <p className="text-slate-500 mt-2">
-                جزء استيراد الطلاب الموجود حاليًا يظل كما هو.
-                اختاري "استيراد الطلاب" للعودة إلى نموذج الطلاب.
-              </p>
+              </div>
             </div>
           )}
+
+          {/* الإحصائيات */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+            <div className="bg-white rounded-2xl border shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500">
+                    إجمالي المدرسين
+                  </p>
+
+                  <p className="text-3xl font-bold mt-2">
+                    {teachers.length}
+                  </p>
+                </div>
+
+                <div className="bg-blue-100 text-blue-700 p-3 rounded-xl">
+                  <Users size={25} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500">
+                    المدرسون النشطون
+                  </p>
+
+                  <p className="text-3xl font-bold mt-2 text-green-600">
+                    {
+                      teachers.filter(
+                        (teacher) =>
+                          teacher.is_active
+                      ).length
+                    }
+                  </p>
+                </div>
+
+                <div className="bg-green-100 text-green-700 p-3 rounded-xl">
+                  <BookOpen size={25} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500">
+                    نتائج البحث
+                  </p>
+
+                  <p className="text-3xl font-bold mt-2">
+                    {filteredTeachers.length}
+                  </p>
+                </div>
+
+                <div className="bg-purple-100 text-purple-700 p-3 rounded-xl">
+                  <Search size={25} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* البحث */}
+          <div className="bg-white rounded-2xl border shadow-sm p-5 mb-6">
+            <div className="relative">
+              <Search
+                size={20}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) =>
+                  setSearchTerm(event.target.value)
+                }
+                placeholder="ابحث باسم المدرس أو الكود أو الهاتف أو التخصص..."
+                className="w-full border border-slate-200 rounded-xl py-3 pr-12 pl-4 outline-none focus:border-slate-400"
+              />
+            </div>
+          </div>
+
+          {/* جدول المدرسين */}
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-bold">
+                قائمة المدرسين
+              </h2>
+
+              <p className="text-sm text-slate-500 mt-1">
+                البيانات المعروضة يتم تحميلها مباشرة من جدول
+                المدرسين في قاعدة البيانات.
+              </p>
+            </div>
+
+            {loadingTeachers ? (
+              <div className="p-12 text-center">
+                <RefreshCw
+                  size={30}
+                  className="mx-auto mb-3 animate-spin"
+                />
+
+                <p className="text-slate-500">
+                  جاري تحميل المدرسين...
+                </p>
+              </div>
+            ) : filteredTeachers.length === 0 ? (
+              <div className="p-12 text-center">
+                <Users
+                  size={50}
+                  className="mx-auto mb-4 text-slate-300"
+                />
+
+                <h3 className="text-lg font-bold text-slate-700">
+                  لا يوجد مدرسون
+                </h3>
+
+                <p className="text-slate-500 mt-2">
+                  عند استيراد مدرسين من صفحة استيراد البيانات
+                  سيظهرون هنا تلقائيًا.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-right">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="p-4">
+                        كود المعلم
+                      </th>
+
+                      <th className="p-4">
+                        اسم المعلم
+                      </th>
+
+                      <th className="p-4">
+                        الهاتف
+                      </th>
+
+                      <th className="p-4">
+                        البريد الإلكتروني
+                      </th>
+
+                      <th className="p-4">
+                        التخصص
+                      </th>
+
+                      <th className="p-4">
+                        المؤهل
+                      </th>
+
+                      <th className="p-4">
+                        الحالة
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {filteredTeachers.map(
+                      (teacher) => (
+                        <tr
+                          key={teacher.id}
+                          className="border-b last:border-b-0 hover:bg-slate-50"
+                        >
+                          <td className="p-4 font-medium">
+                            {teacher.teacher_code ||
+                              "-"}
+                          </td>
+
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="bg-green-100 text-green-700 p-2 rounded-xl">
+                                <GraduationCap
+                                  size={18}
+                                />
+                              </div>
+
+                              <span className="font-semibold">
+                                {teacher.full_name}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="p-4">
+                            {teacher.phone ? (
+                              <div className="flex items-center gap-2">
+                                <Phone
+                                  size={16}
+                                  className="text-slate-400"
+                                />
+
+                                {teacher.phone}
+                              </div>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+
+                          <td className="p-4">
+                            {teacher.email ? (
+                              <div className="flex items-center gap-2">
+                                <Mail
+                                  size={16}
+                                  className="text-slate-400"
+                                />
+
+                                {teacher.email}
+                              </div>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+
+                          <td className="p-4">
+                            {teacher.specialization ||
+                              "-"}
+                          </td>
+
+                          <td className="p-4">
+                            {teacher.qualification ||
+                              "-"}
+                          </td>
+
+                          <td className="p-4">
+                            {teacher.is_active ? (
+                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
+                                نشط
+                              </span>
+                            ) : (
+                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">
+                                غير نشط
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* إضافة مدرس */}
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">
+                    إضافة مدرس جديد
+                  </h2>
+
+                  <p className="text-sm text-slate-500 mt-1">
+                    {selectedInstituteName}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() =>
+                    setShowAddModal(false)
+                  }
+                  className="p-2 rounded-xl hover:bg-slate-100 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block font-semibold mb-2">
+                    اسم المعلم *
+                  </label>
+
+                  <input
+                    value={fullName}
+                    onChange={(event) =>
+                      setFullName(
+                        event.target.value
+                      )
+                    }
+                    className="w-full border rounded-xl px-4 py-3"
+                    placeholder="اسم المعلم"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-2">
+                    كود المعلم
+                  </label>
+
+                  <input
+                    value={teacherCode}
+                    onChange={(event) =>
+                      setTeacherCode(
+                        event.target.value
+                      )
+                    }
+                    className="w-full border rounded-xl px-4 py-3"
+                    placeholder="TCH-001"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-2">
+                    الهاتف
+                  </label>
+
+                  <input
+                    value={phone}
+                    onChange={(event) =>
+                      setPhone(event.target.value)
+                    }
+                    className="w-full border rounded-xl px-4 py-3"
+                    placeholder="01xxxxxxxxx"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-2">
+                    البريد الإلكتروني
+                  </label>
+
+                  <input
+                    value={email}
+                    onChange={(event) =>
+                      setEmail(event.target.value)
+                    }
+                    className="w-full border rounded-xl px-4 py-3"
+                    placeholder="teacher@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-2">
+                    التخصص
+                  </label>
+
+                  <input
+                    value={specialization}
+                    onChange={(event) =>
+                      setSpecialization(
+                        event.target.value
+                      )
+                    }
+                    className="w-full border rounded-xl px-4 py-3"
+                    placeholder="اللغة العربية"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-2">
+                    المؤهل
+                  </label>
+
+                  <input
+                    value={qualification}
+                    onChange={(event) =>
+                      setQualification(
+                        event.target.value
+                      )
+                    }
+                    className="w-full border rounded-xl px-4 py-3"
+                    placeholder="ليسانس..."
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 border-t flex justify-end gap-3">
+                <button
+                  onClick={() =>
+                    setShowAddModal(false)
+                  }
+                  className="px-5 py-3 rounded-xl border"
+                >
+                  إلغاء
+                </button>
+
+                <button
+                  onClick={addTeacher}
+                  disabled={saving}
+                  className="bg-slate-900 text-white px-6 py-3 rounded-xl disabled:opacity-50 flex items-center gap-2"
+                >
+                  {saving && (
+                    <RefreshCw
+                      size={18}
+                      className="animate-spin"
+                    />
+                  )}
+
+                  حفظ المدرس
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </AppShell>
   );
 }
+
