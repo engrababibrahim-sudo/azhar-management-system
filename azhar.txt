@@ -1,0 +1,32 @@
+host=db.oufvsybkuvkgqytfrwxt.supabase.co
+port=5432
+database=postgres
+user=postgres
+
+
+
+
+
+
+
+npx skills add supabase/agent-skills
+
+
+postgresql://postgres:[YOUR-PASSWORD]@db.oufvsybkuvkgqytfrwxt.supabase.co:5432/postgres
+
+
+qpPx2JNP6IacxEY2
+qpPx2JNP6IacxEY2
+
+Pinocchio2026ahmed : باسورد قاعدة البيانات
+
+https://vercel.com/azhar-management/azhar-management-system/deployments       موقع vercel
+
+
+
+
+https://supabase.com/dashboard/project/oufvsybkuvkgqytfrwxt/sql/bf3898e9-2648-4b5b-8550-a4eb6ed335ca  GitHub url
+https://supabase.com/dashboard/project/oufvsybkuvkgqytfrwxt/sql/bf3898e9-2648-4b5b-8550-a4eb6ed335ca    supabase url
+
+
+
