@@ -317,24 +317,29 @@ export default function AttendanceReportPage() {
 
       setClasses(classesData || []);
 
-      const { data: studentsData, error: studentsError } =
-        await supabase
-          .from("students")
-          .select(
-            "id, full_name, student_code, class_id, institute_id"
-          )
-          .in("institute_id", instituteIds)
-          .eq("is_active", true)
-          .order("full_name");
+      // تحميل الطلاب لكل معهد على حدة، مع الحفاظ على نطاق مدير المنطقة.
+      // هذا يتجنب مشكلة رجوع .in(...) بنتيجة فارغة في صفحة التقارير.
+      const studentResults = await Promise.all(
+        institutes.map(async (institute) => {
+          const { data, error } = await supabase
+            .from("students")
+            .select(
+              "id, full_name, student_code, class_id, institute_id"
+            )
+            .eq("institute_id", institute.id)
+            .eq("is_active", true)
+            .order("full_name");
 
-      if (studentsError) {
-        console.error(studentsError);
-        setMessage("حدث خطأ أثناء تحميل الطلاب");
-        setReportLoading(false);
-        return;
-      }
+          if (error) {
+            throw error;
+          }
 
-      setStudents(studentsData || []);
+          return data || [];
+        })
+      );
+
+      const studentsData = studentResults.flat();
+      setStudents(studentsData);
 
       const { data: attendanceData, error: attendanceError } =
         await supabase
