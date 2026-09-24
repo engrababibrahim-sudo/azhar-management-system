@@ -120,7 +120,7 @@ async function loadInitialData() {
 setLoading(true);
 setMessage("");
 
-```
+
 try {
   const {
     data: { user },
@@ -226,11 +226,10 @@ loadInstituteData(selectedInstitute);
 return;
 }
 
-```
 if (profile?.role === "director") {
   loadDirectorateData();
 }
-```
+
 
 }, [selectedInstitute]);
 
@@ -238,7 +237,7 @@ async function loadInstituteData(instituteId: string) {
 setReportLoading(true);
 setMessage("");
 
-```
+
 try {
   const { data: classesData, error: classesError } = await supabase
     .from("classes")
@@ -283,7 +282,7 @@ try {
 }
 
 setReportLoading(false);
-```
+
 
 }
 
@@ -291,7 +290,6 @@ async function loadDirectorateData() {
 setReportLoading(true);
 setMessage("");
 
-```
 try {
   /*
    * المدير يرى البيانات على مستوى الإدارة بالكامل.
@@ -376,7 +374,7 @@ try {
 }
 
 setReportLoading(false);
-```
+
 
 }
 
@@ -388,7 +386,7 @@ const { data, error } = await supabase
 .gte("attendance_date", fromDate)
 .lte("attendance_date", toDate);
 
-```
+
 if (error) {
   console.error(error);
   setMessage("حدث خطأ أثناء تحميل سجلات الحضور");
@@ -396,7 +394,7 @@ if (error) {
 }
 
 setAttendance(data || []);
-```
+
 
 }
 
@@ -405,7 +403,7 @@ let complaints = 0;
 let requests = 0;
 let tasks = 0;
 
-```
+
 try {
   const result = await supabase
     .from("complaints")
@@ -447,7 +445,7 @@ setOperationalStats({
   requests,
   tasks,
 });
-```
+
 
 }
 
@@ -458,7 +456,6 @@ let complaints = 0;
 let requests = 0;
 let tasks = 0;
 
-```
 try {
   const result = await supabase
     .from("complaints")
@@ -500,7 +497,7 @@ setOperationalStats({
   requests,
   tasks,
 });
-```
+
 
 }
 
@@ -510,7 +507,7 @@ setMessage("تاريخ البداية يجب أن يكون قبل تاريخ ا�
 return;
 }
 
-```
+
 if (!profile) return;
 
 setReportLoading(true);
@@ -524,14 +521,14 @@ if (profile.role === "sheikh") {
 }
 
 setReportLoading(false);
-```
+
 
 }
 
 const report = useMemo<ReportRow[]>(() => {
 let filteredStudents = students;
 
-```
+
 if (selectedClass) {
   filteredStudents = filteredStudents.filter(
     (student) => student.class_id === selectedClass
@@ -591,7 +588,7 @@ return filteredStudents.map((student) => {
     percentage,
   };
 });
-```
+
 
 }, [students, attendance, selectedClass, searchTerm]);
 
@@ -605,7 +602,6 @@ acc.late += row.late;
 acc.excused += row.excused;
 acc.total += row.total;
 
-```
     return acc;
   },
   {
@@ -617,7 +613,7 @@ acc.total += row.total;
     total: 0,
   }
 );
-```
+
 
 }, [report]);
 
@@ -638,7 +634,7 @@ const instituteStudents = students.filter(
 (student) => student.institute_id === institute.id
 );
 
-```
+
   const studentIds = new Set(
     instituteStudents.map((student) => student.id)
   );
@@ -683,7 +679,7 @@ const instituteStudents = students.filter(
     percentage,
   };
 });
-```
+
 
 }, [institutes, students, attendance]);
 
@@ -693,14 +689,14 @@ return ( <main className="min-h-screen bg-gray-50 p-8"> <div className="max-w-7x
          size={32}
        />
 
-```
+
       <p className="text-gray-600">
         جاري تحميل تقرير الحضور والإحصائيات...
       </p>
     </div>
   </main>
 );
-```
+
 
 }
 
@@ -714,7 +710,7 @@ return ( <main className="min-h-screen bg-gray-50 p-8"> <div className="max-w-3x
          size={48}
        />
 
-```
+
       <h1 className="text-2xl font-bold text-gray-800">
         غير مصرح
       </h1>
@@ -725,7 +721,7 @@ return ( <main className="min-h-screen bg-gray-50 p-8"> <div className="max-w-3x
     </div>
   </main>
 );
-```
+
 
 }
 
@@ -735,7 +731,7 @@ isDirector && selectedInstitute === "";
 
 return ( <main className="min-h-screen bg-gray-50 p-6 md:p-8"> <div className="max-w-7xl mx-auto">
 
-```
+
     {/* Header */}
     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
       <div>
@@ -1398,7 +1394,7 @@ return ( <main className="min-h-screen bg-gray-50 p-6 md:p-8"> <div className="m
 
   </div>
 </main>
-```
+
 
 );
 }
