@@ -1,3 +1,5 @@
+
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -11,7 +13,13 @@ import {
   XCircle,
   Clock3,
   ShieldCheck,
+  Building2,
+  ClipboardList,
+  MessageSquareWarning,
+  ListChecks,
+  TrendingUp,
 } from "lucide-react";
+
 import { supabase } from "../../lib/supabase/client";
 
 type Profile = {
@@ -44,6 +52,18 @@ type AttendanceRow = {
   student_id: string;
   attendance_date: string;
   status: "present" | "absent" | "late" | "excused";
+  institute_id?: string;
+};
+
+type InstituteSummary = {
+  institute: Institute;
+  students: number;
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+  total: number;
+  percentage: number;
 };
 
 type ReportRow = {
@@ -54,6 +74,12 @@ type ReportRow = {
   excused: number;
   total: number;
   percentage: number;
+};
+
+type OperationalStats = {
+  complaints: number;
+  requests: number;
+  tasks: number;
 };
 
 export default function AttendanceReportPage() {
@@ -80,6 +106,13 @@ export default function AttendanceReportPage() {
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  const [operationalStats, setOperationalStats] =
+    useState<OperationalStats>({
+      complaints: 0,
+      requests: 0,
+      tasks: 0,
+    });
 
   useEffect(() => {
     loadInitialData();
@@ -138,7 +171,7 @@ export default function AttendanceReportPage() {
             .eq("id", profileData.institute_id)
             .single();
 
-        if (instituteError) {
+        if (instituteError || !instituteData) {
           console.error(instituteError);
           setMessage("تعذر تحميل بيانات المعهد");
           setLoading(false);
@@ -172,9 +205,8 @@ export default function AttendanceReportPage() {
 
         setInstitutes(institutesData || []);
 
-        if (institutesData && institutesData.length > 0) {
-          setSelectedInstitute(institutesData[0].id);
-        }
+        // المدير يبدأ على جميع المعاهد
+        setSelectedInstitute("");
       }
     } catch (error) {
       console.error(error);
@@ -185,10 +217,15 @@ export default function AttendanceReportPage() {
   }
 
   useEffect(() => {
-    if (selectedInstitute) {
+    if (profile?.role === "sheikh" && selectedInstitute) {
       loadInstituteData(selectedInstitute);
+      return;
     }
-  }, [selectedInstitute]);
+
+    if (profile?.role === "director") {
+      loadDirectorateData();
+    }
+  }, [profile, selectedInstitute, fromDate, toDate]);
 
   async function loadInstituteData(instituteId: string) {
     setReportLoading(true);
@@ -231,6 +268,99 @@ export default function AttendanceReportPage() {
       setStudents(studentsData || []);
 
       await loadAttendance(instituteId);
+      await loadOperationalStats(instituteId);
+    } catch (error) {
+      console.error(error);
+      setMessage("حدث خطأ غير متوقع");
+    }
+
+    setReportLoading(false);
+  }
+
+  async function loadDirectorateData() {
+    setReportLoading(true);
+    setMessage("");
+
+    try {
+      if (selectedInstitute) {
+        await loadInstituteData(selectedInstitute);
+        return;
+      }
+
+      const instituteIds = institutes.map((item) => item.id);
+
+      if (instituteIds.length === 0) {
+        setClasses([]);
+        setStudents([]);
+        setAttendance([]);
+
+        setOperationalStats({
+          complaints: 0,
+          requests: 0,
+          tasks: 0,
+        });
+
+        setReportLoading(false);
+        return;
+      }
+
+      const { data: classesData, error: classesError } = await supabase
+        .from("classes")
+        .select("id, name, institute_id")
+        .in("institute_id", instituteIds)
+        .eq("is_active", true)
+        .order("name");
+
+      if (classesError) {
+        console.error(classesError);
+      }
+
+      setClasses(classesData || []);
+
+      // تحميل الطلاب لكل معهد على حدة، مع الحفاظ على نطاق مدير المنطقة.
+      // هذا يتجنب مشكلة رجوع .in(...) بنتيجة فارغة في صفحة التقارير.
+      const studentResults = await Promise.all(
+        institutes.map(async (institute) => {
+          const { data, error } = await supabase
+            .from("students")
+            .select(
+              "id, full_name, student_code, class_id, institute_id"
+            )
+            .eq("institute_id", institute.id)
+            .eq("is_active", true)
+            .order("full_name");
+
+          if (error) {
+            throw error;
+          }
+
+          return data || [];
+        })
+      );
+
+      const studentsData = studentResults.flat();
+      setStudents(studentsData);
+
+      const { data: attendanceData, error: attendanceError } =
+        await supabase
+          .from("attendance")
+          .select(
+            "student_id, attendance_date, status, institute_id"
+          )
+          .in("institute_id", instituteIds)
+          .gte("attendance_date", fromDate)
+          .lte("attendance_date", toDate);
+
+      if (attendanceError) {
+        console.error(attendanceError);
+        setMessage("حدث خطأ أثناء تحميل سجلات الحضور");
+        setReportLoading(false);
+        return;
+      }
+
+      setAttendance(attendanceData || []);
+
+      await loadDirectorateOperationalStats(instituteIds);
     } catch (error) {
       console.error(error);
       setMessage("حدث خطأ غير متوقع");
@@ -242,7 +372,7 @@ export default function AttendanceReportPage() {
   async function loadAttendance(instituteId: string) {
     const { data, error } = await supabase
       .from("attendance")
-      .select("student_id, attendance_date, status")
+      .select("student_id, attendance_date, status, institute_id")
       .eq("institute_id", instituteId)
       .gte("attendance_date", fromDate)
       .lte("attendance_date", toDate);
@@ -256,16 +386,146 @@ export default function AttendanceReportPage() {
     setAttendance(data || []);
   }
 
-  async function refreshReport() {
-    if (!selectedInstitute) return;
+  async function loadOperationalStats(instituteId: string) {
+    let complaints = 0;
+    let requests = 0;
+    let tasks = 0;
 
+    try {
+      const result = await supabase
+        .from("complaints")
+        .select("id", { count: "exact", head: true })
+        .eq("institute_id", instituteId)
+        .neq("status", "resolved");
+
+      if (!result.error) {
+        complaints = result.count || 0;
+      } else {
+        console.error(result.error);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    try {
+      const result = await supabase
+        .from("institute_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("institute_id", instituteId)
+        .eq("status", "new");
+
+      if (!result.error) {
+        requests = result.count || 0;
+      } else {
+        console.error(result.error);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    try {
+      const result = await supabase
+        .from("institute_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("institute_id", instituteId)
+        .neq("status", "completed");
+
+      if (!result.error) {
+        tasks = result.count || 0;
+      } else {
+        console.error(result.error);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    setOperationalStats({
+      complaints,
+      requests,
+      tasks,
+    });
+  }
+
+  async function loadDirectorateOperationalStats(
+    instituteIds: string[]
+  ) {
+    let complaints = 0;
+    let requests = 0;
+    let tasks = 0;
+
+    try {
+      const result = await supabase
+        .from("complaints")
+        .select("id", { count: "exact", head: true })
+        .in("institute_id", instituteIds)
+        .neq("status", "resolved");
+
+      if (!result.error) {
+        complaints = result.count || 0;
+      } else {
+        console.error(result.error);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    try {
+      const result = await supabase
+        .from("institute_requests")
+        .select("id", { count: "exact", head: true })
+        .in("institute_id", instituteIds)
+        .eq("status", "new");
+
+      if (!result.error) {
+        requests = result.count || 0;
+      } else {
+        console.error(result.error);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    try {
+      const result = await supabase
+        .from("institute_tasks")
+        .select("id", { count: "exact", head: true })
+        .in("institute_id", instituteIds)
+        .neq("status", "completed");
+
+      if (!result.error) {
+        tasks = result.count || 0;
+      } else {
+        console.error(result.error);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    setOperationalStats({
+      complaints,
+      requests,
+      tasks,
+    });
+  }
+
+  async function refreshReport() {
     if (fromDate > toDate) {
       setMessage("تاريخ البداية يجب أن يكون قبل تاريخ النهاية");
       return;
     }
 
+    if (!profile) return;
+
     setReportLoading(true);
-    await loadAttendance(selectedInstitute);
+
+    if (profile.role === "sheikh") {
+      if (selectedInstitute) {
+        await loadInstituteData(selectedInstitute);
+      }
+    } else {
+      await loadDirectorateData();
+    }
+
     setReportLoading(false);
   }
 
@@ -316,7 +576,9 @@ export default function AttendanceReportPage() {
 
       const percentage =
         total > 0
-          ? Math.round(((present + late + excused) / total) * 100)
+          ? Math.round(
+              ((present + late + excused) / total) * 100
+            )
           : 0;
 
       return {
@@ -357,23 +619,77 @@ export default function AttendanceReportPage() {
   const overallPercentage =
     totals.total > 0
       ? Math.round(
-          ((totals.present + totals.late + totals.excused) /
+          ((totals.present +
+            totals.late +
+            totals.excused) /
             totals.total) *
             100
         )
       : 0;
+
+  const instituteSummary = useMemo<InstituteSummary[]>(() => {
+    return institutes.map((institute) => {
+      const instituteStudents = students.filter(
+        (student) => student.institute_id === institute.id
+      );
+
+      const studentIds = new Set(
+        instituteStudents.map((student) => student.id)
+      );
+
+      const records = attendance.filter((record) =>
+        studentIds.has(record.student_id)
+      );
+
+      const present = records.filter(
+        (record) => record.status === "present"
+      ).length;
+
+      const absent = records.filter(
+        (record) => record.status === "absent"
+      ).length;
+
+      const late = records.filter(
+        (record) => record.status === "late"
+      ).length;
+
+      const excused = records.filter(
+        (record) => record.status === "excused"
+      ).length;
+
+      const total = present + absent + late + excused;
+
+      const percentage =
+        total > 0
+          ? Math.round(
+              ((present + late + excused) / total) * 100
+            )
+          : 0;
+
+      return {
+        institute,
+        students: instituteStudents.length,
+        present,
+        absent,
+        late,
+        excused,
+        total,
+        percentage,
+      };
+    });
+  }, [institutes, students, attendance]);
 
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
         <div className="max-w-7xl mx-auto text-center py-20">
           <RefreshCw
-            className="mx-auto animate-spin mb-4"
+            className="mx-auto animate-spin mb-4 text-blue-600"
             size={32}
           />
 
           <p className="text-gray-600">
-            جاري تحميل تقرير الحضور...
+            جاري تحميل تقرير الحضور والإحصائيات...
           </p>
         </div>
       </main>
@@ -382,7 +698,8 @@ export default function AttendanceReportPage() {
 
   if (
     !profile ||
-    (profile.role !== "sheikh" && profile.role !== "director")
+    (profile.role !== "sheikh" &&
+      profile.role !== "director")
   ) {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
@@ -404,13 +721,20 @@ export default function AttendanceReportPage() {
     );
   }
 
+  const isDirector = profile.role === "director";
+
+  const isAllInstitutes =
+    isDirector && selectedInstitute === "";
+
   return (
-    <main className="min-h-screen bg-gray-50 p-6 md:p-8">
+    <main
+      className="min-h-screen bg-gray-50 p-6 md:p-8"
+      dir="rtl"
+    >
       <div className="max-w-7xl mx-auto">
 
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
           <div>
             <div className="flex items-center gap-3">
               <BarChart3
@@ -418,14 +742,18 @@ export default function AttendanceReportPage() {
                 className="text-blue-600"
               />
 
-              <h1 className="text-3xl font-bold text-gray-800">
-                تقارير الحضور والغياب
-              </h1>
-            </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-800">
+                  التقارير والإحصائيات
+                </h1>
 
-            <p className="text-gray-500 mt-2">
-              متابعة وتحليل حضور الطلاب خلال الفترة المحددة
-            </p>
+                <p className="text-gray-500 mt-1">
+                  {isDirector
+                    ? "لوحة المتابعة المركزية للإدارة التعليمية الأزهرية"
+                    : "متابعة وتحليل حضور الطلاب خلال الفترة المحددة"}
+                </p>
+              </div>
+            </div>
           </div>
 
           <button
@@ -435,7 +763,9 @@ export default function AttendanceReportPage() {
           >
             <RefreshCw
               size={19}
-              className={reportLoading ? "animate-spin" : ""}
+              className={
+                reportLoading ? "animate-spin" : ""
+              }
             />
 
             تحديث التقرير
@@ -451,6 +781,16 @@ export default function AttendanceReportPage() {
 
         {/* Filters */}
         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+          <div className="flex items-center gap-2 mb-5">
+            <CalendarDays
+              size={21}
+              className="text-blue-600"
+            />
+
+            <h2 className="font-bold text-gray-800">
+              الفلاتر والتقرير الزمني
+            </h2>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
@@ -469,6 +809,12 @@ export default function AttendanceReportPage() {
                 disabled={profile.role === "sheikh"}
                 className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
               >
+                {isDirector && (
+                  <option value="">
+                    جميع المعاهد
+                  </option>
+                )}
+
                 {institutes.map((institute) => (
                   <option
                     key={institute.id}
@@ -493,7 +839,9 @@ export default function AttendanceReportPage() {
                 }
                 className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">كل الفصول</option>
+                <option value="">
+                  كل الفصول
+                </option>
 
                 {classes.map((classItem) => (
                   <option
@@ -521,7 +869,9 @@ export default function AttendanceReportPage() {
                 <input
                   type="date"
                   value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
+                  onChange={(e) =>
+                    setFromDate(e.target.value)
+                  }
                   className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -542,7 +892,9 @@ export default function AttendanceReportPage() {
                 <input
                   type="date"
                   value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
+                  onChange={(e) =>
+                    setToDate(e.target.value)
+                  }
                   className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -574,12 +926,29 @@ export default function AttendanceReportPage() {
           </div>
         </div>
 
-        {/* Statistics */}
+        {/* Main Statistics */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
 
           <div className="bg-white rounded-2xl shadow-sm p-5">
-            <Users
+            <Building2
               className="text-blue-600 mb-3"
+              size={25}
+            />
+
+            <p className="text-gray-500 text-sm">
+              المعاهد
+            </p>
+
+            <p className="text-2xl font-bold text-gray-800">
+              {isDirector
+                ? institutes.length
+                : 1}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <Users
+              className="text-indigo-600 mb-3"
               size={25}
             />
 
@@ -638,22 +1007,7 @@ export default function AttendanceReportPage() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm p-5">
-            <CalendarDays
-              className="text-blue-500 mb-3"
-              size={25}
-            />
-
-            <p className="text-gray-500 text-sm">
-              المعذور
-            </p>
-
-            <p className="text-2xl font-bold text-gray-800">
-              {totals.excused}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <BarChart3
+            <TrendingUp
               className="text-purple-600 mb-3"
               size={25}
             />
@@ -666,25 +1020,233 @@ export default function AttendanceReportPage() {
               {overallPercentage}%
             </p>
           </div>
-
         </div>
 
-        {/* Report Table */}
+        {/* Operational Statistics */}
+        {isDirector && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-orange-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-sm">
+                    الشكاوى المفتوحة
+                  </p>
+
+                  <p className="text-3xl font-bold text-gray-800 mt-1">
+                    {operationalStats.complaints}
+                  </p>
+                </div>
+
+                <MessageSquareWarning
+                  size={30}
+                  className="text-orange-500"
+                />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-blue-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-sm">
+                    الطلبات الجديدة
+                  </p>
+
+                  <p className="text-3xl font-bold text-gray-800 mt-1">
+                    {operationalStats.requests}
+                  </p>
+                </div>
+
+                <ClipboardList
+                  size={30}
+                  className="text-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-purple-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-sm">
+                    المهام غير المكتملة
+                  </p>
+
+                  <p className="text-3xl font-bold text-gray-800 mt-1">
+                    {operationalStats.tasks}
+                  </p>
+                </div>
+
+                <ListChecks
+                  size={30}
+                  className="text-purple-500"
+                />
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* Directorate Institute Summary */}
+        {isDirector && isAllInstitutes && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
+
+            <div className="p-6 border-b">
+              <div className="flex items-center gap-3">
+                <Building2
+                  size={24}
+                  className="text-blue-600"
+                />
+
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">
+                    ملخص أداء المعاهد
+                  </h2>
+
+                  <p className="text-gray-500 text-sm mt-1">
+                    مقارنة مؤشرات الحضور والطلاب بين المعاهد التابعة للإدارة
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {instituteSummary.length === 0 ? (
+              <div className="text-center py-14 text-gray-500">
+                لا توجد معاهد مسجلة
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-right px-5 py-4">
+                        المعهد
+                      </th>
+
+                      <th className="text-center px-5 py-4">
+                        الطلاب
+                      </th>
+
+                      <th className="text-center px-5 py-4">
+                        الحضور
+                      </th>
+
+                      <th className="text-center px-5 py-4">
+                        الغياب
+                      </th>
+
+                      <th className="text-center px-5 py-4">
+                        التأخير
+                      </th>
+
+                      <th className="text-center px-5 py-4">
+                        المعذور
+                      </th>
+
+                      <th className="text-center px-5 py-4">
+                        نسبة الحضور
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y">
+                    {instituteSummary.map((row) => (
+                      <tr
+                        key={row.institute.id}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="px-5 py-5">
+                          <div className="font-semibold text-gray-800">
+                            {row.institute.name}
+                          </div>
+
+                          <div className="text-xs text-gray-400 mt-1">
+                            {row.institute.code}
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-5 text-center font-semibold">
+                          {row.students}
+                        </td>
+
+                        <td className="px-5 py-5 text-center">
+                          <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">
+                            {row.present}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-5 text-center">
+                          <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-red-50 text-red-700 font-semibold">
+                            {row.absent}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-5 text-center">
+                          <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">
+                            {row.late}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-5 text-center">
+                          <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
+                            {row.excused}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-5 text-center">
+                          <span
+                            className={`inline-flex px-3 py-1 rounded-lg font-bold ${
+                              row.percentage >= 90
+                                ? "bg-green-50 text-green-700"
+                                : row.percentage >= 75
+                                  ? "bg-yellow-50 text-yellow-700"
+                                  : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {row.percentage}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Student Details */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
 
           <div className="p-6 border-b">
-            <h2 className="text-xl font-bold text-gray-800">
-              تفاصيل الطلاب
-            </h2>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
 
-            <p className="text-gray-500 text-sm mt-1">
-              التقرير حسب الفترة والفصل المحددين
-            </p>
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">
+                  تفاصيل الطلاب
+                </h2>
+
+                <p className="text-gray-500 text-sm mt-1">
+                  {isAllInstitutes
+                    ? "تفاصيل الطلاب في جميع المعاهد التابعة للإدارة"
+                    : "التقرير حسب الفترة والفصل المحددين"}
+                </p>
+              </div>
+
+              <div className="text-sm text-gray-500">
+                عدد النتائج:
+                <span className="font-bold text-gray-800 mr-1">
+                  {report.length}
+                </span>
+              </div>
+
+            </div>
           </div>
 
           {report.length === 0 ? (
             <div className="text-center py-16 text-gray-500">
-              لا توجد بيانات مطابقة للبحث
+              لا توجد بيانات مطابقة للفترة أو البحث المحدد
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -692,8 +1254,13 @@ export default function AttendanceReportPage() {
               <table className="w-full">
 
                 <thead className="bg-gray-50">
-
                   <tr>
+
+                    {isAllInstitutes && (
+                      <th className="text-right px-5 py-4">
+                        المعهد
+                      </th>
+                    )}
 
                     <th className="text-right px-5 py-4">
                       الطالب
@@ -728,75 +1295,85 @@ export default function AttendanceReportPage() {
                     </th>
 
                   </tr>
-
                 </thead>
 
                 <tbody className="divide-y">
 
-                  {report.map((row) => (
+                  {report.map((row) => {
+                    const institute = institutes.find(
+                      (item) =>
+                        item.id === row.student.institute_id
+                    );
 
-                    <tr
-                      key={row.student.id}
-                      className="hover:bg-gray-50"
-                    >
+                    return (
+                      <tr
+                        key={row.student.id}
+                        className="hover:bg-gray-50"
+                      >
 
-                      <td className="px-5 py-5">
-                        <div className="font-semibold text-gray-800">
-                          {row.student.full_name}
-                        </div>
-                      </td>
+                        {isAllInstitutes && (
+                          <td className="px-5 py-5">
+                            <div className="text-sm font-semibold text-gray-700">
+                              {institute?.name || "-"}
+                            </div>
+                          </td>
+                        )}
 
-                      <td className="px-5 py-5 text-gray-500">
-                        {row.student.student_code || "-"}
-                      </td>
+                        <td className="px-5 py-5">
+                          <div className="font-semibold text-gray-800">
+                            {row.student.full_name}
+                          </div>
+                        </td>
 
-                      <td className="px-5 py-5 text-center">
-                        <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">
-                          {row.present}
-                        </span>
-                      </td>
+                        <td className="px-5 py-5 text-gray-500">
+                          {row.student.student_code || "-"}
+                        </td>
 
-                      <td className="px-5 py-5 text-center">
-                        <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-red-50 text-red-700 font-semibold">
-                          {row.absent}
-                        </span>
-                      </td>
+                        <td className="px-5 py-5 text-center">
+                          <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">
+                            {row.present}
+                          </span>
+                        </td>
 
-                      <td className="px-5 py-5 text-center">
-                        <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">
-                          {row.late}
-                        </span>
-                      </td>
+                        <td className="px-5 py-5 text-center">
+                          <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-red-50 text-red-700 font-semibold">
+                            {row.absent}
+                          </span>
+                        </td>
 
-                      <td className="px-5 py-5 text-center">
-                        <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
-                          {row.excused}
-                        </span>
-                      </td>
+                        <td className="px-5 py-5 text-center">
+                          <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">
+                            {row.late}
+                          </span>
+                        </td>
 
-                      <td className="px-5 py-5 text-center font-semibold">
-                        {row.total}
-                      </td>
+                        <td className="px-5 py-5 text-center">
+                          <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
+                            {row.excused}
+                          </span>
+                        </td>
 
-                      <td className="px-5 py-5 text-center">
+                        <td className="px-5 py-5 text-center font-semibold">
+                          {row.total}
+                        </td>
 
-                        <span
-                          className={`inline-flex px-3 py-1 rounded-lg font-bold ${
-                            row.percentage >= 90
-                              ? "bg-green-50 text-green-700"
-                              : row.percentage >= 75
-                              ? "bg-yellow-50 text-yellow-700"
-                              : "bg-red-50 text-red-700"
-                          }`}
-                        >
-                          {row.percentage}%
-                        </span>
+                        <td className="px-5 py-5 text-center">
+                          <span
+                            className={`inline-flex px-3 py-1 rounded-lg font-bold ${
+                              row.percentage >= 90
+                                ? "bg-green-50 text-green-700"
+                                : row.percentage >= 75
+                                  ? "bg-yellow-50 text-yellow-700"
+                                  : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {row.percentage}%
+                          </span>
+                        </td>
 
-                      </td>
-
-                    </tr>
-
-                  ))}
+                      </tr>
+                    );
+                  })}
 
                 </tbody>
 

@@ -18,7 +18,6 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    // تسجيل الدخول
     const { data: authData, error: authError } =
       await supabase.auth.signInWithPassword({
         email,
@@ -37,7 +36,6 @@ export default function LoginPage() {
       return;
     }
 
-    // الحصول على بيانات المستخدم وصلاحياته
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role, institute_id, directorate_id, full_name")
@@ -78,6 +76,13 @@ export default function LoginPage() {
       return;
     }
 
+    // ولي الأمر
+    if (profile.role === "parent") {
+      router.push("/parent");
+      router.refresh();
+      return;
+    }
+
     // أدوار أخرى سيتم تفعيلها لاحقًا
     await supabase.auth.signOut();
 
@@ -92,12 +97,10 @@ export default function LoginPage() {
       className="min-h-screen bg-slate-100 flex items-center justify-center p-6"
     >
       <div className="w-full max-w-md">
-
         <div className="bg-white rounded-3xl shadow-xl p-8">
 
           {/* Logo */}
           <div className="text-center mb-8">
-
             <div className="mx-auto mb-4 w-20 h-20 rounded-2xl bg-emerald-700 text-white flex items-center justify-center text-3xl font-bold">
               أز
             </div>
@@ -109,7 +112,6 @@ export default function LoginPage() {
             <p className="text-slate-500 mt-2">
               الإدارة التعليمية الأزهرية
             </p>
-
           </div>
 
           {/* Login Form */}
@@ -168,7 +170,6 @@ export default function LoginPage() {
           </div>
 
         </div>
-
       </div>
     </main>
   );
