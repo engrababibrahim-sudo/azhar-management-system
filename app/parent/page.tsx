@@ -1,6 +1,8 @@
+```tsx
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Baby,
   BookOpen,
@@ -9,6 +11,9 @@ import {
   Loader2,
   MessageSquareWarning,
   Users,
+  ArrowLeft,
+  PlusCircle,
+  ClipboardList,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase/client";
 
@@ -193,7 +198,7 @@ export default function ParentPage() {
       {/* Header */}
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 py-5">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-slate-800">
                 لوحة ولي الأمر
@@ -204,8 +209,18 @@ export default function ParentPage() {
               </p>
             </div>
 
-            <div className="w-12 h-12 rounded-2xl bg-emerald-700 text-white flex items-center justify-center">
-              <Users size={24} />
+            <div className="flex items-center gap-3">
+              <Link
+                href="/parent-complaints"
+                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm"
+              >
+                <MessageSquareWarning size={19} />
+                شكاوى أولياء الأمور
+              </Link>
+
+              <div className="w-12 h-12 rounded-2xl bg-emerald-700 text-white flex items-center justify-center">
+                <Users size={24} />
+              </div>
             </div>
           </div>
         </div>
@@ -283,20 +298,82 @@ export default function ParentPage() {
           </div>
 
           {/* Complaints */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <Link
+            href="/parent-complaints"
+            className="group bg-white rounded-2xl border border-red-200 p-5 hover:border-red-400 hover:shadow-md transition cursor-pointer"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">
                   الشكاوى
                 </p>
 
-                <p className="text-sm font-semibold text-slate-700 mt-2">
+                <p className="text-base font-bold text-slate-800 mt-2 group-hover:text-red-700 transition">
                   تقديم ومتابعة الشكاوى
+                </p>
+
+                <p className="text-xs text-slate-500 mt-1">
+                  اضغط للدخول إلى مركز الشكاوى
                 </p>
               </div>
 
-              <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center group-hover:bg-red-100 transition">
                 <MessageSquareWarning size={24} />
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between text-sm">
+              <span className="inline-flex items-center gap-1 text-red-700 font-semibold">
+                <PlusCircle size={17} />
+                تقديم شكوى
+              </span>
+
+              <ArrowLeft
+                size={18}
+                className="text-red-500 group-hover:-translate-x-1 transition"
+              />
+            </div>
+          </Link>
+        </section>
+
+        {/* Quick complaint section */}
+        <section className="mb-8">
+          <div className="rounded-3xl bg-gradient-to-l from-red-700 to-red-500 text-white p-6 shadow-sm">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
+                    <MessageSquareWarning size={26} />
+                  </div>
+
+                  <div>
+                    <h2 className="text-xl font-bold">
+                      هل لديك مشكلة أو ملاحظة؟
+                    </h2>
+
+                    <p className="text-sm text-red-100 mt-1">
+                      يمكنك تقديم شكوى ومتابعتها حتى يتم التعامل معها من المعهد.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link
+                  href="/parent-complaints"
+                  className="inline-flex items-center justify-center gap-2 bg-white text-red-700 hover:bg-red-50 px-5 py-3 rounded-xl font-bold transition"
+                >
+                  <PlusCircle size={20} />
+                  تقديم شكوى جديدة
+                </Link>
+
+                <Link
+                  href="/parent-complaints"
+                  className="inline-flex items-center justify-center gap-2 bg-red-800/40 hover:bg-red-800/60 text-white border border-white/20 px-5 py-3 rounded-xl font-bold transition"
+                >
+                  <ClipboardList size={20} />
+                  متابعة الشكاوى
+                </Link>
               </div>
             </div>
           </div>
@@ -446,3 +523,4 @@ export default function ParentPage() {
     </main>
   );
 }
+```
