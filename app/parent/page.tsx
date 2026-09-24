@@ -1,4 +1,4 @@
-```tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -45,7 +45,9 @@ type Institute = {
 export default function ParentPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
-  const [institutes, setInstitutes] = useState<Record<string, Institute>>({});
+  const [institutes, setInstitutes] = useState<Record<string, Institute>>(
+    {}
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -210,6 +212,7 @@ export default function ParentPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Parent complaints button */}
               <Link
                 href="/parent-complaints"
                 className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm"
@@ -437,15 +440,14 @@ export default function ParentPage() {
                       </div>
 
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          student.is_active
+                        className={
+                          "px-3 py-1 rounded-full text-xs font-semibold " +
+                          (student.is_active
                             ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
+                            : "bg-slate-100 text-slate-500")
+                        }
                       >
-                        {student.is_active
-                          ? "نشط"
-                          : "غير نشط"}
+                        {student.is_active ? "نشط" : "غير نشط"}
                       </span>
                     </div>
 
@@ -523,4 +525,4 @@ export default function ParentPage() {
     </main>
   );
 }
-```
+
