@@ -17,6 +17,10 @@ import * as XLSX from "xlsx";
 import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
 
+/* =========================================================
+   TYPES
+========================================================= */
+
 type ImportType = "students" | "teachers";
 
 type StudentRow = {
@@ -64,6 +68,10 @@ type ImportResult = {
   failed: number;
 };
 
+/* =========================================================
+   STUDENT TEMPLATE
+========================================================= */
+
 const STUDENT_TEMPLATE_HEADERS = [
   "كود الطالب",
   "اسم الطالب",
@@ -104,6 +112,10 @@ const STUDENT_EXAMPLE_ROWS = [
   },
 ];
 
+/* =========================================================
+   TEACHER TEMPLATE
+========================================================= */
+
 const TEACHER_TEMPLATE_HEADERS = [
   "كود المعلم",
   "اسم المعلم",
@@ -142,7 +154,29 @@ const TEACHER_EXAMPLE_ROWS = [
     المؤهل: "ماجستير علوم",
     الحالة: "نشط",
   },
+  {
+    "كود المعلم": "TCH-004",
+    "اسم المعلم": "مريم حسن عبد الله",
+    الهاتف: "01544445555",
+    "البريد الإلكتروني": "teacher4@example.com",
+    التخصص: "اللغة الإنجليزية",
+    المؤهل: "ليسانس آداب",
+    الحالة: "نشط",
+  },
+  {
+    "كود المعلم": "TCH-005",
+    "اسم المعلم": "عمر أشرف السيد",
+    الهاتف: "01055556666",
+    "البريد الإلكتروني": "teacher5@example.com",
+    التخصص: "الدراسات الاجتماعية",
+    المؤهل: "ليسانس آداب",
+    الحالة: "نشط",
+  },
 ];
+
+/* =========================================================
+   HELPERS
+========================================================= */
 
 function normalizeValue(value: unknown): string {
   if (value === null || value === undefined) {
@@ -153,23 +187,37 @@ function normalizeValue(value: unknown): string {
 }
 
 function excelDateToString(value: unknown): string {
-  if (value === null || value === undefined || value === "") {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
     return "";
   }
 
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+  if (
+    value instanceof Date &&
+    !Number.isNaN(value.getTime())
+  ) {
     const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, "0");
-    const day = String(value.getDate()).padStart(2, "0");
+    const month = String(
+      value.getMonth() + 1
+    ).padStart(2, "0");
+    const day = String(
+      value.getDate()
+    ).padStart(2, "0");
 
     return `${year}-${month}-${day}`;
   }
 
   if (typeof value === "number") {
-    const date = XLSX.SSF.parse_date_code(value);
+    const date =
+      XLSX.SSF.parse_date_code(value);
 
     if (date) {
-      return `${date.y}-${String(date.m).padStart(2, "0")}-${String(
+      return `${date.y}-${String(
+        date.m
+      ).padStart(2, "0")}-${String(
         date.d
       ).padStart(2, "0")}`;
     }
@@ -177,25 +225,49 @@ function excelDateToString(value: unknown): string {
 
   const text = String(value).trim();
 
-  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text)) {
-    const [year, month, day] = text.split("-");
+  if (
+    /^\d{4}-\d{1,2}-\d{1,2}$/.test(
+      text
+    )
+  ) {
+    const [year, month, day] =
+      text.split("-");
 
-    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    return `${year}-${month.padStart(
+      2,
+      "0"
+    )}-${day.padStart(2, "0")}`;
   }
 
-  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text)) {
-    const [day, month, year] = text.split("/");
+  if (
+    /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(
+      text
+    )
+  ) {
+    const [day, month, year] =
+      text.split("/");
 
-    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    return `${year}-${month.padStart(
+      2,
+      "0"
+    )}-${day.padStart(2, "0")}`;
   }
 
   return text;
 }
 
-function normalizeGender(value: unknown): string {
-  const text = normalizeValue(value).toLowerCase();
+function normalizeGender(
+  value: unknown
+): string {
+  const text = normalizeValue(
+    value
+  ).toLowerCase();
 
-  if (text === "ذكر" || text === "male" || text === "m") {
+  if (
+    text === "ذكر" ||
+    text === "male" ||
+    text === "m"
+  ) {
     return "ذكر";
   }
 
@@ -211,12 +283,26 @@ function normalizeGender(value: unknown): string {
   return normalizeValue(value);
 }
 
-function normalizeActive(value: unknown): boolean {
-  const text = normalizeValue(value).toLowerCase();
+function normalizeTeacherStatus(
+  value: unknown
+): boolean {
+  const text = normalizeValue(
+    value
+  ).toLowerCase();
+
+  if (
+    text === "نشط" ||
+    text === "فعال" ||
+    text === "active" ||
+    text === "true" ||
+    text === "1"
+  ) {
+    return true;
+  }
 
   if (
     text === "غير نشط" ||
-    text === "غيرنشط" ||
+    text === "غير فعال" ||
     text === "inactive" ||
     text === "false" ||
     text === "0"
@@ -232,15 +318,26 @@ function getField(
   aliases: string[]
 ): string {
   for (const alias of aliases) {
-    if (row[alias] !== undefined && row[alias] !== null) {
-      return normalizeValue(row[alias]);
+    if (
+      row[alias] !== undefined &&
+      row[alias] !== null
+    ) {
+      return normalizeValue(
+        row[alias]
+      );
     }
   }
 
   return "";
 }
 
-function mapStudentRow(row: Record<string, unknown>): StudentRow {
+/* =========================================================
+   STUDENT MAPPING
+========================================================= */
+
+function mapStudentRow(
+  row: Record<string, unknown>
+): StudentRow {
   return {
     student_code: getField(row, [
       "كود الطالب",
@@ -268,18 +365,24 @@ function mapStudentRow(row: Record<string, unknown>): StudentRow {
     ]),
 
     gender: normalizeGender(
-      getField(row, ["النوع", "الجنس", "gender", "sex"])
-    ),
-
-    date_of_birth: excelDateToString(
       getField(row, [
-        "تاريخ الميلاد",
-        "تاريخ الميلاد ",
-        "date_of_birth",
-        "birth_date",
-        "date of birth",
+        "النوع",
+        "الجنس",
+        "gender",
+        "sex",
       ])
     ),
+
+    date_of_birth:
+      excelDateToString(
+        getField(row, [
+          "تاريخ الميلاد",
+          "تاريخ الميلاد ",
+          "date_of_birth",
+          "birth_date",
+          "date of birth",
+        ])
+      ),
 
     phone: getField(row, [
       "الهاتف",
@@ -289,7 +392,10 @@ function mapStudentRow(row: Record<string, unknown>): StudentRow {
       "mobile",
     ]),
 
-    address: getField(row, ["العنوان", "address"]),
+    address: getField(row, [
+      "العنوان",
+      "address",
+    ]),
 
     guardian_name: getField(row, [
       "اسم ولي الأمر",
@@ -307,21 +413,29 @@ function mapStudentRow(row: Record<string, unknown>): StudentRow {
       "guardian phone",
     ]),
 
-    enrollment_date: excelDateToString(
-      getField(row, [
-        "تاريخ الالتحاق",
-        "تاريخ التسجيل",
-        "enrollment_date",
-        "enrollment date",
-      ])
-    ),
+    enrollment_date:
+      excelDateToString(
+        getField(row, [
+          "تاريخ الالتحاق",
+          "تاريخ التسجيل",
+          "enrollment_date",
+          "enrollment date",
+        ])
+      ),
   };
 }
 
-function mapTeacherRow(row: Record<string, unknown>): TeacherRow {
+/* =========================================================
+   TEACHER MAPPING
+========================================================= */
+
+function mapTeacherRow(
+  row: Record<string, unknown>
+): TeacherRow {
   return {
     teacher_code: getField(row, [
       "كود المعلم",
+      "كود المدرس",
       "كود المدرس",
       "teacher_code",
       "teacher code",
@@ -331,10 +445,10 @@ function mapTeacherRow(row: Record<string, unknown>): TeacherRow {
     full_name: getField(row, [
       "اسم المعلم",
       "اسم المدرس",
-      "اسم المعلم بالكامل",
       "الاسم",
       "full_name",
       "teacher_name",
+      "teacher name",
       "name",
     ]),
 
@@ -342,6 +456,7 @@ function mapTeacherRow(row: Record<string, unknown>): TeacherRow {
       "الهاتف",
       "رقم الهاتف",
       "تليفون",
+      "الموبايل",
       "phone",
       "mobile",
     ]),
@@ -352,13 +467,14 @@ function mapTeacherRow(row: Record<string, unknown>): TeacherRow {
       "الإيميل",
       "الايميل",
       "email",
+      "e-mail",
     ]),
 
     specialization: getField(row, [
       "التخصص",
       "التخصص الدراسي",
       "specialization",
-      "subject",
+      "speciality",
     ]),
 
     qualification: getField(row, [
@@ -368,16 +484,21 @@ function mapTeacherRow(row: Record<string, unknown>): TeacherRow {
       "degree",
     ]),
 
-    is_active: normalizeActive(
+    is_active: normalizeTeacherStatus(
       getField(row, [
         "الحالة",
         "حالة المعلم",
         "status",
         "is_active",
+        "active",
       ])
     ),
   };
 }
+
+/* =========================================================
+   VALIDATION
+========================================================= */
 
 function validateStudentRow(
   row: StudentRow,
@@ -393,8 +514,15 @@ function validateStudentRow(
     errors.push("اسم الطالب مطلوب");
   }
 
-  if (row.national_id && !/^\d{14}$/.test(row.national_id)) {
-    errors.push("الرقم القومي يجب أن يتكون من 14 رقمًا");
+  if (
+    row.national_id &&
+    !/^\d{14}$/.test(
+      row.national_id
+    )
+  ) {
+    errors.push(
+      "الرقم القومي يجب أن يتكون من 14 رقمًا"
+    );
   }
 
   if (
@@ -402,14 +530,20 @@ function validateStudentRow(
     row.gender !== "ذكر" &&
     row.gender !== "أنثى"
   ) {
-    errors.push("النوع يجب أن يكون ذكر أو أنثى");
+    errors.push(
+      "النوع يجب أن يكون ذكر أو أنثى"
+    );
   }
 
   if (
     row.guardian_phone &&
-    !/^[0-9+\-\s()]{8,20}$/.test(row.guardian_phone)
+    !/^[0-9+\-\s()]{8,20}$/.test(
+      row.guardian_phone
+    )
   ) {
-    errors.push("هاتف ولي الأمر غير صحيح");
+    errors.push(
+      "هاتف ولي الأمر غير صحيح"
+    );
   }
 
   return {
@@ -435,16 +569,22 @@ function validateTeacherRow(
 
   if (
     row.phone &&
-    !/^[0-9+\-\s()]{8,20}$/.test(row.phone)
+    !/^[0-9+\-\s()]{8,20}$/.test(
+      row.phone
+    )
   ) {
-    errors.push("رقم هاتف المعلم غير صحيح");
+    errors.push("رقم الهاتف غير صحيح");
   }
 
   if (
     row.email &&
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      row.email
+    )
   ) {
-    errors.push("البريد الإلكتروني غير صحيح");
+    errors.push(
+      "البريد الإلكتروني غير صحيح"
+    );
   }
 
   return {
@@ -453,6 +593,10 @@ function validateTeacherRow(
     errors,
   };
 }
+
+/* =========================================================
+   STAT CARD
+========================================================= */
 
 function StatCard({
   label,
@@ -463,27 +607,39 @@ function StatCard({
   label: string;
   value: string | number;
   icon: React.ReactNode;
-  color?: "emerald" | "red" | "blue" | "slate";
+  color?:
+    | "emerald"
+    | "red"
+    | "blue"
+    | "slate";
 }) {
   const styles = {
-    emerald: "bg-emerald-100 text-emerald-600",
-    red: "bg-red-100 text-red-600",
-    blue: "bg-blue-100 text-blue-600",
-    slate: "bg-slate-100 text-slate-600",
+    emerald:
+      "bg-emerald-100 text-emerald-600",
+    red:
+      "bg-red-100 text-red-600",
+    blue:
+      "bg-blue-100 text-blue-600",
+    slate:
+      "bg-slate-100 text-slate-600",
   };
 
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-slate-500">{label}</p>
+          <p className="text-sm text-slate-500">
+            {label}
+          </p>
 
           <p className="mt-2 text-3xl font-bold text-slate-800">
             {value}
           </p>
         </div>
 
-        <div className={`rounded-xl p-3 ${styles[color]}`}>
+        <div
+          className={`rounded-xl p-3 ${styles[color]}`}
+        >
           {icon}
         </div>
       </div>
@@ -491,53 +647,105 @@ function StatCard({
   );
 }
 
+/* =========================================================
+   MAIN PAGE
+========================================================= */
+
 export default function ImportPage() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef =
+    useRef<HTMLInputElement | null>(
+      null
+    );
 
   const [importType, setImportType] =
     useState<ImportType>("students");
 
-  const [studentRows, setStudentRows] = useState<
+  const [
+    studentRows,
+    setStudentRows,
+  ] = useState<
     ValidationStudentRow[]
   >([]);
 
-  const [teacherRows, setTeacherRows] = useState<
+  const [
+    teacherRows,
+    setTeacherRows,
+  ] = useState<
     ValidationTeacherRow[]
   >([]);
 
-  const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [institutes, setInstitutes] =
+    useState<Institute[]>([]);
 
-  const [selectedInstitute, setSelectedInstitute] =
+  const [
+    selectedInstitute,
+    setSelectedInstitute,
+  ] = useState("");
+
+  const [fileName, setFileName] =
     useState("");
 
-  const [fileName, setFileName] = useState("");
+  const [error, setError] =
+    useState("");
 
-  const [error, setError] = useState("");
+  const [message, setMessage] =
+    useState("");
 
-  const [message, setMessage] = useState("");
+  const [
+    isLoadingInstitutes,
+    setIsLoadingInstitutes,
+  ] = useState(true);
 
-  const [isLoadingInstitutes, setIsLoadingInstitutes] =
-    useState(true);
+  const [isReading, setIsReading] =
+    useState(false);
 
-  const [isReading, setIsReading] = useState(false);
+  const [
+    isImporting,
+    setIsImporting,
+  ] = useState(false);
 
-  const [isImporting, setIsImporting] = useState(false);
+  const [
+    importResult,
+    setImportResult,
+  ] =
+    useState<ImportResult | null>(
+      null
+    );
 
-  const [importResult, setImportResult] =
-    useState<ImportResult | null>(null);
+  const validStudentRows =
+    studentRows.filter(
+      (row) => row.errors.length === 0
+    );
 
-  const rows =
+  const invalidStudentRows =
+    studentRows.filter(
+      (row) => row.errors.length > 0
+    );
+
+  const validTeacherRows =
+    teacherRows.filter(
+      (row) => row.errors.length === 0
+    );
+
+  const invalidTeacherRows =
+    teacherRows.filter(
+      (row) => row.errors.length > 0
+    );
+
+  const currentRows =
     importType === "students"
       ? studentRows
       : teacherRows;
 
-  const validRows = rows.filter(
-    (row) => row.errors.length === 0
-  );
+  const currentValidRows =
+    importType === "students"
+      ? validStudentRows
+      : validTeacherRows;
 
-  const invalidRows = rows.filter(
-    (row) => row.errors.length > 0
-  );
+  const currentInvalidRows =
+    importType === "students"
+      ? invalidStudentRows
+      : invalidTeacherRows;
 
   useEffect(() => {
     loadInstitutes();
@@ -546,56 +754,54 @@ export default function ImportPage() {
   async function loadInstitutes() {
     setIsLoadingInstitutes(true);
 
-    const { data, error } = await supabase
+    const {
+      data,
+      error: instituteError,
+    } = await supabase
       .from("institutes")
       .select("id,name,code")
       .order("name");
 
-    if (error) {
+    if (instituteError) {
       setError(
-        `تعذر تحميل قائمة المعاهد: ${error.message}`
+        `تعذر تحميل قائمة المعاهد: ${instituteError.message}`
       );
     } else {
-      setInstitutes((data ?? []) as Institute[]);
+      setInstitutes(
+        (data ?? []) as Institute[]
+      );
     }
 
     setIsLoadingInstitutes(false);
   }
 
-  function changeImportType(type: ImportType) {
-    setImportType(type);
-
-    setError("");
-    setMessage("");
-    setImportResult(null);
-    setFileName("");
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-
-    if (type === "students") {
-      setTeacherRows([]);
-    } else {
-      setStudentRows([]);
-    }
-  }
+  /* =======================================================
+     DOWNLOAD TEMPLATE
+  ======================================================= */
 
   function downloadTemplate() {
     if (importType === "students") {
-      const worksheet = XLSX.utils.json_to_sheet(
-        STUDENT_EXAMPLE_ROWS,
-        {
-          header: STUDENT_TEMPLATE_HEADERS,
-        }
-      );
+      const worksheet =
+        XLSX.utils.json_to_sheet(
+          STUDENT_EXAMPLE_ROWS,
+          {
+            header:
+              STUDENT_TEMPLATE_HEADERS,
+          }
+        );
 
       worksheet["!cols"] =
-        STUDENT_TEMPLATE_HEADERS.map((header) => ({
-          wch: Math.max(header.length + 5, 18),
-        }));
+        STUDENT_TEMPLATE_HEADERS.map(
+          (header) => ({
+            wch: Math.max(
+              header.length + 5,
+              18
+            ),
+          })
+        );
 
-      const workbook = XLSX.utils.book_new();
+      const workbook =
+        XLSX.utils.book_new();
 
       XLSX.utils.book_append_sheet(
         workbook,
@@ -611,19 +817,27 @@ export default function ImportPage() {
       return;
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(
-      TEACHER_EXAMPLE_ROWS,
-      {
-        header: TEACHER_TEMPLATE_HEADERS,
-      }
-    );
+    const worksheet =
+      XLSX.utils.json_to_sheet(
+        TEACHER_EXAMPLE_ROWS,
+        {
+          header:
+            TEACHER_TEMPLATE_HEADERS,
+        }
+      );
 
     worksheet["!cols"] =
-      TEACHER_TEMPLATE_HEADERS.map((header) => ({
-        wch: Math.max(header.length + 5, 20),
-      }));
+      TEACHER_TEMPLATE_HEADERS.map(
+        (header) => ({
+          wch: Math.max(
+            header.length + 5,
+            20
+          ),
+        })
+      );
 
-    const workbook = XLSX.utils.book_new();
+    const workbook =
+      XLSX.utils.book_new();
 
     XLSX.utils.book_append_sheet(
       workbook,
@@ -637,18 +851,28 @@ export default function ImportPage() {
     );
   }
 
+  /* =======================================================
+     STUDENT DUPLICATES
+  ======================================================= */
+
   async function checkStudentDuplicates(
     importedRows: ValidationStudentRow[],
     instituteId: string
   ) {
-    if (!instituteId || !importedRows.length) {
+    if (
+      !instituteId ||
+      !importedRows.length
+    ) {
       return importedRows;
     }
 
     const codes = [
       ...new Set(
         importedRows
-          .map((row) => row.student_code)
+          .map(
+            (row) =>
+              row.student_code
+          )
           .filter(Boolean)
       ),
     ];
@@ -656,7 +880,10 @@ export default function ImportPage() {
     const nationalIds = [
       ...new Set(
         importedRows
-          .map((row) => row.national_id)
+          .map(
+            (row) =>
+              row.national_id
+          )
           .filter(Boolean)
       ),
     ];
@@ -666,8 +893,14 @@ export default function ImportPage() {
         ? supabase
             .from("students")
             .select("student_code")
-            .eq("institute_id", instituteId)
-            .in("student_code", codes)
+            .eq(
+              "institute_id",
+              instituteId
+            )
+            .in(
+              "student_code",
+              codes
+            )
         : Promise.resolve({
             data: [],
             error: null,
@@ -678,8 +911,14 @@ export default function ImportPage() {
         ? supabase
             .from("students")
             .select("national_id")
-            .eq("institute_id", instituteId)
-            .in("national_id", nationalIds)
+            .eq(
+              "institute_id",
+              instituteId
+            )
+            .in(
+              "national_id",
+              nationalIds
+            )
         : Promise.resolve({
             data: [],
             error: null,
@@ -705,158 +944,219 @@ export default function ImportPage() {
       );
     }
 
-    const existingCodes = new Set(
-      (codeResult.data ?? []).map((item) =>
-        String(item.student_code)
-      )
-    );
-
-    const existingNationalIds = new Set(
-      (nationalResult.data ?? []).map((item) =>
-        String(item.national_id)
-      )
-    );
-
-    const codesInsideFile = new Set<string>();
-
-    return importedRows.map((row) => {
-      const errors = row.errors.filter(
-        (error) =>
-          error !==
-          "الطالب موجود بالفعل أو مكرر داخل الملف"
+    const existingCodes =
+      new Set(
+        (codeResult.data ?? []).map(
+          (item) =>
+            String(
+              item.student_code
+            )
+        )
       );
 
-      let duplicate = false;
+    const existingNationalIds =
+      new Set(
+        (nationalResult.data ?? []).map(
+          (item) =>
+            String(
+              item.national_id
+            )
+        )
+      );
 
-      if (existingCodes.has(row.student_code)) {
-        duplicate = true;
+    const codesInsideFile =
+      new Set<string>();
+
+    return importedRows.map(
+      (row) => {
+        const errors =
+          row.errors.filter(
+            (error) =>
+              error !==
+              "الطالب موجود بالفعل أو مكرر داخل الملف"
+          );
+
+        let duplicate = false;
+
+        if (
+          existingCodes.has(
+            row.student_code
+          )
+        ) {
+          duplicate = true;
+        }
+
+        if (
+          row.national_id &&
+          existingNationalIds.has(
+            row.national_id
+          )
+        ) {
+          duplicate = true;
+        }
+
+        if (
+          row.student_code &&
+          codesInsideFile.has(
+            row.student_code
+          )
+        ) {
+          duplicate = true;
+        }
+
+        if (row.student_code) {
+          codesInsideFile.add(
+            row.student_code
+          );
+        }
+
+        if (duplicate) {
+          errors.push(
+            "الطالب موجود بالفعل أو مكرر داخل الملف"
+          );
+        }
+
+        return {
+          ...row,
+          errors,
+        };
       }
-
-      if (
-        row.national_id &&
-        existingNationalIds.has(row.national_id)
-      ) {
-        duplicate = true;
-      }
-
-      if (
-        row.student_code &&
-        codesInsideFile.has(row.student_code)
-      ) {
-        duplicate = true;
-      }
-
-      if (row.student_code) {
-        codesInsideFile.add(row.student_code);
-      }
-
-      if (duplicate) {
-        errors.push(
-          "الطالب موجود بالفعل أو مكرر داخل الملف"
-        );
-      }
-
-      return {
-        ...row,
-        errors,
-      };
-    });
+    );
   }
+
+  /* =======================================================
+     TEACHER DUPLICATES
+  ======================================================= */
 
   async function checkTeacherDuplicates(
     importedRows: ValidationTeacherRow[],
     instituteId: string
   ) {
-    if (!instituteId || !importedRows.length) {
+    if (
+      !instituteId ||
+      !importedRows.length
+    ) {
       return importedRows;
     }
 
     const codes = [
       ...new Set(
         importedRows
-          .map((row) => row.teacher_code)
+          .map(
+            (row) =>
+              row.teacher_code
+          )
           .filter(Boolean)
       ),
     ];
 
-    const codeQuery =
-      codes.length > 0
-        ? supabase
-            .from("teachers")
-            .select("teacher_code")
-            .eq("institute_id", instituteId)
-            .in("teacher_code", codes)
-        : Promise.resolve({
-            data: [],
-            error: null,
-          });
+    let existingCodes =
+      new Set<string>();
 
-    const { data, error } = await codeQuery;
+    if (codes.length > 0) {
+      const {
+        data,
+        error: duplicateError,
+      } = await supabase
+        .from("teachers")
+        .select("teacher_code")
+        .eq(
+          "institute_id",
+          instituteId
+        )
+        .in(
+          "teacher_code",
+          codes
+        );
 
-    if (error) {
-      throw new Error(
-        `تعذر فحص أكواد المدرسين: ${error.message}`
-      );
-    }
-
-    const existingCodes = new Set(
-      (data ?? []).map((item) =>
-        String(item.teacher_code)
-      )
-    );
-
-    const codesInsideFile = new Set<string>();
-
-    return importedRows.map((row) => {
-      const errors = row.errors.filter(
-        (item) =>
-          item !==
-          "المعلم موجود بالفعل أو مكرر داخل الملف"
-      );
-
-      let duplicate = false;
-
-      if (
-        row.teacher_code &&
-        existingCodes.has(row.teacher_code)
-      ) {
-        duplicate = true;
-      }
-
-      if (
-        row.teacher_code &&
-        codesInsideFile.has(row.teacher_code)
-      ) {
-        duplicate = true;
-      }
-
-      if (row.teacher_code) {
-        codesInsideFile.add(row.teacher_code);
-      }
-
-      if (duplicate) {
-        errors.push(
-          "المعلم موجود بالفعل أو مكرر داخل الملف"
+      if (duplicateError) {
+        throw new Error(
+          `تعذر فحص أكواد المدرسين: ${duplicateError.message}`
         );
       }
 
-      return {
-        ...row,
-        errors,
-      };
-    });
+      existingCodes = new Set(
+        (data ?? [])
+          .map((item) =>
+            String(
+              item.teacher_code ??
+                ""
+            ).trim()
+          )
+          .filter(Boolean)
+      );
+    }
+
+    const codesInsideFile =
+      new Set<string>();
+
+    return importedRows.map(
+      (row) => {
+        const errors =
+          row.errors.filter(
+            (error) =>
+              error !==
+              "المعلم موجود بالفعل أو مكرر داخل الملف"
+          );
+
+        let duplicate = false;
+
+        const code =
+          row.teacher_code.trim();
+
+        if (
+          code &&
+          existingCodes.has(code)
+        ) {
+          duplicate = true;
+        }
+
+        if (
+          code &&
+          codesInsideFile.has(code)
+        ) {
+          duplicate = true;
+        }
+
+        if (code) {
+          codesInsideFile.add(code);
+        }
+
+        if (duplicate) {
+          errors.push(
+            "المعلم موجود بالفعل أو مكرر داخل الملف"
+          );
+        }
+
+        return {
+          ...row,
+          errors,
+        };
+      }
+    );
   }
 
-  async function handleFile(file: File) {
+  /* =======================================================
+     READ FILE
+  ======================================================= */
+
+  async function handleFile(
+    file: File
+  ) {
     setError("");
     setMessage("");
     setImportResult(null);
+
+    setStudentRows([]);
+    setTeacherRows([]);
+
     setFileName(file.name);
 
     if (!selectedInstitute) {
       setError(
         `اختاري المعهد أولًا قبل رفع ملف ${
-          importType === "students"
+          importType ===
+          "students"
             ? "الطلاب"
             : "المدرسين"
         }.`
@@ -884,24 +1184,27 @@ export default function ImportPage() {
     setIsReading(true);
 
     try {
-      const data = await file.arrayBuffer();
+      const data =
+        await file.arrayBuffer();
 
-      const workbook = XLSX.read(data, {
-        type: "array",
-        cellDates: true,
-      });
+      const workbook =
+        XLSX.read(data, {
+          type: "array",
+          cellDates: true,
+        });
 
-      if (!workbook.SheetNames.length) {
+      if (
+        !workbook.SheetNames.length
+      ) {
         throw new Error(
           "ملف Excel لا يحتوي على أوراق عمل."
         );
       }
 
-      const firstSheetName =
-        workbook.SheetNames[0];
-
       const worksheet =
-        workbook.Sheets[firstSheetName];
+        workbook.Sheets[
+          workbook.SheetNames[0]
+        ];
 
       const jsonRows =
         XLSX.utils.sheet_to_json<
@@ -917,17 +1220,23 @@ export default function ImportPage() {
         );
       }
 
-      if (importType === "students") {
+      if (
+        importType === "students"
+      ) {
         let validatedRows =
-          jsonRows.map((rawRow, index) => {
-            const mapped =
-              mapStudentRow(rawRow);
+          jsonRows.map(
+            (rawRow, index) => {
+              const mapped =
+                mapStudentRow(
+                  rawRow
+                );
 
-            return validateStudentRow(
-              mapped,
-              index + 2
-            );
-          });
+              return validateStudentRow(
+                mapped,
+                index + 2
+              );
+            }
+          );
 
         validatedRows =
           await checkStudentDuplicates(
@@ -935,31 +1244,35 @@ export default function ImportPage() {
             selectedInstitute
           );
 
-        setStudentRows(validatedRows);
-        setTeacherRows([]);
-
-        return;
-      }
-
-      let validatedRows =
-        jsonRows.map((rawRow, index) => {
-          const mapped =
-            mapTeacherRow(rawRow);
-
-          return validateTeacherRow(
-            mapped,
-            index + 2
-          );
-        });
-
-      validatedRows =
-        await checkTeacherDuplicates(
-          validatedRows,
-          selectedInstitute
+        setStudentRows(
+          validatedRows
         );
+      } else {
+        let validatedRows =
+          jsonRows.map(
+            (rawRow, index) => {
+              const mapped =
+                mapTeacherRow(
+                  rawRow
+                );
 
-      setTeacherRows(validatedRows);
-      setStudentRows([]);
+              return validateTeacherRow(
+                mapped,
+                index + 2
+              );
+            }
+          );
+
+        validatedRows =
+          await checkTeacherDuplicates(
+            validatedRows,
+            selectedInstitute
+          );
+
+        setTeacherRows(
+          validatedRows
+        );
+      }
     } catch (err) {
       console.error(err);
 
@@ -986,21 +1299,33 @@ export default function ImportPage() {
     handleFile(file);
   }
 
+  /* =======================================================
+     INSTITUTE CHANGE
+  ======================================================= */
+
   async function handleInstituteChange(
     instituteId: string
   ) {
-    setSelectedInstitute(instituteId);
+    setSelectedInstitute(
+      instituteId
+    );
 
     setError("");
     setMessage("");
     setImportResult(null);
 
-    if (!instituteId || rows.length === 0) {
+    if (
+      !instituteId ||
+      !currentRows.length
+    ) {
       return;
     }
 
     try {
-      if (importType === "students") {
+      if (
+        importType ===
+        "students"
+      ) {
         const checked =
           await checkStudentDuplicates(
             studentRows,
@@ -1026,30 +1351,60 @@ export default function ImportPage() {
     }
   }
 
+  /* =======================================================
+     CHANGE IMPORT TYPE
+  ======================================================= */
+
+  function changeImportType(
+    type: ImportType
+  ) {
+    setImportType(type);
+
+    setError("");
+    setMessage("");
+    setImportResult(null);
+
+    setStudentRows([]);
+    setTeacherRows([]);
+
+    setFileName("");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value =
+        "";
+    }
+  }
+
+  /* =======================================================
+     IMPORT STUDENTS
+  ======================================================= */
+
   async function importStudents() {
     setError("");
     setMessage("");
     setImportResult(null);
 
     if (!selectedInstitute) {
-      setError("اختاري المعهد أولًا.");
+      setError(
+        "اختاري المعهد أولًا."
+      );
+
       return;
     }
 
     if (!studentRows.length) {
-      setError("ارفعي ملف Excel للطلاب أولًا.");
+      setError(
+        "ارفعي ملف Excel للطلاب أولًا."
+      );
+
       return;
     }
 
-    const validStudentRows =
-      studentRows.filter(
-        (row) => row.errors.length === 0
-      );
-
     if (!validStudentRows.length) {
       setError(
-        "لا توجد صفوف صالحة للاستيراد. راجعي البيانات بالأحمر."
+        "لا توجد صفوف صالحة للاستيراد."
       );
+
       return;
     }
 
@@ -1057,25 +1412,49 @@ export default function ImportPage() {
 
     try {
       const payload =
-        validStudentRows.map((row) => ({
-          student_code: row.student_code,
-          full_name: row.full_name,
-          national_id:
-            row.national_id || null,
-          gender: row.gender || null,
-          date_of_birth:
-            row.date_of_birth || null,
-          phone: row.phone || null,
-          address: row.address || null,
-          guardian_name:
-            row.guardian_name || null,
-          guardian_phone:
-            row.guardian_phone || null,
-          enrollment_date:
-            row.enrollment_date || null,
-          institute_id: selectedInstitute,
-          is_active: true,
-        }));
+        validStudentRows.map(
+          (row) => ({
+            student_code:
+              row.student_code,
+
+            full_name:
+              row.full_name,
+
+            national_id:
+              row.national_id ||
+              null,
+
+            gender:
+              row.gender || null,
+
+            date_of_birth:
+              row.date_of_birth ||
+              null,
+
+            phone:
+              row.phone || null,
+
+            address:
+              row.address || null,
+
+            guardian_name:
+              row.guardian_name ||
+              null,
+
+            guardian_phone:
+              row.guardian_phone ||
+              null,
+
+            enrollment_date:
+              row.enrollment_date ||
+              null,
+
+            institute_id:
+              selectedInstitute,
+
+            is_active: true,
+          })
+        );
 
       const {
         error: insertError,
@@ -1084,7 +1463,23 @@ export default function ImportPage() {
         .insert(payload);
 
       if (insertError) {
-        throw insertError;
+        throw new Error(
+          [
+            "تعذر حفظ الطلاب في قاعدة البيانات.",
+            `الرسالة: ${insertError.message}`,
+            insertError.details
+              ? `التفاصيل: ${insertError.details}`
+              : "",
+            insertError.hint
+              ? `معلومة: ${insertError.hint}`
+              : "",
+            insertError.code
+              ? `كود الخطأ: ${insertError.code}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" | ")
+        );
       }
 
       const skipped =
@@ -1092,7 +1487,8 @@ export default function ImportPage() {
         validStudentRows.length;
 
       setImportResult({
-        inserted: payload.length,
+        inserted:
+          payload.length,
         skipped,
         failed: 0,
       });
@@ -1105,7 +1501,8 @@ export default function ImportPage() {
       setFileName("");
 
       if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+        fileInputRef.current.value =
+          "";
       }
     } catch (err) {
       console.error(err);
@@ -1120,108 +1517,275 @@ export default function ImportPage() {
     }
   }
 
+  /* =======================================================
+     IMPORT TEACHERS
+  ======================================================= */
+
   async function importTeachers() {
     setError("");
     setMessage("");
     setImportResult(null);
 
     if (!selectedInstitute) {
-      setError("اختاري المعهد أولًا.");
+      setError(
+        "اختاري المعهد أولًا."
+      );
+
       return;
     }
 
     if (!teacherRows.length) {
-      setError("ارفعي ملف Excel للمدرسين أولًا.");
+      setError(
+        "ارفعي ملف Excel للمدرسين أولًا."
+      );
+
       return;
     }
-
-    const validTeacherRows =
-      teacherRows.filter(
-        (row) => row.errors.length === 0
-      );
 
     if (!validTeacherRows.length) {
       setError(
         "لا توجد صفوف صالحة للاستيراد. راجعي البيانات بالأحمر."
       );
+
       return;
     }
 
     setIsImporting(true);
 
     try {
+      const teacherCodes = [
+        ...new Set(
+          validTeacherRows
+            .map((row) =>
+              row.teacher_code.trim()
+            )
+            .filter(Boolean)
+        ),
+      ];
+
+      let existingCodes =
+        new Set<string>();
+
+      if (
+        teacherCodes.length > 0
+      ) {
+        const {
+          data: existingTeachers,
+          error: existingError,
+        } = await supabase
+          .from("teachers")
+          .select("teacher_code")
+          .eq(
+            "institute_id",
+            selectedInstitute
+          )
+          .in(
+            "teacher_code",
+            teacherCodes
+          );
+
+        if (existingError) {
+          throw new Error(
+            `تعذر فحص المدرسين الموجودين: ${existingError.message}`
+          );
+        }
+
+        existingCodes =
+          new Set(
+            (existingTeachers ??
+              [])
+              .map((teacher) =>
+                String(
+                  teacher.teacher_code ??
+                    ""
+                ).trim()
+              )
+              .filter(Boolean)
+          );
+      }
+
+      const codesInsideFile =
+        new Set<string>();
+
+      const rowsToInsert: TeacherRow[] =
+        [];
+
+      let skipped = 0;
+
+      for (const row of validTeacherRows) {
+        const code =
+          row.teacher_code.trim();
+
+        if (
+          code &&
+          existingCodes.has(code)
+        ) {
+          skipped++;
+          continue;
+        }
+
+        if (
+          code &&
+          codesInsideFile.has(code)
+        ) {
+          skipped++;
+          continue;
+        }
+
+        if (code) {
+          codesInsideFile.add(
+            code
+          );
+        }
+
+        rowsToInsert.push(row);
+      }
+
+      if (!rowsToInsert.length) {
+        setImportResult({
+          inserted: 0,
+          skipped,
+          failed: 0,
+        });
+
+        setMessage(
+          `لم يتم إضافة مدرسين جدد. تم تخطي ${skipped} مدرس بسبب التكرار.`
+        );
+
+        return;
+      }
+
       const payload =
-        validTeacherRows.map((row) => ({
-          institute_id: selectedInstitute,
-          full_name: row.full_name.trim(),
-          teacher_code:
-            row.teacher_code.trim() || null,
-          phone: row.phone.trim() || null,
-          email: row.email.trim() || null,
-          specialization:
-            row.specialization.trim() || null,
-          qualification:
-            row.qualification.trim() || null,
-          is_active: row.is_active,
-        }));
+        rowsToInsert.map(
+          (row) => ({
+            institute_id:
+              selectedInstitute,
+
+            full_name:
+              row.full_name.trim(),
+
+            teacher_code:
+              row.teacher_code.trim() ||
+              null,
+
+            phone:
+              row.phone.trim() ||
+              null,
+
+            email:
+              row.email.trim() ||
+              null,
+
+            specialization:
+              row.specialization.trim() ||
+              null,
+
+            qualification:
+              row.qualification.trim() ||
+              null,
+
+            is_active:
+              row.is_active,
+          })
+        );
 
       const {
+        data: insertedTeachers,
         error: insertError,
       } = await supabase
         .from("teachers")
-        .insert(payload);
+        .insert(payload)
+        .select(
+          "id, full_name, teacher_code, institute_id"
+        );
 
       if (insertError) {
-        throw insertError;
+        console.error(
+          "Teacher import error:",
+          insertError
+        );
+
+        throw new Error(
+          [
+            "تعذر حفظ المدرسين في قاعدة البيانات.",
+            `الرسالة: ${insertError.message}`,
+            insertError.details
+              ? `التفاصيل: ${insertError.details}`
+              : "",
+            insertError.hint
+              ? `معلومة: ${insertError.hint}`
+              : "",
+            insertError.code
+              ? `كود الخطأ: ${insertError.code}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" | ")
+        );
       }
 
-      const skipped =
-        teacherRows.length -
-        validTeacherRows.length;
+      const insertedCount =
+        insertedTeachers?.length ??
+        payload.length;
 
       setImportResult({
-        inserted: payload.length,
+        inserted: insertedCount,
         skipped,
         failed: 0,
       });
 
       setMessage(
-        `تم استيراد ${payload.length} مدرس بنجاح إلى المعهد المحدد.`
+        `تم استيراد ${insertedCount} مدرس بنجاح إلى المعهد المحدد${
+          skipped
+            ? `، وتم تخطي ${skipped} مدرس مكرر.`
+            : "."
+        }`
       );
 
       setTeacherRows([]);
       setFileName("");
 
       if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+        fileInputRef.current.value =
+          "";
       }
     } catch (err) {
-      console.error(err);
+      console.error(
+        "Teacher import failed:",
+        err
+      );
 
       setError(
         err instanceof Error
           ? err.message
-          : "حدث خطأ أثناء استيراد المدرسين."
+          : "حدث خطأ غير معروف أثناء استيراد المدرسين."
       );
     } finally {
       setIsImporting(false);
     }
   }
 
-  function importData() {
-    if (importType === "students") {
+  /* =======================================================
+     IMPORT CURRENT
+  ======================================================= */
+
+  function importCurrentData() {
+    if (
+      importType === "students"
+    ) {
       importStudents();
     } else {
       importTeachers();
     }
   }
 
+  /* =======================================================
+     RESET
+  ======================================================= */
+
   function resetImport() {
-    if (importType === "students") {
-      setStudentRows([]);
-    } else {
-      setTeacherRows([]);
-    }
+    setStudentRows([]);
+    setTeacherRows([]);
 
     setFileName("");
     setError("");
@@ -1229,12 +1793,25 @@ export default function ImportPage() {
     setImportResult(null);
 
     if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      fileInputRef.current.value =
+        "";
     }
   }
 
-  const isStudentMode =
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
+  const isStudents =
     importType === "students";
+
+  const title = isStudents
+    ? "استيراد بيانات الطلاب"
+    : "استيراد بيانات المدرسين";
+
+  const subtitle = isStudents
+    ? "استيراد الطلاب من Excel إلى المعهد بطريقة آمنة"
+    : "استيراد المدرسين من Excel إلى المعهد بطريقة آمنة";
 
   return (
     <AppShell>
@@ -1244,46 +1821,47 @@ export default function ImportPage() {
       >
         <div className="mx-auto max-w-7xl space-y-6">
 
-          {/* Header */}
+          {/* HEADER */}
           <div className="rounded-3xl bg-gradient-to-l from-emerald-700 to-teal-600 p-6 text-white shadow-lg">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
               <div className="flex items-center gap-3">
                 <div className="rounded-2xl bg-white/15 p-3">
-                  <FileSpreadsheet size={30} />
+                  <FileSpreadsheet
+                    size={30}
+                  />
                 </div>
 
                 <div>
                   <h1 className="text-2xl font-bold">
-                    استيراد بيانات{" "}
-                    {isStudentMode
-                      ? "الطلاب"
-                      : "المدرسين"}
+                    {title}
                   </h1>
 
                   <p className="mt-1 text-sm text-emerald-50">
-                    استيراد{" "}
-                    {isStudentMode
-                      ? "الطلاب"
-                      : "المدرسين"}{" "}
-                    من Excel إلى المعهد بطريقة آمنة
+                    {subtitle}
                   </p>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={downloadTemplate}
+                onClick={
+                  downloadTemplate
+                }
                 className="flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-50"
               >
-                <Download size={19} />
+                <Download
+                  size={19}
+                />
+
                 تحميل نموذج Excel
               </button>
             </div>
           </div>
 
-          {/* Import Type */}
+          {/* IMPORT TYPE */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+
             <h2 className="mb-4 text-lg font-bold text-slate-800">
               نوع البيانات المراد استيرادها
             </h2>
@@ -1293,92 +1871,121 @@ export default function ImportPage() {
               <button
                 type="button"
                 onClick={() =>
-                  changeImportType("students")
+                  changeImportType(
+                    "students"
+                  )
                 }
-                disabled={isImporting}
-                className={`flex items-center gap-4 rounded-2xl border-2 p-5 text-right transition ${
-                  isStudentMode
-                    ? "border-emerald-500 bg-emerald-50"
-                    : "border-slate-200 bg-white hover:border-emerald-300"
+                disabled={
+                  isImporting
+                }
+                className={`rounded-2xl border p-5 text-right transition ${
+                  isStudents
+                    ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100"
+                    : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50"
                 }`}
               >
-                <div
-                  className={`rounded-xl p-3 ${
-                    isStudentMode
-                      ? "bg-emerald-600 text-white"
-                      : "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  <Users size={28} />
-                </div>
+                <div className="flex items-center gap-3">
 
-                <div>
-                  <div className="font-bold text-slate-800">
-                    استيراد الطلاب
+                  <div
+                    className={`rounded-xl p-3 ${
+                      isStudents
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    <Users size={24} />
                   </div>
 
-                  <div className="mt-1 text-sm text-slate-500">
-                    رفع بيانات الطلاب من Excel
+                  <div>
+                    <div className="font-bold text-slate-800">
+                      استيراد الطلاب
+                    </div>
+
+                    <div className="mt-1 text-sm text-slate-500">
+                      رفع بيانات الطلاب من Excel
+                    </div>
                   </div>
+
                 </div>
               </button>
 
               <button
                 type="button"
                 onClick={() =>
-                  changeImportType("teachers")
+                  changeImportType(
+                    "teachers"
+                  )
                 }
-                disabled={isImporting}
-                className={`flex items-center gap-4 rounded-2xl border-2 p-5 text-right transition ${
-                  !isStudentMode
-                    ? "border-blue-500 bg-blue-50"
-                    : "border-slate-200 bg-white hover:border-blue-300"
+                disabled={
+                  isImporting
+                }
+                className={`rounded-2xl border p-5 text-right transition ${
+                  !isStudents
+                    ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100"
+                    : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50"
                 }`}
               >
-                <div
-                  className={`rounded-xl p-3 ${
-                    !isStudentMode
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  <GraduationCap size={28} />
-                </div>
+                <div className="flex items-center gap-3">
 
-                <div>
-                  <div className="font-bold text-slate-800">
-                    استيراد المدرسين
+                  <div
+                    className={`rounded-xl p-3 ${
+                      !isStudents
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    <GraduationCap
+                      size={24}
+                    />
                   </div>
 
-                  <div className="mt-1 text-sm text-slate-500">
-                    رفع بيانات المدرسين من Excel
+                  <div>
+                    <div className="font-bold text-slate-800">
+                      استيراد المدرسين
+                    </div>
+
+                    <div className="mt-1 text-sm text-slate-500">
+                      رفع بيانات المدرسين من Excel
+                    </div>
                   </div>
+
                 </div>
               </button>
 
             </div>
           </div>
 
-          {/* Institute */}
+          {/* INSTITUTE */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 
             <div className="mb-3 flex items-center gap-2">
-              <Users
-                size={20}
-                className="text-emerald-600"
-              />
+
+              {isStudents ? (
+                <Users
+                  size={20}
+                  className="text-emerald-600"
+                />
+              ) : (
+                <GraduationCap
+                  size={20}
+                  className="text-emerald-600"
+                />
+              )}
 
               <label className="font-bold text-slate-800">
                 المعهد الذي سيتم استيراد{" "}
-                {isStudentMode
+                {isStudents
                   ? "الطلاب"
                   : "المدرسين"}{" "}
                 إليه
               </label>
+
             </div>
 
             <select
-              value={selectedInstitute}
+              value={
+                selectedInstitute
+              }
               onChange={(event) =>
                 handleInstituteChange(
                   event.target.value
@@ -1396,29 +2003,36 @@ export default function ImportPage() {
                   : "اختيار المعهد..."}
               </option>
 
-              {institutes.map((institute) => (
-                <option
-                  key={institute.id}
-                  value={institute.id}
-                >
-                  {institute.name}
-                  {institute.code
-                    ? ` — ${institute.code}`
-                    : ""}
-                </option>
-              ))}
+              {institutes.map(
+                (institute) => (
+                  <option
+                    key={
+                      institute.id
+                    }
+                    value={
+                      institute.id
+                    }
+                  >
+                    {institute.name}
+                    {institute.code
+                      ? ` — ${institute.code}`
+                      : ""}
+                  </option>
+                )
+              )}
             </select>
 
             <p className="mt-2 text-xs text-slate-500">
-              يجب اختيار المعهد قبل رفع الملف حتى يتم ربط{" "}
-              {isStudentMode
+              يجب اختيار المعهد قبل رفع الملف
+              حتى يتم ربط{" "}
+              {isStudents
                 ? "الطلاب"
                 : "المدرسين"}{" "}
               بالمعهد الصحيح.
             </p>
           </div>
 
-          {/* Instructions */}
+          {/* INSTRUCTIONS */}
           <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
 
             <h2 className="mb-4 text-lg font-bold text-slate-800">
@@ -1432,7 +2046,7 @@ export default function ImportPage() {
                   number="1"
                   title="اختيار النوع"
                   text={`اختاري ${
-                    isStudentMode
+                    isStudents
                       ? "الطلاب"
                       : "المدرسين"
                   }.`}
@@ -1444,7 +2058,7 @@ export default function ImportPage() {
                   number="2"
                   title="اختيار المعهد"
                   text={`حددي المعهد الذي ينتمي إليه ${
-                    isStudentMode
+                    isStudents
                       ? "الطلاب"
                       : "المدرسون"
                   }.`}
@@ -1470,36 +2084,35 @@ export default function ImportPage() {
             </div>
           </div>
 
-          {/* Upload */}
+          {/* UPLOAD */}
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
 
             <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/40 px-6 py-12 text-center">
 
               <div className="mb-4 rounded-2xl bg-emerald-100 p-4 text-emerald-700">
-                {isStudentMode ? (
-                  <Users size={34} />
-                ) : (
-                  <GraduationCap size={34} />
-                )}
+                <Upload size={34} />
               </div>
 
               <h2 className="text-xl font-bold text-slate-800">
                 رفع ملف Excel{" "}
-                {isStudentMode
+                {isStudents
                   ? "الطلاب"
                   : "المدرسين"}
               </h2>
 
               <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
-                اختاري ملف XLSX أو XLS. سيتم فحص
-                البيانات وكشف التكرار قبل حفظها.
+                اختاري ملف XLSX أو XLS.
+                سيتم فحص البيانات وكشف التكرار
+                قبل حفظها.
               </p>
 
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".xlsx,.xls"
-                onChange={handleFileChange}
+                onChange={
+                  handleFileChange
+                }
                 className="hidden"
               />
 
@@ -1538,10 +2151,11 @@ export default function ImportPage() {
                   {fileName}
                 </div>
               )}
+
             </div>
           </div>
 
-          {/* Error */}
+          {/* ERROR */}
           {error && (
             <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
 
@@ -1559,10 +2173,11 @@ export default function ImportPage() {
                   {error}
                 </div>
               </div>
+
             </div>
           )}
 
-          {/* Success */}
+          {/* SUCCESS */}
           {message && (
             <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
 
@@ -1580,91 +2195,120 @@ export default function ImportPage() {
                   {message}
                 </div>
               </div>
+
             </div>
           )}
 
-          {/* Import result */}
+          {/* RESULT */}
           {importResult && (
             <div className="grid gap-4 sm:grid-cols-3">
 
               <StatCard
                 label="تم استيرادهم"
-                value={importResult.inserted}
-                icon={<CheckCircle2 size={24} />}
+                value={
+                  importResult.inserted
+                }
+                icon={
+                  <CheckCircle2
+                    size={24}
+                  />
+                }
                 color="emerald"
               />
 
               <StatCard
                 label="تم تخطيهم"
-                value={importResult.skipped}
-                icon={<AlertCircle size={24} />}
+                value={
+                  importResult.skipped
+                }
+                icon={
+                  <AlertCircle
+                    size={24}
+                  />
+                }
                 color="blue"
               />
 
               <StatCard
                 label="أخطاء"
-                value={importResult.failed}
-                icon={<XCircle size={24} />}
+                value={
+                  importResult.failed
+                }
+                icon={
+                  <XCircle
+                    size={24}
+                  />
+                }
                 color="red"
               />
 
             </div>
           )}
 
-          {/* Statistics + Preview */}
-          {rows.length > 0 && (
+          {/* STATISTICS + PREVIEW */}
+          {currentRows.length > 0 && (
             <>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
                 <StatCard
                   label="إجمالي الصفوف"
-                  value={rows.length}
+                  value={
+                    currentRows.length
+                  }
                   icon={
-                    isStudentMode ? (
-                      <Users size={24} />
-                    ) : (
-                      <GraduationCap size={24} />
-                    )
+                    <Users size={24} />
                   }
                   color="slate"
                 />
 
                 <StatCard
                   label="جاهزة للاستيراد"
-                  value={validRows.length}
+                  value={
+                    currentValidRows.length
+                  }
                   icon={
-                    <CheckCircle2 size={24} />
+                    <CheckCircle2
+                      size={24}
+                    />
                   }
                   color="emerald"
                 />
 
                 <StatCard
                   label="تحتاج مراجعة"
-                  value={invalidRows.length}
-                  icon={<XCircle size={24} />}
+                  value={
+                    currentInvalidRows.length
+                  }
+                  icon={
+                    <XCircle
+                      size={24}
+                    />
+                  }
                   color="red"
                 />
 
                 <StatCard
                   label="نسبة الصحة"
                   value={`${
-                    rows.length
+                    currentRows.length
                       ? Math.round(
-                          (validRows.length /
-                            rows.length) *
+                          (currentValidRows.length /
+                            currentRows.length) *
                             100
                         )
                       : 0
                   }%`}
                   icon={
-                    <CheckCircle2 size={24} />
+                    <CheckCircle2
+                      size={24}
+                    />
                   }
                   color="blue"
                 />
 
               </div>
 
-              {/* Preview */}
+              {/* PREVIEW */}
               <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
 
                 <div className="flex flex-col gap-3 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between">
@@ -1672,14 +2316,14 @@ export default function ImportPage() {
                   <div>
                     <h2 className="text-lg font-bold text-slate-800">
                       معاينة بيانات{" "}
-                      {isStudentMode
+                      {isStudents
                         ? "الطلاب"
                         : "المدرسين"}
                     </h2>
 
                     <p className="mt-1 text-sm text-slate-500">
                       لن يتم حفظ أي{" "}
-                      {isStudentMode
+                      {isStudents
                         ? "طالب"
                         : "مدرس"}{" "}
                       إلا بعد الضغط على زر استيراد البيانات.
@@ -1690,8 +2334,12 @@ export default function ImportPage() {
 
                     <button
                       type="button"
-                      onClick={resetImport}
-                      disabled={isImporting}
+                      onClick={
+                        resetImport
+                      }
+                      disabled={
+                        isImporting
+                      }
                       className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                     >
                       مسح الملف
@@ -1699,11 +2347,13 @@ export default function ImportPage() {
 
                     <button
                       type="button"
-                      onClick={importData}
+                      onClick={
+                        importCurrentData
+                      }
                       disabled={
                         isImporting ||
                         !selectedInstitute ||
-                        !validRows.length
+                        !currentValidRows.length
                       }
                       className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -1717,7 +2367,9 @@ export default function ImportPage() {
                         </>
                       ) : (
                         <>
-                          <Database size={18} />
+                          <Database
+                            size={18}
+                          />
                           استيراد البيانات
                         </>
                       )}
@@ -1726,9 +2378,10 @@ export default function ImportPage() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* STUDENT TABLE */}
+                {isStudents ? (
+                  <div className="overflow-x-auto">
 
-                  {isStudentMode ? (
                     <table className="min-w-[1400px] w-full text-sm">
 
                       <thead className="bg-slate-50">
@@ -1746,103 +2399,136 @@ export default function ImportPage() {
                             "ولي الأمر",
                             "هاتف ولي الأمر",
                             "الحالة",
-                          ].map((header) => (
-                            <th
-                              key={header}
-                              className="px-4 py-3 text-right font-bold text-slate-700"
-                            >
-                              {header}
-                            </th>
-                          ))}
+                          ].map(
+                            (header) => (
+                              <th
+                                key={
+                                  header
+                                }
+                                className="px-4 py-3 text-right font-bold text-slate-700"
+                              >
+                                {header}
+                              </th>
+                            )
+                          )}
 
                         </tr>
                       </thead>
 
                       <tbody>
-                        {studentRows.map((row) => {
-                          const hasError =
-                            row.errors.length > 0;
+                        {studentRows.map(
+                          (row) => {
+                            const hasError =
+                              row.errors.length >
+                              0;
 
-                          return (
-                            <tr
-                              key={row.rowNumber}
-                              className={`border-b border-slate-100 ${
-                                hasError
-                                  ? "bg-red-50"
-                                  : "hover:bg-slate-50"
-                              }`}
-                            >
+                            return (
+                              <tr
+                                key={
+                                  row.rowNumber
+                                }
+                                className={`border-b border-slate-100 ${
+                                  hasError
+                                    ? "bg-red-50"
+                                    : "hover:bg-slate-50"
+                                }`}
+                              >
 
-                              <td className="px-4 py-3 font-semibold text-slate-600">
-                                {row.rowNumber}
-                              </td>
+                                <td className="px-4 py-3 font-semibold text-slate-600">
+                                  {
+                                    row.rowNumber
+                                  }
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.student_code || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.student_code ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3 font-semibold text-slate-800">
-                                {row.full_name || "—"}
-                              </td>
+                                <td className="px-4 py-3 font-semibold text-slate-800">
+                                  {row.full_name ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.national_id || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.national_id ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.gender || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.gender ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.date_of_birth || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.date_of_birth ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.phone || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.phone ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.address || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.address ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.guardian_name || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.guardian_name ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.guardian_phone || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.guardian_phone ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {hasError ? (
-                                  <div className="max-w-xs">
+                                <td className="px-4 py-3">
 
-                                    <div className="flex items-center gap-1 font-semibold text-red-700">
-                                      <XCircle size={16} />
-                                      يحتاج مراجعة
+                                  {hasError ? (
+                                    <div className="max-w-xs">
+
+                                      <div className="flex items-center gap-1 font-semibold text-red-700">
+                                        <XCircle
+                                          size={16}
+                                        />
+                                        يحتاج مراجعة
+                                      </div>
+
+                                      <div className="mt-1 text-xs leading-5 text-red-600">
+                                        {row.errors.join(
+                                          " • "
+                                        )}
+                                      </div>
+
                                     </div>
-
-                                    <div className="mt-1 text-xs leading-5 text-red-600">
-                                      {row.errors.join(" • ")}
+                                  ) : (
+                                    <div className="flex items-center gap-1 font-semibold text-emerald-700">
+                                      <CheckCircle2
+                                        size={16}
+                                      />
+                                      جاهز للاستيراد
                                     </div>
+                                  )}
 
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1 font-semibold text-emerald-700">
-                                    <CheckCircle2 size={16} />
-                                    جاهز للاستيراد
-                                  </div>
-                                )}
-                              </td>
+                                </td>
 
-                            </tr>
-                          );
-                        })}
+                              </tr>
+                            );
+                          }
+                        )}
                       </tbody>
 
                     </table>
-                  ) : (
-                    <table className="min-w-[1100px] w-full text-sm">
+
+                  </div>
+                ) : (
+                  /* TEACHER TABLE */
+                  <div className="overflow-x-auto">
+
+                    <table className="min-w-[1000px] w-full text-sm">
 
                       <thead className="bg-slate-50">
                         <tr className="border-b border-slate-200">
@@ -1856,99 +2542,123 @@ export default function ImportPage() {
                             "التخصص",
                             "المؤهل",
                             "الحالة",
-                          ].map((header) => (
-                            <th
-                              key={header}
-                              className="px-4 py-3 text-right font-bold text-slate-700"
-                            >
-                              {header}
-                            </th>
-                          ))}
+                          ].map(
+                            (header) => (
+                              <th
+                                key={
+                                  header
+                                }
+                                className="px-4 py-3 text-right font-bold text-slate-700"
+                              >
+                                {header}
+                              </th>
+                            )
+                          )}
 
                         </tr>
                       </thead>
 
                       <tbody>
-                        {teacherRows.map((row) => {
-                          const hasError =
-                            row.errors.length > 0;
+                        {teacherRows.map(
+                          (row) => {
+                            const hasError =
+                              row.errors.length >
+                              0;
 
-                          return (
-                            <tr
-                              key={row.rowNumber}
-                              className={`border-b border-slate-100 ${
-                                hasError
-                                  ? "bg-red-50"
-                                  : "hover:bg-slate-50"
-                              }`}
-                            >
+                            return (
+                              <tr
+                                key={
+                                  row.rowNumber
+                                }
+                                className={`border-b border-slate-100 ${
+                                  hasError
+                                    ? "bg-red-50"
+                                    : "hover:bg-slate-50"
+                                }`}
+                              >
 
-                              <td className="px-4 py-3 font-semibold text-slate-600">
-                                {row.rowNumber}
-                              </td>
+                                <td className="px-4 py-3 font-semibold text-slate-600">
+                                  {
+                                    row.rowNumber
+                                  }
+                                </td>
 
-                              <td className="px-4 py-3 font-semibold text-blue-700">
-                                {row.teacher_code || "—"}
-                              </td>
+                                <td className="px-4 py-3 font-semibold text-slate-800">
+                                  {row.teacher_code ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3 font-semibold text-slate-800">
-                                {row.full_name || "—"}
-                              </td>
+                                <td className="px-4 py-3 font-semibold text-slate-800">
+                                  {row.full_name ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.phone || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.phone ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.email || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.email ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.specialization || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.specialization ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
-                                {row.qualification || "—"}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {row.qualification ||
+                                    "—"}
+                                </td>
 
-                              <td className="px-4 py-3">
+                                <td className="px-4 py-3">
 
-                                {hasError ? (
-                                  <div className="max-w-xs">
+                                  {hasError ? (
+                                    <div className="max-w-xs">
 
-                                    <div className="flex items-center gap-1 font-semibold text-red-700">
-                                      <XCircle size={16} />
-                                      يحتاج مراجعة
+                                      <div className="flex items-center gap-1 font-semibold text-red-700">
+                                        <XCircle
+                                          size={16}
+                                        />
+                                        يحتاج مراجعة
+                                      </div>
+
+                                      <div className="mt-1 text-xs leading-5 text-red-600">
+                                        {row.errors.join(
+                                          " • "
+                                        )}
+                                      </div>
+
                                     </div>
-
-                                    <div className="mt-1 text-xs leading-5 text-red-600">
-                                      {row.errors.join(" • ")}
+                                  ) : (
+                                    <div className="flex items-center gap-1 font-semibold text-emerald-700">
+                                      <CheckCircle2
+                                        size={16}
+                                      />
+                                      {row.is_active
+                                        ? "نشط - جاهز للاستيراد"
+                                        : "غير نشط - جاهز للاستيراد"}
                                     </div>
+                                  )}
 
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1 font-semibold text-emerald-700">
-                                    <CheckCircle2 size={16} />
-                                    {row.is_active
-                                      ? "نشط - جاهز للاستيراد"
-                                      : "غير نشط - جاهز للاستيراد"}
-                                  </div>
-                                )}
+                                </td>
 
-                              </td>
-
-                            </tr>
-                          );
-                        })}
+                              </tr>
+                            );
+                          }
+                        )}
                       </tbody>
 
                     </table>
-                  )}
 
-                </div>
+                  </div>
+                )}
+
               </div>
 
-              {/* Notice */}
+              {/* NOTICE */}
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
 
                 <div className="flex items-start gap-3">
@@ -1959,19 +2669,22 @@ export default function ImportPage() {
                   />
 
                   <div>
+
                     <h3 className="font-bold text-emerald-800">
                       الاستيراد الفعلي مفعل
                     </h3>
 
                     <p className="mt-1 text-sm leading-6 text-emerald-700">
-                      بعد اختيار المعهد ورفع الملف، سيتم
-                      فحص البيانات والتأكد من عدم التكرار.
-                      الصفوف الصحيحة فقط سيتم إدخالها إلى
-                      قاعدة البيانات.
+                      بعد اختيار المعهد ورفع الملف،
+                      سيتم فحص البيانات والتأكد من عدم
+                      التكرار. الصفوف الصحيحة فقط سيتم
+                      إدخالها إلى قاعدة البيانات.
                     </p>
+
                   </div>
 
                 </div>
+
               </div>
             </>
           )}
@@ -1981,6 +2694,10 @@ export default function ImportPage() {
     </AppShell>
   );
 }
+
+/* =========================================================
+   STEP
+========================================================= */
 
 function Step({
   number,
