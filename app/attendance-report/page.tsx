@@ -1195,17 +1195,17 @@ return ( <main className="min-h-screen bg-gray-50 p-6 md:p-8"> <div className="m
                     </td>
 
                     <td className="px-5 py-5 text-center">
-                      <span
-                        className={`inline-flex px-3 py-1 rounded-lg font-bold ${
-                          row.percentage >= 90
-                            ? "bg-green-50 text-green-700"
-                            : row.percentage >= 75
-                            ? "bg-yellow-50 text-yellow-700"
-                            : "bg-red-50 text-red-700"
-                        }`}
-                      >
-                        {row.percentage}%
-                      </span>
+                    <span
+  className={`inline-flex px-3 py-1 rounded-lg font-bold ${
+    row.percentage >= 90
+      ? "bg-green-50 text-green-700"
+      : row.percentage >= 75
+        ? "bg-yellow-50 text-yellow-700"
+        : "bg-red-50 text-red-700"
+  }`}
+>
+  {row.percentage.toFixed(1)}%
+</span>
                     </td>
 
                   </tr>
