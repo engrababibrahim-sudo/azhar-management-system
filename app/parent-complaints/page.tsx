@@ -167,7 +167,7 @@ export default function ParentComplaintsPage() {
   const [newDescription, setNewDescription] = useState("");
 
   const [instituteStatus, setInstituteStatus] =
-    useState<"under_review" | "in_progress" | "resolved">("in_progress");
+    useState<"new" | "under_review" | "in_progress" | "resolved">("new");
   const [instituteResponse, setInstituteResponse] = useState("");
   const [escalationReason, setEscalationReason] = useState("");
 
@@ -472,7 +472,12 @@ export default function ParentComplaintsPage() {
     setSelectedComplaint(complaint);
     setInstituteResponse(complaint.institute_response || "");
     setInstituteStatus(
-      complaint.status === "resolved" ? "resolved" : "in_progress"
+      complaint.status === "new" ||
+        complaint.status === "under_review" ||
+        complaint.status === "in_progress" ||
+        complaint.status === "resolved"
+        ? complaint.status
+        : "new"
     );
     setEscalationReason(complaint.escalation_reason || "");
     setShowInstituteModal(true);
@@ -963,7 +968,7 @@ export default function ParentComplaintsPage() {
                           </button>
 
                           {isInstituteUser &&
-                            !["resolved", "admin_resolved"].includes(
+                            !["resolved", "escalated", "admin_review", "admin_resolved"].includes(
                               complaint.status
                             ) && (
                               <button
@@ -1297,6 +1302,7 @@ export default function ParentComplaintsPage() {
                 onChange={(e) =>
                   setInstituteStatus(
                     e.target.value as
+                      | "new"
                       | "under_review"
                       | "in_progress"
                       | "resolved"
@@ -1304,6 +1310,7 @@ export default function ParentComplaintsPage() {
                 }
                 className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
               >
+                <option value="new">جديدة</option>
                 <option value="under_review">قيد المراجعة</option>
                 <option value="in_progress">قيد المعالجة</option>
                 <option value="resolved">تم الحل</option>
