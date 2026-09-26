@@ -63,9 +63,6 @@ export default function SettingsPage() {
     profile?.role === "director" ||
     profile?.role === "super_admin";
 
-  // =========================
-  // تحميل البيانات
-  // =========================
   async function loadSettings() {
     try {
       setLoading(true);
@@ -85,35 +82,66 @@ export default function SettingsPage() {
         throw new Error("لم يتم العثور على المستخدم الحالي.");
       }
 
-      const { data: profileData, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select("role, full_name, directorate_id")
-          .eq("id", user.id)
-          .single();
+      // ==============================
+      // تحميل بيانات المستخدم
+      // ==============================
+      const {
+        data: profileData,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select("role, full_name, directorate_id")
+        .eq("id", user.id)
+        .maybeSingle();
 
       if (profileError) {
         throw profileError;
       }
 
+      if (!profileData) {
+        throw new Error(
+          "لم يتم العثور على بيانات ملف المستخدم."
+        );
+      }
+
       setProfile(profileData);
 
+      // ==============================
+      // التحقق من الإدارة المرتبطة
+      // ==============================
       if (!profileData.directorate_id) {
         setDirectorate(null);
         return;
       }
 
-      const { data: directorateData, error: directorateError } =
-        await supabase
-          .from("educational_directorates")
-          .select(
-            "id, name, code, governorate, city, address, phone, email, is_active"
-          )
-          .eq("id", profileData.directorate_id)
-          .single();
+      // ==============================
+      // جلب الإدارة التعليمية
+      // لا نستخدم single هنا
+      // ==============================
+      const {
+        data: directorateRows,
+        error: directorateError,
+      } = await supabase
+        .from("educational_directorates")
+        .select(
+          "id, name, code, governorate, city, address, phone, email, is_active"
+        )
+        .eq("id", profileData.directorate_id)
+        .limit(1);
 
       if (directorateError) {
         throw directorateError;
+      }
+
+      const directorateData =
+        directorateRows && directorateRows.length > 0
+          ? directorateRows[0]
+          : null;
+
+      if (!directorateData) {
+        throw new Error(
+          "لم يتم العثور على الإدارة التعليمية المرتبطة بهذا الحساب."
+        );
       }
 
       setDirectorate(directorateData);
@@ -131,6 +159,8 @@ export default function SettingsPage() {
     } catch (err: any) {
       console.error("Settings load error:", err);
 
+      setDirectorate(null);
+
       setError(
         err?.message ||
           "حدث خطأ أثناء تحميل إعدادات الإدارة التعليمية."
@@ -144,9 +174,6 @@ export default function SettingsPage() {
     loadSettings();
   }, []);
 
-  // =========================
-  // تغيير الحقول
-  // =========================
   function updateField(
     field: keyof typeof form,
     value: string | boolean
@@ -157,9 +184,6 @@ export default function SettingsPage() {
     }));
   }
 
-  // =========================
-  // حفظ البيانات
-  // =========================
   async function handleSave() {
     if (!directorate) {
       setError("لا توجد إدارة تعليمية مرتبطة بهذا الحساب.");
@@ -183,7 +207,10 @@ export default function SettingsPage() {
       setError("");
       setMessage("");
 
-      const { data, error: updateError } = await supabase
+      const {
+        data: updatedRows,
+        error: updateError,
+      } = await supabase
         .from("educational_directorates")
         .update({
           name: form.name.trim(),
@@ -197,27 +224,42 @@ export default function SettingsPage() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", directorate.id)
-        .select()
-        .single();
+        .select(
+          "id, name, code, governorate, city, address, phone, email, is_active"
+        )
+        .limit(1);
 
       if (updateError) {
         throw updateError;
       }
 
-      setDirectorate(data);
+      const updated =
+        updatedRows && updatedRows.length > 0
+          ? updatedRows[0]
+          : null;
+
+      if (!updated) {
+        throw new Error(
+          "تم تنفيذ الحفظ ولكن لم يتم إرجاع بيانات الإدارة."
+        );
+      }
+
+      setDirectorate(updated);
 
       setForm({
-        name: data.name || "",
-        code: data.code || "",
-        governorate: data.governorate || "",
-        city: data.city || "",
-        address: data.address || "",
-        phone: data.phone || "",
-        email: data.email || "",
-        is_active: data.is_active ?? true,
+        name: updated.name || "",
+        code: updated.code || "",
+        governorate: updated.governorate || "",
+        city: updated.city || "",
+        address: updated.address || "",
+        phone: updated.phone || "",
+        email: updated.email || "",
+        is_active: updated.is_active ?? true,
       });
 
-      setMessage("تم حفظ إعدادات الإدارة التعليمية بنجاح ✅");
+      setMessage(
+        "تم حفظ إعدادات الإدارة التعليمية بنجاح ✅"
+      );
     } catch (err: any) {
       console.error("Settings save error:", err);
 
@@ -230,16 +272,10 @@ export default function SettingsPage() {
     }
   }
 
-  // =========================
-  // إعادة تحميل
-  // =========================
   async function handleRefresh() {
     await loadSettings();
   }
 
-  // =========================
-  // Loading
-  // =========================
   if (loading) {
     return (
       <AppShell>
@@ -267,9 +303,7 @@ export default function SettingsPage() {
       >
         <div className="max-w-7xl mx-auto space-y-6">
 
-          {/* =========================
-              Header
-          ========================= */}
+          {/* Header */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
@@ -292,27 +326,19 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={handleRefresh}
-                disabled={loading || saving}
+                disabled={saving}
                 className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 transition disabled:opacity-50"
               >
-                <RefreshCw
-                  className={`w-4 h-4 ${
-                    loading ? "animate-spin" : ""
-                  }`}
-                />
-
+                <RefreshCw className="w-4 h-4" />
                 تحديث
               </button>
             </div>
           </div>
 
-          {/* =========================
-              Messages
-          ========================= */}
+          {/* Messages */}
           {message && (
             <div className="flex items-center gap-3 bg-green-50 border border-green-200 text-green-700 rounded-xl p-4">
               <CheckCircle2 className="w-5 h-5 shrink-0" />
-
               <span>{message}</span>
             </div>
           )}
@@ -333,11 +359,10 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* =========================
-              User information
-          ========================= */}
+          {/* Current account */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center gap-3 mb-5">
+
               <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
                 <UserCog className="w-5 h-5 text-purple-600" />
               </div>
@@ -351,6 +376,7 @@ export default function SettingsPage() {
                   معلومات الحساب والصلاحيات
                 </p>
               </div>
+
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -396,16 +422,17 @@ export default function SettingsPage() {
                     : "عرض فقط"}
                 </div>
               </div>
+
             </div>
           </div>
 
-          {/* =========================
-              Directorate settings
-          ========================= */}
+          {/* Directorate */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
 
             <div className="p-6 border-b border-gray-200">
+
               <div className="flex items-center gap-3">
+
                 <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
                   <Building2 className="w-5 h-5 text-blue-600" />
                 </div>
@@ -419,7 +446,9 @@ export default function SettingsPage() {
                     البيانات الأساسية للإدارة التعليمية الأزهرية
                   </p>
                 </div>
+
               </div>
+
             </div>
 
             <div className="p-6">
@@ -431,7 +460,7 @@ export default function SettingsPage() {
               ) : (
                 <div className="space-y-6">
 
-                  {/* Row 1 */}
+                  {/* Name + code */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
                     <div>
@@ -446,8 +475,8 @@ export default function SettingsPage() {
                           updateField("name", e.target.value)
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-                        placeholder="مثال: إدارة دمياط الجديدة التعليمية الأزهرية"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                        placeholder="اسم الإدارة التعليمية"
                       />
                     </div>
 
@@ -463,14 +492,14 @@ export default function SettingsPage() {
                           updateField("code", e.target.value)
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         placeholder="AZ-DAM-NEW"
                       />
                     </div>
 
                   </div>
 
-                  {/* Row 2 */}
+                  {/* Governorate + city */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
                     <div>
@@ -488,7 +517,7 @@ export default function SettingsPage() {
                           )
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         placeholder="دمياط"
                       />
                     </div>
@@ -505,7 +534,7 @@ export default function SettingsPage() {
                           updateField("city", e.target.value)
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         placeholder="دمياط الجديدة"
                       />
                     </div>
@@ -522,16 +551,19 @@ export default function SettingsPage() {
                     <textarea
                       value={form.address}
                       onChange={(e) =>
-                        updateField("address", e.target.value)
+                        updateField(
+                          "address",
+                          e.target.value
+                        )
                       }
                       disabled={!canEdit}
                       rows={3}
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500 resize-none"
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 resize-none"
                       placeholder="العنوان التفصيلي للإدارة التعليمية"
                     />
                   </div>
 
-                  {/* Contact */}
+                  {/* Phone + email */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
                     <div>
@@ -544,10 +576,13 @@ export default function SettingsPage() {
                         type="text"
                         value={form.phone}
                         onChange={(e) =>
-                          updateField("phone", e.target.value)
+                          updateField(
+                            "phone",
+                            e.target.value
+                          )
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         placeholder="01000000000"
                       />
                     </div>
@@ -562,10 +597,13 @@ export default function SettingsPage() {
                         type="email"
                         value={form.email}
                         onChange={(e) =>
-                          updateField("email", e.target.value)
+                          updateField(
+                            "email",
+                            e.target.value
+                          )
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         placeholder="example@azhar.eg"
                       />
                     </div>
@@ -637,9 +675,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* =========================
-              Permissions
-          ========================= */}
+          {/* Permissions */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
 
             <div className="flex items-center gap-3 mb-5">
@@ -711,12 +747,9 @@ export default function SettingsPage() {
               </div>
 
             </div>
-
           </div>
 
-          {/* =========================
-              Notifications
-          ========================= */}
+          {/* Notifications */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
 
             <div className="flex items-center gap-3 mb-5">
@@ -770,12 +803,9 @@ export default function SettingsPage() {
               </div>
 
             </div>
-
           </div>
 
-          {/* =========================
-              Database
-          ========================= */}
+          {/* System status */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
 
             <div className="flex items-center gap-3 mb-5">
@@ -799,7 +829,6 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
               <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-green-600" />
 
@@ -811,11 +840,9 @@ export default function SettingsPage() {
                 <div className="text-sm text-green-700 mt-2">
                   متصلة وتعمل
                 </div>
-
               </div>
 
               <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-green-600" />
 
@@ -827,11 +854,9 @@ export default function SettingsPage() {
                 <div className="text-sm text-green-700 mt-2">
                   يعمل
                 </div>
-
               </div>
 
               <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-green-600" />
 
@@ -843,11 +868,9 @@ export default function SettingsPage() {
                 <div className="text-sm text-green-700 mt-2">
                   مفعلة
                 </div>
-
               </div>
 
             </div>
-
           </div>
 
         </div>
