@@ -51,24 +51,30 @@ export default async function proxy(request: NextRequest) {
   );
 
   // =====================================================
-  // الصفحات التي يمكن الوصول إليها بدون Supabase Auth
+  // المسارات العامة
   // =====================================================
-  const publicPaths = [
-    "/login",
-    "/parent-login",
-    "/parent",
-  ];
+
+  const isPublicPath =
+    pathname === "/login" ||
+    pathname === "/parent-login" ||
+    pathname === "/parent" ||
+    pathname.startsWith("/parent/");
 
   // =====================================================
-  // السماح بالصفحات العامة
+  // السماح بمسارات ولي الأمر
+  //
+  // ولي الأمر لا يستخدم Supabase Auth،
+  // وإنما يتم التحقق من هويته داخل صفحات ولي الأمر.
   // =====================================================
-  if (publicPaths.includes(pathname)) {
+
+  if (isPublicPath) {
     return response;
   }
 
   // =====================================================
-  // أي مستخدم غير مسجل دخوله يتم تحويله إلى Login
+  // حماية باقي النظام
   // =====================================================
+
   if (!user) {
     const loginUrl = new URL("/login", request.url);
 
@@ -80,6 +86,7 @@ export default async function proxy(request: NextRequest) {
   // =====================================================
   // المستخدم مسجل الدخول
   // =====================================================
+
   return response;
 }
 
