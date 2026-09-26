@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -133,11 +131,12 @@ export default function AttendanceReportPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("role, institute_id, directorate_id")
-        .eq("id", user.id)
-        .single();
+      const { data: profileData, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select("role, institute_id, directorate_id")
+          .eq("id", user.id)
+          .maybeSingle();
 
       if (profileError || !profileData) {
         console.error(profileError);
@@ -146,9 +145,16 @@ export default function AttendanceReportPage() {
         return;
       }
 
+      /*
+       * الصلاحيات:
+       * super_admin = مدير الإدارة التعليمية الأزهرية
+       * director   = مدير قديم للتوافق مع الحسابات السابقة
+       * sheikh     = شيخ المعهد
+       */
       if (
         profileData.role !== "sheikh" &&
-        profileData.role !== "director"
+        profileData.role !== "director" &&
+        profileData.role !== "super_admin"
       ) {
         setMessage("ليس لديك صلاحية لعرض تقارير الحضور");
         setLoading(false);
@@ -157,6 +163,10 @@ export default function AttendanceReportPage() {
 
       setProfile(profileData);
 
+      /*
+       * شيخ المعهد:
+       * يرى معهده فقط.
+       */
       if (profileData.role === "sheikh") {
         if (!profileData.institute_id) {
           setMessage("لم يتم ربط الشيخ بمعهد");
@@ -169,7 +179,7 @@ export default function AttendanceReportPage() {
             .from("institutes")
             .select("id, name, code")
             .eq("id", profileData.institute_id)
-            .single();
+            .maybeSingle();
 
         if (instituteError || !instituteData) {
           console.error(instituteError);
@@ -182,9 +192,19 @@ export default function AttendanceReportPage() {
         setSelectedInstitute(instituteData.id);
       }
 
-      if (profileData.role === "director") {
+      /*
+       * مدير الإدارة:
+       * super_admin أو director
+       * يرى جميع المعاهد التابعة لإدارته التعليمية.
+       */
+      if (
+        profileData.role === "director" ||
+        profileData.role === "super_admin"
+      ) {
         if (!profileData.directorate_id) {
-          setMessage("لم يتم ربط مدير الإدارة بالإدارة التعليمية");
+          setMessage(
+            "لم يتم ربط مدير الإدارة بالإدارة التعليمية"
+          );
           setLoading(false);
           return;
         }
@@ -193,7 +213,10 @@ export default function AttendanceReportPage() {
           await supabase
             .from("institutes")
             .select("id, name, code")
-            .eq("directorate_id", profileData.directorate_id)
+            .eq(
+              "directorate_id",
+              profileData.directorate_id
+            )
             .order("name");
 
         if (institutesError) {
@@ -205,7 +228,7 @@ export default function AttendanceReportPage() {
 
         setInstitutes(institutesData || []);
 
-        // المدير يبدأ على جميع المعاهد
+        // مدير الإدارة يبدأ على جميع المعاهد
         setSelectedInstitute("");
       }
     } catch (error) {
@@ -222,7 +245,10 @@ export default function AttendanceReportPage() {
       return;
     }
 
-    if (profile?.role === "director") {
+    if (
+      profile?.role === "director" ||
+      profile?.role === "super_admin"
+    ) {
       loadDirectorateData();
     }
   }, [profile, selectedInstitute, fromDate, toDate]);
@@ -232,12 +258,13 @@ export default function AttendanceReportPage() {
     setMessage("");
 
     try {
-      const { data: classesData, error: classesError } = await supabase
-        .from("classes")
-        .select("id, name, institute_id")
-        .eq("institute_id", instituteId)
-        .eq("is_active", true)
-        .order("name");
+      const { data: classesData, error: classesError } =
+        await supabase
+          .from("classes")
+          .select("id, name, institute_id")
+          .eq("institute_id", instituteId)
+          .eq("is_active", true)
+          .order("name");
 
       if (classesError) {
         console.error(classesError);
@@ -248,15 +275,17 @@ export default function AttendanceReportPage() {
 
       setClasses(classesData || []);
 
-      const { data: studentsData, error: studentsError } =
-        await supabase
-          .from("students")
-          .select(
-            "id, full_name, student_code, class_id, institute_id"
-          )
-          .eq("institute_id", instituteId)
-          .eq("is_active", true)
-          .order("full_name");
+      const {
+        data: studentsData,
+        error: studentsError,
+      } = await supabase
+        .from("students")
+        .select(
+          "id, full_name, student_code, class_id, institute_id"
+        )
+        .eq("institute_id", instituteId)
+        .eq("is_active", true)
+        .order("full_name");
 
       if (studentsError) {
         console.error(studentsError);
@@ -287,7 +316,9 @@ export default function AttendanceReportPage() {
         return;
       }
 
-      const instituteIds = institutes.map((item) => item.id);
+      const instituteIds = institutes.map(
+        (item) => item.id
+      );
 
       if (instituteIds.length === 0) {
         setClasses([]);
@@ -304,7 +335,10 @@ export default function AttendanceReportPage() {
         return;
       }
 
-      const { data: classesData, error: classesError } = await supabase
+      const {
+        data: classesData,
+        error: classesError,
+      } = await supabase
         .from("classes")
         .select("id, name, institute_id")
         .in("institute_id", instituteIds)
@@ -317,8 +351,6 @@ export default function AttendanceReportPage() {
 
       setClasses(classesData || []);
 
-      // تحميل الطلاب لكل معهد على حدة، مع الحفاظ على نطاق مدير المنطقة.
-      // هذا يتجنب مشكلة رجوع .in(...) بنتيجة فارغة في صفحة التقارير.
       const studentResults = await Promise.all(
         institutes.map(async (institute) => {
           const { data, error } = await supabase
@@ -339,17 +371,20 @@ export default function AttendanceReportPage() {
       );
 
       const studentsData = studentResults.flat();
+
       setStudents(studentsData);
 
-      const { data: attendanceData, error: attendanceError } =
-        await supabase
-          .from("attendance")
-          .select(
-            "student_id, attendance_date, status, institute_id"
-          )
-          .in("institute_id", instituteIds)
-          .gte("attendance_date", fromDate)
-          .lte("attendance_date", toDate);
+      const {
+        data: attendanceData,
+        error: attendanceError,
+      } = await supabase
+        .from("attendance")
+        .select(
+          "student_id, attendance_date, status, institute_id"
+        )
+        .in("institute_id", instituteIds)
+        .gte("attendance_date", fromDate)
+        .lte("attendance_date", toDate);
 
       if (attendanceError) {
         console.error(attendanceError);
@@ -360,7 +395,9 @@ export default function AttendanceReportPage() {
 
       setAttendance(attendanceData || []);
 
-      await loadDirectorateOperationalStats(instituteIds);
+      await loadDirectorateOperationalStats(
+        instituteIds
+      );
     } catch (error) {
       console.error(error);
       setMessage("حدث خطأ غير متوقع");
@@ -372,7 +409,9 @@ export default function AttendanceReportPage() {
   async function loadAttendance(instituteId: string) {
     const { data, error } = await supabase
       .from("attendance")
-      .select("student_id, attendance_date, status, institute_id")
+      .select(
+        "student_id, attendance_date, status, institute_id"
+      )
       .eq("institute_id", instituteId)
       .gte("attendance_date", fromDate)
       .lte("attendance_date", toDate);
@@ -386,7 +425,9 @@ export default function AttendanceReportPage() {
     setAttendance(data || []);
   }
 
-  async function loadOperationalStats(instituteId: string) {
+  async function loadOperationalStats(
+    instituteId: string
+  ) {
     let complaints = 0;
     let requests = 0;
     let tasks = 0;
@@ -394,7 +435,10 @@ export default function AttendanceReportPage() {
     try {
       const result = await supabase
         .from("complaints")
-        .select("id", { count: "exact", head: true })
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
         .eq("institute_id", instituteId)
         .neq("status", "resolved");
 
@@ -410,7 +454,10 @@ export default function AttendanceReportPage() {
     try {
       const result = await supabase
         .from("institute_requests")
-        .select("id", { count: "exact", head: true })
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
         .eq("institute_id", instituteId)
         .eq("status", "new");
 
@@ -426,7 +473,10 @@ export default function AttendanceReportPage() {
     try {
       const result = await supabase
         .from("institute_tasks")
-        .select("id", { count: "exact", head: true })
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
         .eq("institute_id", instituteId)
         .neq("status", "completed");
 
@@ -456,7 +506,10 @@ export default function AttendanceReportPage() {
     try {
       const result = await supabase
         .from("complaints")
-        .select("id", { count: "exact", head: true })
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
         .in("institute_id", instituteIds)
         .neq("status", "resolved");
 
@@ -472,7 +525,10 @@ export default function AttendanceReportPage() {
     try {
       const result = await supabase
         .from("institute_requests")
-        .select("id", { count: "exact", head: true })
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
         .in("institute_id", instituteIds)
         .eq("status", "new");
 
@@ -488,7 +544,10 @@ export default function AttendanceReportPage() {
     try {
       const result = await supabase
         .from("institute_tasks")
-        .select("id", { count: "exact", head: true })
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
         .in("institute_id", instituteIds)
         .neq("status", "completed");
 
@@ -510,7 +569,9 @@ export default function AttendanceReportPage() {
 
   async function refreshReport() {
     if (fromDate > toDate) {
-      setMessage("تاريخ البداية يجب أن يكون قبل تاريخ النهاية");
+      setMessage(
+        "تاريخ البداية يجب أن يكون قبل تاريخ النهاية"
+      );
       return;
     }
 
@@ -534,50 +595,68 @@ export default function AttendanceReportPage() {
 
     if (selectedClass) {
       filteredStudents = filteredStudents.filter(
-        (student) => student.class_id === selectedClass
+        (student) =>
+          student.class_id === selectedClass
       );
     }
 
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase();
 
-      filteredStudents = filteredStudents.filter((student) => {
-        return (
-          student.full_name.toLowerCase().includes(search) ||
-          (student.student_code || "")
-            .toLowerCase()
-            .includes(search)
-        );
-      });
+      filteredStudents = filteredStudents.filter(
+        (student) => {
+          return (
+            student.full_name
+              .toLowerCase()
+              .includes(search) ||
+            (student.student_code || "")
+              .toLowerCase()
+              .includes(search)
+          );
+        }
+      );
     }
 
     return filteredStudents.map((student) => {
       const records = attendance.filter(
-        (record) => record.student_id === student.id
+        (record) =>
+          record.student_id === student.id
       );
 
       const present = records.filter(
-        (record) => record.status === "present"
+        (record) =>
+          record.status === "present"
       ).length;
 
       const absent = records.filter(
-        (record) => record.status === "absent"
+        (record) =>
+          record.status === "absent"
       ).length;
 
       const late = records.filter(
-        (record) => record.status === "late"
+        (record) =>
+          record.status === "late"
       ).length;
 
       const excused = records.filter(
-        (record) => record.status === "excused"
+        (record) =>
+          record.status === "excused"
       ).length;
 
-      const total = present + absent + late + excused;
+      const total =
+        present +
+        absent +
+        late +
+        excused;
 
       const percentage =
         total > 0
           ? Math.round(
-              ((present + late + excused) / total) * 100
+              ((present +
+                late +
+                excused) /
+                total) *
+                100
             )
           : 0;
 
@@ -591,7 +670,12 @@ export default function AttendanceReportPage() {
         percentage,
       };
     });
-  }, [students, attendance, selectedClass, searchTerm]);
+  }, [
+    students,
+    attendance,
+    selectedClass,
+    searchTerm,
+  ]);
 
   const totals = useMemo(() => {
     return report.reduce(
@@ -627,57 +711,81 @@ export default function AttendanceReportPage() {
         )
       : 0;
 
-  const instituteSummary = useMemo<InstituteSummary[]>(() => {
-    return institutes.map((institute) => {
-      const instituteStudents = students.filter(
-        (student) => student.institute_id === institute.id
-      );
+  const instituteSummary =
+    useMemo<InstituteSummary[]>(() => {
+      return institutes.map((institute) => {
+        const instituteStudents =
+          students.filter(
+            (student) =>
+              student.institute_id ===
+              institute.id
+          );
 
-      const studentIds = new Set(
-        instituteStudents.map((student) => student.id)
-      );
+        const studentIds = new Set(
+          instituteStudents.map(
+            (student) => student.id
+          )
+        );
 
-      const records = attendance.filter((record) =>
-        studentIds.has(record.student_id)
-      );
+        const records = attendance.filter(
+          (record) =>
+            studentIds.has(record.student_id)
+        );
 
-      const present = records.filter(
-        (record) => record.status === "present"
-      ).length;
+        const present = records.filter(
+          (record) =>
+            record.status === "present"
+        ).length;
 
-      const absent = records.filter(
-        (record) => record.status === "absent"
-      ).length;
+        const absent = records.filter(
+          (record) =>
+            record.status === "absent"
+        ).length;
 
-      const late = records.filter(
-        (record) => record.status === "late"
-      ).length;
+        const late = records.filter(
+          (record) =>
+            record.status === "late"
+        ).length;
 
-      const excused = records.filter(
-        (record) => record.status === "excused"
-      ).length;
+        const excused = records.filter(
+          (record) =>
+            record.status === "excused"
+        ).length;
 
-      const total = present + absent + late + excused;
+        const total =
+          present +
+          absent +
+          late +
+          excused;
 
-      const percentage =
-        total > 0
-          ? Math.round(
-              ((present + late + excused) / total) * 100
-            )
-          : 0;
+        const percentage =
+          total > 0
+            ? Math.round(
+                ((present +
+                  late +
+                  excused) /
+                  total) *
+                  100
+              )
+            : 0;
 
-      return {
-        institute,
-        students: instituteStudents.length,
-        present,
-        absent,
-        late,
-        excused,
-        total,
-        percentage,
-      };
-    });
-  }, [institutes, students, attendance]);
+        return {
+          institute,
+          students:
+            instituteStudents.length,
+          present,
+          absent,
+          late,
+          excused,
+          total,
+          percentage,
+        };
+      });
+    }, [
+      institutes,
+      students,
+      attendance,
+    ]);
 
   if (loading) {
     return (
@@ -698,8 +806,11 @@ export default function AttendanceReportPage() {
 
   if (
     !profile ||
-    (profile.role !== "sheikh" &&
-      profile.role !== "director")
+    (
+      profile.role !== "sheikh" &&
+      profile.role !== "director" &&
+      profile.role !== "super_admin"
+    )
   ) {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
@@ -721,10 +832,13 @@ export default function AttendanceReportPage() {
     );
   }
 
-  const isDirector = profile.role === "director";
+  const isDirector =
+    profile.role === "director" ||
+    profile.role === "super_admin";
 
   const isAllInstitutes =
-    isDirector && selectedInstitute === "";
+    isDirector &&
+    selectedInstitute === "";
 
   return (
     <main
@@ -764,7 +878,9 @@ export default function AttendanceReportPage() {
             <RefreshCw
               size={19}
               className={
-                reportLoading ? "animate-spin" : ""
+                reportLoading
+                  ? "animate-spin"
+                  : ""
               }
             />
 
@@ -803,10 +919,14 @@ export default function AttendanceReportPage() {
               <select
                 value={selectedInstitute}
                 onChange={(e) => {
-                  setSelectedInstitute(e.target.value);
+                  setSelectedInstitute(
+                    e.target.value
+                  );
                   setSelectedClass("");
                 }}
-                disabled={profile.role === "sheikh"}
+                disabled={
+                  profile.role === "sheikh"
+                }
                 className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
               >
                 {isDirector && (
@@ -815,14 +935,16 @@ export default function AttendanceReportPage() {
                   </option>
                 )}
 
-                {institutes.map((institute) => (
-                  <option
-                    key={institute.id}
-                    value={institute.id}
-                  >
-                    {institute.name}
-                  </option>
-                ))}
+                {institutes.map(
+                  (institute) => (
+                    <option
+                      key={institute.id}
+                      value={institute.id}
+                    >
+                      {institute.name}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
@@ -835,7 +957,9 @@ export default function AttendanceReportPage() {
               <select
                 value={selectedClass}
                 onChange={(e) =>
-                  setSelectedClass(e.target.value)
+                  setSelectedClass(
+                    e.target.value
+                  )
                 }
                 className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
               >
@@ -843,14 +967,16 @@ export default function AttendanceReportPage() {
                   كل الفصول
                 </option>
 
-                {classes.map((classItem) => (
-                  <option
-                    key={classItem.id}
-                    value={classItem.id}
-                  >
-                    {classItem.name}
-                  </option>
-                ))}
+                {classes.map(
+                  (classItem) => (
+                    <option
+                      key={classItem.id}
+                      value={classItem.id}
+                    >
+                      {classItem.name}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
@@ -870,7 +996,9 @@ export default function AttendanceReportPage() {
                   type="date"
                   value={fromDate}
                   onChange={(e) =>
-                    setFromDate(e.target.value)
+                    setFromDate(
+                      e.target.value
+                    )
                   }
                   className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -893,7 +1021,9 @@ export default function AttendanceReportPage() {
                   type="date"
                   value={toDate}
                   onChange={(e) =>
-                    setToDate(e.target.value)
+                    setToDate(
+                      e.target.value
+                    )
                   }
                   className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -917,7 +1047,9 @@ export default function AttendanceReportPage() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) =>
-                  setSearchTerm(e.target.value)
+                  setSearchTerm(
+                    e.target.value
+                  )
                 }
                 placeholder="اسم الطالب أو كود الطالب..."
                 className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
@@ -1302,7 +1434,8 @@ export default function AttendanceReportPage() {
                   {report.map((row) => {
                     const institute = institutes.find(
                       (item) =>
-                        item.id === row.student.institute_id
+                        item.id ===
+                        row.student.institute_id
                     );
 
                     return (
