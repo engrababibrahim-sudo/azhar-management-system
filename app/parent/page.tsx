@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,7 +13,11 @@ import {
   ArrowLeft,
   PlusCircle,
   ClipboardList,
+  LogOut,
+  Mail,
+  Phone,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase/client";
 
 type Profile = {
@@ -32,22 +35,24 @@ type Student = {
   gender: string | null;
   date_of_birth: string | null;
   institute_id: string;
+  institute_name: string | null;
+  institute_code: string | null;
   class_id: string | null;
   is_active: boolean;
 };
 
-type Institute = {
-  id: string;
-  name: string;
-  code: string | null;
+type DashboardResponse = {
+  success: boolean;
+  message?: string;
+  parent?: Profile;
+  students?: Student[];
 };
 
 export default function ParentPage() {
+  const router = useRouter();
+
   const [profile, setProfile] = useState<Profile | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
-  const [institutes, setInstitutes] = useState<Record<string, Institute>>(
-    {}
-  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -61,118 +66,77 @@ export default function ParentPage() {
 
     try {
       // --------------------------------------------------
-      // 1) Get logged-in user
+      // 1) قراءة بيانات الدخول التي تم حفظها في parent-login
       // --------------------------------------------------
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      const nationalId = sessionStorage.getItem("parent_national_id");
+      const email = sessionStorage.getItem("parent_email");
 
-      if (userError || !user) {
-        setError("يجب تسجيل الدخول أولًا");
-        setLoading(false);
+      if (!nationalId || !email) {
+        router.replace("/parent-login");
         return;
       }
 
       // --------------------------------------------------
-      // 2) Load parent profile
+      // 2) التحقق وتحميل لوحة ولي الأمر من RPC
       // --------------------------------------------------
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, full_name, phone, email, role")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError || !profileData) {
-        console.error("Parent profile error:", profileError);
-
-        setError("لم يتم العثور على بيانات ولي الأمر");
-        setLoading(false);
-        return;
-      }
-
-      if (profileData.role !== "parent") {
-        setError("هذا الحساب ليس حساب ولي أمر");
-        setLoading(false);
-        return;
-      }
-
-      setProfile(profileData);
-
-      // --------------------------------------------------
-      // 3) Load students linked to this parent
-      // --------------------------------------------------
-      const { data: studentsData, error: studentsError } =
-        await supabase
-          .from("students")
-          .select(
-            "id, full_name, student_code, gender, date_of_birth, institute_id, class_id, is_active"
-          )
-          .eq("parent_id", user.id)
-          .order("full_name");
-
-      if (studentsError) {
-        console.error("Students error:", studentsError);
-
-        setError("تعذر تحميل بيانات الأبناء");
-        setLoading(false);
-        return;
-      }
-
-      const loadedStudents = studentsData || [];
-
-      setStudents(loadedStudents);
-
-      // --------------------------------------------------
-      // 4) Load institutes connected to the students
-      // --------------------------------------------------
-      if (loadedStudents.length > 0) {
-        const instituteIds = [
-          ...new Set(
-            loadedStudents
-              .map((student) => student.institute_id)
-              .filter(Boolean)
-          ),
-        ];
-
-        if (instituteIds.length > 0) {
-          const {
-            data: institutesData,
-            error: institutesError,
-          } = await supabase
-            .from("institutes")
-            .select("id, name, code")
-            .in("id", instituteIds);
-
-          if (institutesError) {
-            console.error(
-              "Institutes load error:",
-              institutesError
-            );
-
-            setError(
-              "تم تحميل بيانات الأبناء، ولكن تعذر تحميل بيانات المعهد. " +
-                institutesError.message
-            );
-
-            setInstitutes({});
-          } else {
-            const instituteMap: Record<string, Institute> = {};
-
-            (institutesData || []).forEach((institute) => {
-              instituteMap[institute.id] = institute;
-            });
-
-            setInstitutes(instituteMap);
-          }
+      const { data, error: rpcError } = await supabase.rpc(
+        "get_parent_dashboard",
+        {
+          p_national_id: nationalId,
+          p_email: email,
         }
+      );
+
+      if (rpcError) {
+        console.error("Parent dashboard RPC error:", rpcError);
+        setError(
+          "تعذر تحميل بيانات ولي الأمر. يرجى المحاولة مرة أخرى."
+        );
+        setLoading(false);
+        return;
       }
+
+      const result = data as DashboardResponse;
+
+      if (!result?.success || !result.parent) {
+        sessionStorage.removeItem("parent_national_id");
+        sessionStorage.removeItem("parent_email");
+
+        setError(
+          result?.message ||
+            "بيانات ولي الأمر غير صحيحة أو لم يعد الحساب نشطًا."
+        );
+
+        setLoading(false);
+
+        setTimeout(() => {
+          router.replace("/parent-login");
+        }, 1800);
+
+        return;
+      }
+
+      // --------------------------------------------------
+      // 3) حفظ البيانات
+      // --------------------------------------------------
+      setProfile(result.parent);
+      setStudents(result.students || []);
     } catch (err) {
       console.error("Parent dashboard error:", err);
-      setError("حدث خطأ غير متوقع");
+      setError("حدث خطأ غير متوقع أثناء تحميل لوحة ولي الأمر.");
     } finally {
       setLoading(false);
     }
+  }
+
+  // --------------------------------------------------
+  // تسجيل الخروج
+  // --------------------------------------------------
+  function handleLogout() {
+    sessionStorage.removeItem("parent_national_id");
+    sessionStorage.removeItem("parent_email");
+
+    router.replace("/parent-login");
   }
 
   // --------------------------------------------------
@@ -184,23 +148,38 @@ export default function ParentPage() {
         dir="rtl"
         className="min-h-screen bg-slate-100 flex items-center justify-center"
       >
-        <div className="flex items-center gap-3 text-slate-600">
-          <Loader2 className="animate-spin" size={24} />
-          <span>جاري تحميل لوحة ولي الأمر...</span>
+        <div className="flex flex-col items-center gap-4 text-slate-600">
+          <Loader2
+            className="animate-spin text-emerald-700"
+            size={32}
+          />
+
+          <span className="font-semibold">
+            جاري تحميل لوحة ولي الأمر...
+          </span>
         </div>
       </main>
     );
   }
+
+  const activeStudents = students.filter(
+    (student) => student.is_active
+  ).length;
 
   // --------------------------------------------------
   // Dashboard
   // --------------------------------------------------
   return (
     <main dir="rtl" className="min-h-screen bg-slate-100">
-      {/* Header */}
+
+      {/* ==================================================
+          Header
+      ================================================== */}
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 py-5">
+
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+
             <div>
               <h1 className="text-2xl font-bold text-slate-800">
                 لوحة ولي الأمر
@@ -212,7 +191,8 @@ export default function ParentPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Parent complaints button */}
+
+              {/* الشكاوى */}
               <Link
                 href="/parent-complaints"
                 className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm"
@@ -221,27 +201,170 @@ export default function ParentPage() {
                 شكاوى أولياء الأمور
               </Link>
 
+              {/* تسجيل الخروج */}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-semibold text-sm transition"
+              >
+                <LogOut size={18} />
+                خروج
+              </button>
+
               <div className="w-12 h-12 rounded-2xl bg-emerald-700 text-white flex items-center justify-center">
                 <Users size={24} />
               </div>
+
             </div>
           </div>
+
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Error */}
+
+        {/* ==================================================
+            Error
+        ================================================== */}
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700 font-semibold">
             {error}
           </div>
         )}
 
-        {/* Statistics */}
+        {/* ==================================================
+            Parent Information
+        ================================================== */}
+        {profile && (
+          <section className="bg-white rounded-3xl border border-slate-200 p-6 mb-8">
+
+            <div className="flex items-center gap-3 mb-5">
+
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                <Users size={24} />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">
+                  بيانات ولي الأمر
+                </h2>
+
+                <p className="text-sm text-slate-500 mt-1">
+                  بيانات الحساب المستخدم للدخول إلى النظام
+                </p>
+              </div>
+
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                <div className="flex items-center gap-3">
+
+                  <Users
+                    size={20}
+                    className="text-emerald-700"
+                  />
+
+                  <div>
+                    <p className="text-xs text-slate-500">
+                      الاسم
+                    </p>
+
+                    <p className="font-bold text-slate-800 mt-1">
+                      {profile.full_name || "ولي الأمر"}
+                    </p>
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                <div className="flex items-center gap-3">
+
+                  <Mail
+                    size={20}
+                    className="text-blue-700"
+                  />
+
+                  <div>
+                    <p className="text-xs text-slate-500">
+                      البريد الإلكتروني
+                    </p>
+
+                    <p className="font-bold text-slate-800 mt-1 break-all">
+                      {profile.email || "غير مسجل"}
+                    </p>
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                <div className="flex items-center gap-3">
+
+                  <Phone
+                    size={20}
+                    className="text-purple-700"
+                  />
+
+                  <div>
+                    <p className="text-xs text-slate-500">
+                      رقم الهاتف
+                    </p>
+
+                    <p className="font-bold text-slate-800 mt-1">
+                      {profile.phone || "غير مسجل"}
+                    </p>
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                <div className="flex items-center gap-3">
+
+                  <GraduationCap
+                    size={20}
+                    className="text-amber-700"
+                  />
+
+                  <div>
+                    <p className="text-xs text-slate-500">
+                      نوع الحساب
+                    </p>
+
+                    <p className="font-bold text-slate-800 mt-1">
+                      ولي أمر
+                    </p>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </section>
+        )}
+
+        {/* ==================================================
+            Statistics
+        ================================================== */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+
           {/* Linked children */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
+
             <div className="flex items-center justify-between">
+
               <div>
                 <p className="text-sm text-slate-500">
                   الأبناء المرتبطون
@@ -255,35 +378,39 @@ export default function ParentPage() {
               <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
                 <Users size={24} />
               </div>
+
             </div>
+
           </div>
 
           {/* Active children */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
+
             <div className="flex items-center justify-between">
+
               <div>
                 <p className="text-sm text-slate-500">
                   الأبناء النشطون
                 </p>
 
                 <p className="text-3xl font-bold text-slate-800 mt-2">
-                  {
-                    students.filter(
-                      (student) => student.is_active
-                    ).length
-                  }
+                  {activeStudents}
                 </p>
               </div>
 
               <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
                 <GraduationCap size={24} />
               </div>
+
             </div>
+
           </div>
 
           {/* Attendance */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
+
             <div className="flex items-center justify-between">
+
               <div>
                 <p className="text-sm text-slate-500">
                   الحضور والغياب
@@ -297,7 +424,9 @@ export default function ParentPage() {
               <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
                 <CalendarCheck size={24} />
               </div>
+
             </div>
+
           </div>
 
           {/* Complaints */}
@@ -305,7 +434,9 @@ export default function ParentPage() {
             href="/parent-complaints"
             className="group bg-white rounded-2xl border border-red-200 p-5 hover:border-red-400 hover:shadow-md transition cursor-pointer"
           >
+
             <div className="flex items-center justify-between">
+
               <div>
                 <p className="text-sm text-slate-500">
                   الشكاوى
@@ -323,9 +454,11 @@ export default function ParentPage() {
               <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center group-hover:bg-red-100 transition">
                 <MessageSquareWarning size={24} />
               </div>
+
             </div>
 
             <div className="mt-4 flex items-center justify-between text-sm">
+
               <span className="inline-flex items-center gap-1 text-red-700 font-semibold">
                 <PlusCircle size={17} />
                 تقديم شكوى
@@ -335,21 +468,32 @@ export default function ParentPage() {
                 size={18}
                 className="text-red-500 group-hover:-translate-x-1 transition"
               />
+
             </div>
+
           </Link>
+
         </section>
 
-        {/* Quick complaint section */}
+        {/* ==================================================
+            Quick Complaint
+        ================================================== */}
         <section className="mb-8">
+
           <div className="rounded-3xl bg-gradient-to-l from-red-700 to-red-500 text-white p-6 shadow-sm">
+
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+
               <div>
+
                 <div className="flex items-center gap-3">
+
                   <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
                     <MessageSquareWarning size={26} />
                   </div>
 
                   <div>
+
                     <h2 className="text-xl font-bold">
                       هل لديك مشكلة أو ملاحظة؟
                     </h2>
@@ -357,11 +501,15 @@ export default function ParentPage() {
                     <p className="text-sm text-red-100 mt-1">
                       يمكنك تقديم شكوى ومتابعتها حتى يتم التعامل معها من المعهد.
                     </p>
+
                   </div>
+
                 </div>
+
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
+
                 <Link
                   href="/parent-complaints"
                   className="inline-flex items-center justify-center gap-2 bg-white text-red-700 hover:bg-red-50 px-5 py-3 rounded-xl font-bold transition"
@@ -377,18 +525,31 @@ export default function ParentPage() {
                   <ClipboardList size={20} />
                   متابعة الشكاوى
                 </Link>
+
               </div>
+
             </div>
+
           </div>
+
         </section>
 
-        {/* Children */}
+        {/* ==================================================
+            Children
+        ================================================== */}
         <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
+
           <div className="px-6 py-5 border-b border-slate-200">
+
             <div className="flex items-center gap-3">
-              <Baby className="text-emerald-700" size={24} />
+
+              <Baby
+                className="text-emerald-700"
+                size={24}
+              />
 
               <div>
+
                 <h2 className="text-xl font-bold text-slate-800">
                   أبنائي
                 </h2>
@@ -396,12 +557,17 @@ export default function ParentPage() {
                 <p className="text-sm text-slate-500 mt-1">
                   الطلاب المرتبطون بحساب ولي الأمر
                 </p>
+
               </div>
+
             </div>
+
           </div>
 
           {students.length === 0 ? (
+
             <div className="p-10 text-center">
+
               <div className="mx-auto w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-4">
                 <Users size={30} />
               </div>
@@ -411,118 +577,135 @@ export default function ParentPage() {
               </h3>
 
               <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-                عند قيام إدارة المعهد بربط أحد الأبناء بهذا
-                الحساب، ستظهر بياناته هنا تلقائيًا.
+                عند قيام إدارة المعهد بربط أحد الأبناء بهذا الحساب،
+                ستظهر بياناته هنا تلقائيًا.
               </p>
+
             </div>
+
           ) : (
+
             <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {students.map((student) => {
-                const institute =
-                  institutes[student.institute_id];
 
-                return (
-                  <div
-                    key={student.id}
-                    className="rounded-2xl border border-slate-200 p-5 hover:shadow-md transition"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-800">
-                          {student.full_name}
-                        </h3>
+              {students.map((student) => (
 
-                        {student.student_code && (
-                          <p className="text-sm text-slate-500 mt-1">
-                            كود الطالب: {student.student_code}
-                          </p>
-                        )}
-                      </div>
+                <div
+                  key={student.id}
+                  className="rounded-2xl border border-slate-200 p-5 hover:shadow-md transition"
+                >
 
-                      <span
-                        className={
-                          "px-3 py-1 rounded-full text-xs font-semibold " +
-                          (student.is_active
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-500")
-                        }
-                      >
-                        {student.is_active ? "نشط" : "غير نشط"}
-                      </span>
-                    </div>
+                  <div className="flex items-start justify-between gap-4">
 
-                    <div className="mt-5 space-y-3">
-                      {/* Institute */}
-                      <div className="flex items-start gap-3 text-sm">
-                        <BookOpen
-                          size={18}
-                          className="text-slate-400 mt-0.5 shrink-0"
-                        />
+                    <div>
 
-                        <span className="text-slate-600">
-                          المعهد:
-                        </span>
+                      <h3 className="text-lg font-bold text-slate-800">
+                        {student.full_name}
+                      </h3>
 
-                        <span className="font-semibold text-slate-800">
-                          {institute?.name || "غير محدد"}
-                        </span>
-                      </div>
-
-                      {/* Institute code */}
-                      {institute?.code && (
-                        <div className="text-sm text-slate-500">
-                          كود المعهد:{" "}
-                          <span className="font-semibold text-slate-700">
-                            {institute.code}
-                          </span>
-                        </div>
+                      {student.student_code && (
+                        <p className="text-sm text-slate-500 mt-1">
+                          كود الطالب: {student.student_code}
+                        </p>
                       )}
 
-                      {/* Gender */}
-                      {student.gender && (
-                        <div className="text-sm text-slate-600">
-                          النوع:{" "}
-                          <span className="font-semibold text-slate-800">
-                            {student.gender}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Date of birth */}
-                      {student.date_of_birth && (
-                        <div className="text-sm text-slate-600">
-                          تاريخ الميلاد:{" "}
-                          <span className="font-semibold text-slate-800">
-                            {student.date_of_birth}
-                          </span>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Actions */}
-                    <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        className="rounded-xl bg-emerald-50 text-emerald-700 py-2.5 text-sm font-semibold hover:bg-emerald-100 transition"
-                      >
-                        متابعة الحضور
-                      </button>
+                    <span
+                      className={
+                        "px-3 py-1 rounded-full text-xs font-semibold " +
+                        (student.is_active
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-slate-100 text-slate-500")
+                      }
+                    >
+                      {student.is_active ? "نشط" : "غير نشط"}
+                    </span>
 
-                      <button
-                        type="button"
-                        className="rounded-xl bg-slate-100 text-slate-700 py-2.5 text-sm font-semibold hover:bg-slate-200 transition"
-                      >
-                        التفاصيل
-                      </button>
-                    </div>
                   </div>
-                );
-              })}
+
+                  <div className="mt-5 space-y-3">
+
+                    {/* Institute */}
+                    <div className="flex items-start gap-3 text-sm">
+
+                      <BookOpen
+                        size={18}
+                        className="text-slate-400 mt-0.5 shrink-0"
+                      />
+
+                      <span className="text-slate-600">
+                        المعهد:
+                      </span>
+
+                      <span className="font-semibold text-slate-800">
+                        {student.institute_name || "غير محدد"}
+                      </span>
+
+                    </div>
+
+                    {/* Institute code */}
+                    {student.institute_code && (
+                      <div className="text-sm text-slate-500">
+                        كود المعهد:{" "}
+                        <span className="font-semibold text-slate-700">
+                          {student.institute_code}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Gender */}
+                    {student.gender && (
+                      <div className="text-sm text-slate-600">
+                        النوع:{" "}
+                        <span className="font-semibold text-slate-800">
+                          {student.gender}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Date of birth */}
+                    {student.date_of_birth && (
+                      <div className="text-sm text-slate-600">
+                        تاريخ الميلاد:{" "}
+                        <span className="font-semibold text-slate-800">
+                          {student.date_of_birth}
+                        </span>
+                      </div>
+                    )}
+
+                  </div>
+
+                  {/* Actions */}
+                  <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 gap-3">
+
+                    <button
+                      type="button"
+                      className="rounded-xl bg-emerald-50 text-emerald-700 py-2.5 text-sm font-semibold hover:bg-emerald-100 transition"
+                    >
+                      متابعة الحضور
+                    </button>
+
+                    <button
+                      type="button"
+                      className="rounded-xl bg-slate-100 text-slate-700 py-2.5 text-sm font-semibold hover:bg-slate-200 transition"
+                    >
+                      التفاصيل
+                    </button>
+
+                  </div>
+
+                </div>
+
+              ))}
+
             </div>
+
           )}
+
         </section>
+
       </div>
+
     </main>
   );
 }
-
