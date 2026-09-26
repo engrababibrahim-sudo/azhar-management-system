@@ -81,11 +81,8 @@ const roleColors: Record<Role, string> = {
 
 /*
 |--------------------------------------------------------------------------
-| الأدوار المسموح بإضافتها من الشاشة
+| الأدوار المسموح بإضافتها
 |--------------------------------------------------------------------------
-| مهم:
-| director غير موجود هنا حتى لا يظهر "مدير الإدارة التعليمية" مرتين.
-| الدور الرسمي الجديد هو super_admin.
 */
 
 const selectableRoles: {
@@ -128,7 +125,7 @@ const selectableRoles: {
 
 /*
 |--------------------------------------------------------------------------
-| أدوار فلتر البحث
+| أدوار الفلتر
 |--------------------------------------------------------------------------
 */
 
@@ -238,6 +235,12 @@ function UsersManagement() {
     setMessage("");
 
     try {
+      /*
+      |--------------------------------------------------------------------------
+      | المستخدم الحالي
+      |--------------------------------------------------------------------------
+      */
+
       const {
         data: { user },
         error: authError,
@@ -281,14 +284,8 @@ function UsersManagement() {
 
       /*
       |--------------------------------------------------------------------------
-      | صلاحية إدارة المستخدمين
+      | صلاحية الدخول
       |--------------------------------------------------------------------------
-      |
-      | super_admin هو الدور الرسمي لمدير الإدارة.
-      |
-      | director موجود فقط للتوافق مع الحساب القديم
-      | الموجود حاليًا في قاعدة البيانات.
-      |
       */
 
       if (
@@ -305,6 +302,9 @@ function UsersManagement() {
 
       setCurrentUserRole(role);
 
+      const directorateId =
+        currentProfile.directorate_id;
+
       /*
       |--------------------------------------------------------------------------
       | تحميل المعاهد التابعة للإدارة
@@ -318,11 +318,11 @@ function UsersManagement() {
         )
         .order("name");
 
-      if (currentProfile.directorate_id) {
+      if (directorateId) {
         institutesQuery =
           institutesQuery.eq(
             "directorate_id",
-            currentProfile.directorate_id
+            directorateId
           );
       }
 
@@ -342,18 +342,36 @@ function UsersManagement() {
         return;
       }
 
-      setInstitutes(
-        (institutesData ||
-          []) as Institute[]
-      );
+      const loadedInstitutes =
+        (institutesData || []) as Institute[];
+
+      setInstitutes(loadedInstitutes);
+
+      const instituteIds =
+        loadedInstitutes.map(
+          (institute) => institute.id
+        );
 
       /*
       |--------------------------------------------------------------------------
-      | تحميل المستخدمين
+      | تحميل المستخدمين الأساسيين للإدارة
       |--------------------------------------------------------------------------
+      |
+      | يشمل:
+      | super_admin
+      | director القديم
+      | deputy
+      | sheikh
+      | institute_deputy
+      | employee
+      | teacher
+      |
       */
 
-      let usersQuery = supabase
+      const {
+        data: directUsers,
+        error: directUsersError,
+      } = await supabase
         .from("profiles")
         .select(
           `
@@ -369,35 +387,215 @@ function UsersManagement() {
           updated_at
           `
         )
+        .eq(
+          "directorate_id",
+          directorateId
+        )
         .order("full_name");
 
-      if (currentProfile.directorate_id) {
-        usersQuery =
-          usersQuery.eq(
-            "directorate_id",
-            currentProfile.directorate_id
-          );
-      }
-
-      const {
-        data: usersData,
-        error: usersError,
-      } = await usersQuery;
-
-      if (usersError) {
-        console.error(usersError);
+      if (directUsersError) {
+        console.error(directUsersError);
 
         setMessage(
-          "حدث خطأ أثناء تحميل المستخدمين"
+          "حدث خطأ أثناء تحميل مستخدمي الإدارة"
         );
 
         setLoading(false);
         return;
       }
 
-      setUsers(
-        (usersData || []) as Profile[]
-      );
+      /*
+      |--------------------------------------------------------------------------
+      | تحميل الطلاب التابعين لمعاهد الإدارة
+      |--------------------------------------------------------------------------
+      |
+      | نحتاج هذه البيانات حتى نعرف:
+      | - أولياء الأمور المرتبطين بهذه المعاهد
+      | - الطلاب التابعين لهذه الإدارة
+      |
+      */
+
+      let relatedUsers: Profile[] = [];
+
+      if (instituteIds.length > 0) {
+        const {
+          data: studentsData,
+          error: studentsError,
+        } = await supabase
+          .from("students")
+          .select(
+            `
+            id,
+            parent_id,
+            institute_id
+            `
+          )
+          .in(
+            "institute_id",
+            instituteIds
+          );
+
+        if (studentsError) {
+          console.error(
+            "students lookup error:",
+            studentsError
+          );
+        } else {
+          const students =
+            studentsData || [];
+
+          /*
+          |--------------------------------------------------------------------------
+          | الطلاب
+          |--------------------------------------------------------------------------
+          */
+
+          const studentIds =
+            students.map(
+              (student) => student.id
+            );
+
+          /*
+          |--------------------------------------------------------------------------
+          | أولياء الأمور
+          |--------------------------------------------------------------------------
+          */
+
+          const parentIds = Array.from(
+            new Set(
+              students
+                .map(
+                  (student) =>
+                    student.parent_id
+                )
+                .filter(
+                  (
+                    id
+                  ): id is string =>
+                    Boolean(id)
+                )
+            )
+          );
+
+          /*
+          |--------------------------------------------------------------------------
+          | جلب الطلاب من profiles
+          |--------------------------------------------------------------------------
+          */
+
+          if (studentIds.length > 0) {
+            const {
+              data: studentProfiles,
+              error: studentProfilesError,
+            } = await supabase
+              .from("profiles")
+              .select(
+                `
+                id,
+                full_name,
+                phone,
+                email,
+                role,
+                directorate_id,
+                institute_id,
+                is_active,
+                created_at,
+                updated_at
+                `
+              )
+              .in(
+                "id",
+                studentIds
+              );
+
+            if (!studentProfilesError) {
+              relatedUsers.push(
+                ...((studentProfiles ||
+                  []) as Profile[])
+              );
+            } else {
+              console.error(
+                studentProfilesError
+              );
+            }
+          }
+
+          /*
+          |--------------------------------------------------------------------------
+          | جلب أولياء الأمور
+          |--------------------------------------------------------------------------
+          */
+
+          if (parentIds.length > 0) {
+            const {
+              data: parentProfiles,
+              error: parentProfilesError,
+            } = await supabase
+              .from("profiles")
+              .select(
+                `
+                id,
+                full_name,
+                phone,
+                email,
+                role,
+                directorate_id,
+                institute_id,
+                is_active,
+                created_at,
+                updated_at
+                `
+              )
+              .in(
+                "id",
+                parentIds
+              );
+
+            if (!parentProfilesError) {
+              relatedUsers.push(
+                ...((parentProfiles ||
+                  []) as Profile[])
+              );
+            } else {
+              console.error(
+                parentProfilesError
+              );
+            }
+          }
+        }
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | دمج المستخدمين بدون تكرار
+      |--------------------------------------------------------------------------
+      */
+
+      const allUsersMap =
+        new Map<string, Profile>();
+
+      [
+        ...((directUsers ||
+          []) as Profile[]),
+        ...relatedUsers,
+      ].forEach((profile) => {
+        allUsersMap.set(
+          profile.id,
+          profile
+        );
+      });
+
+      const allUsers =
+        Array.from(
+          allUsersMap.values()
+        ).sort((a, b) =>
+          a.full_name.localeCompare(
+            b.full_name,
+            "ar"
+          )
+        );
+
+      setUsers(allUsers);
     } catch (error) {
       console.error(error);
 
@@ -639,7 +837,7 @@ function UsersManagement() {
 
       /*
       |--------------------------------------------------------------------------
-      | تعديل مستخدم موجود
+      | تعديل مستخدم
       |--------------------------------------------------------------------------
       */
 
@@ -700,10 +898,6 @@ function UsersManagement() {
         |--------------------------------------------------------------------------
         | إضافة مستخدم جديد
         |--------------------------------------------------------------------------
-        |
-        | إنشاء حساب Auth حقيقي سيتم تنفيذه في المرحلة
-        | الخاصة بإنشاء المستخدمين.
-        |
         */
 
         setMessage(
@@ -733,10 +927,6 @@ function UsersManagement() {
   async function toggleUserStatus(
     user: Profile
   ) {
-    /*
-     * لا نسمح للمستخدم بتعطيل حسابه الحالي.
-     */
-
     if (
       currentAuthUserId &&
       user.id === currentAuthUserId
@@ -1396,12 +1586,6 @@ function UsersManagement() {
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   >
-
-                    {/*
-                     * عند تعديل حساب قديم يحمل director
-                     * نظهره فقط لهذا الحساب.
-                     * لن يظهر عند إضافة مستخدم جديد.
-                     */}
 
                     {editingUser?.role ===
                       "director" && (
