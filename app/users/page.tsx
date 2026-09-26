@@ -19,6 +19,7 @@ import { supabase } from "../../lib/supabase/client";
 
 type Role =
   | "super_admin"
+  | "director"
   | "deputy"
   | "sheikh"
   | "institute_deputy"
@@ -49,6 +50,7 @@ type Institute = {
 
 const roleLabels: Record<Role, string> = {
   super_admin: "مدير الإدارة التعليمية",
+  director: "مدير الإدارة التعليمية",
   deputy: "وكيل الإدارة التعليمية",
   sheikh: "شيخ المعهد",
   institute_deputy: "وكيل شيخ المعهد",
@@ -60,6 +62,7 @@ const roleLabels: Record<Role, string> = {
 
 const roleColors: Record<Role, string> = {
   super_admin: "bg-purple-100 text-purple-800",
+  director: "bg-purple-100 text-purple-800",
   deputy: "bg-indigo-100 text-indigo-800",
   sheikh: "bg-blue-100 text-blue-800",
   institute_deputy: "bg-cyan-100 text-cyan-800",
@@ -95,9 +98,8 @@ function UsersManagement() {
   const [instituteFilter, setInstituteFilter] = useState("all");
 
   const [showModal, setShowModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<Profile | null>(
-    null
-  );
+  const [editingUser, setEditingUser] =
+    useState<Profile | null>(null);
 
   const [form, setForm] = useState({
     full_name: "",
@@ -146,7 +148,17 @@ function UsersManagement() {
 
       const role = currentProfile.role as Role;
 
-      if (role !== "super_admin" && role !== "director") {
+      /*
+       * مدير الإدارة التعليمية:
+       * super_admin
+       *
+       * ونحتفظ بالدور director لأن هذا الدور موجود بالفعل
+       * في قاعدة البيانات الحالية، بدون اعتباره الدور الأساسي.
+       */
+      if (
+        role !== "super_admin" &&
+        role !== "director"
+      ) {
         setMessage(
           "ليس لديك صلاحية الوصول إلى إدارة المستخدمين"
         );
@@ -155,13 +167,19 @@ function UsersManagement() {
       }
 
       setCurrentUserRole(role);
+
       setCurrentDirectorateId(
         currentProfile.directorate_id || null
       );
 
+      /*
+       * تحميل المعاهد التابعة للإدارة الحالية
+       */
       let institutesQuery = supabase
         .from("institutes")
-        .select("id, name, code, directorate_id")
+        .select(
+          "id, name, code, directorate_id"
+        )
         .order("name");
 
       if (currentProfile.directorate_id) {
@@ -171,8 +189,10 @@ function UsersManagement() {
         );
       }
 
-      const { data: institutesData, error: institutesError } =
-        await institutesQuery;
+      const {
+        data: institutesData,
+        error: institutesError,
+      } = await institutesQuery;
 
       if (institutesError) {
         console.error(institutesError);
@@ -183,10 +203,24 @@ function UsersManagement() {
 
       setInstitutes(institutesData || []);
 
+      /*
+       * تحميل المستخدمين التابعين للإدارة
+       */
       let usersQuery = supabase
         .from("profiles")
         .select(
-          "id, full_name, phone, email, role, directorate_id, institute_id, is_active, created_at, updated_at"
+          `
+          id,
+          full_name,
+          phone,
+          email,
+          role,
+          directorate_id,
+          institute_id,
+          is_active,
+          created_at,
+          updated_at
+          `
         )
         .order("full_name");
 
@@ -197,8 +231,10 @@ function UsersManagement() {
         );
       }
 
-      const { data: usersData, error: usersError } =
-        await usersQuery;
+      const {
+        data: usersData,
+        error: usersError,
+      } = await usersQuery;
 
       if (usersError) {
         console.error(usersError);
@@ -207,7 +243,9 @@ function UsersManagement() {
         return;
       }
 
-      setUsers((usersData || []) as Profile[]);
+      setUsers(
+        (usersData || []) as Profile[]
+      );
     } catch (error) {
       console.error(error);
       setMessage("حدث خطأ غير متوقع");
@@ -217,17 +255,26 @@ function UsersManagement() {
   }
 
   const filteredUsers = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase();
+    const search = searchTerm
+      .trim()
+      .toLowerCase();
 
     return users.filter((user) => {
       const matchesSearch =
         !search ||
-        user.full_name.toLowerCase().includes(search) ||
-        (user.email || "").toLowerCase().includes(search) ||
-        (user.phone || "").toLowerCase().includes(search);
+        user.full_name
+          .toLowerCase()
+          .includes(search) ||
+        (user.email || "")
+          .toLowerCase()
+          .includes(search) ||
+        (user.phone || "")
+          .toLowerCase()
+          .includes(search);
 
       const matchesRole =
-        roleFilter === "all" || user.role === roleFilter;
+        roleFilter === "all" ||
+        user.role === roleFilter;
 
       const matchesInstitute =
         instituteFilter === "all" ||
@@ -249,16 +296,35 @@ function UsersManagement() {
   const statistics = useMemo(() => {
     return {
       total: users.length,
-      active: users.filter((u) => u.is_active !== false).length,
-      inactive: users.filter((u) => u.is_active === false).length,
-      sheikhs: users.filter((u) => u.role === "sheikh").length,
-      teachers: users.filter((u) => u.role === "teacher").length,
-      parents: users.filter((u) => u.role === "parent").length,
+
+      active: users.filter(
+        (u) => u.is_active !== false
+      ).length,
+
+      inactive: users.filter(
+        (u) => u.is_active === false
+      ).length,
+
+      sheikhs: users.filter(
+        (u) => u.role === "sheikh"
+      ).length,
+
+      teachers: users.filter(
+        (u) => u.role === "teacher"
+      ).length,
+
+      parents: users.filter(
+        (u) => u.role === "parent"
+      ).length,
     };
   }, [users]);
 
-  function getInstituteName(instituteId: string | null) {
-    if (!instituteId) return "—";
+  function getInstituteName(
+    instituteId: string | null
+  ) {
+    if (!instituteId) {
+      return "—";
+    }
 
     const institute = institutes.find(
       (item) => item.id === instituteId
@@ -302,7 +368,9 @@ function UsersManagement() {
   }
 
   function closeModal() {
-    if (saving) return;
+    if (saving) {
+      return;
+    }
 
     setShowModal(false);
     setEditingUser(null);
@@ -323,110 +391,152 @@ function UsersManagement() {
       } = await supabase.auth.getUser();
 
       if (!currentAuthUser) {
-        setMessage("انتهت جلسة تسجيل الدخول");
+        setMessage(
+          "انتهت جلسة تسجيل الدخول"
+        );
         setSaving(false);
         return;
       }
 
-      const { data: currentProfile } = await supabase
+      const {
+        data: currentProfile,
+      } = await supabase
         .from("profiles")
-        .select("role, directorate_id")
-        .eq("id", currentAuthUser.id)
+        .select(
+          "role, directorate_id"
+        )
+        .eq(
+          "id",
+          currentAuthUser.id
+        )
         .maybeSingle();
 
       if (!currentProfile) {
-        setMessage("تعذر التحقق من صلاحيات المستخدم");
+        setMessage(
+          "تعذر التحقق من صلاحيات المستخدم"
+        );
         setSaving(false);
         return;
       }
 
-      const directorateId =
-        currentProfile.directorate_id ||
-        currentDirectorateId;
-
       if (editingUser) {
+        /*
+         * تعديل مستخدم موجود
+         */
         const updateData = {
-          full_name: form.full_name.trim(),
-          phone: form.phone.trim() || null,
-          email: form.email.trim() || null,
+          full_name:
+            form.full_name.trim(),
+
+          phone:
+            form.phone.trim() || null,
+
+          email:
+            form.email.trim() || null,
+
           role: form.role,
+
           institute_id:
             form.institute_id || null,
-          is_active: form.is_active,
-          updated_at: new Date().toISOString(),
+
+          is_active:
+            form.is_active,
+
+          updated_at:
+            new Date().toISOString(),
         };
 
-        const { error } = await supabase
+        const {
+          error,
+        } = await supabase
           .from("profiles")
           .update(updateData)
-          .eq("id", editingUser.id);
+          .eq(
+            "id",
+            editingUser.id
+          );
 
         if (error) {
           console.error(error);
+
           setMessage(
             "حدث خطأ أثناء تحديث بيانات المستخدم"
           );
+
           setSaving(false);
           return;
         }
 
-        setMessage("تم تحديث بيانات المستخدم بنجاح ✅");
+        setMessage(
+          "تم تحديث بيانات المستخدم بنجاح ✅"
+        );
+
+        setShowModal(false);
+        setEditingUser(null);
+
+        await loadData();
       } else {
         /*
-         * ملاحظة:
-         * إنشاء مستخدم Auth جديد يحتاج Supabase Auth
-         * ولا يتم تنفيذه بإضافة صف profiles فقط.
-         *
-         * لذلك في مرحلة الإضافة الحالية سنعرض رسالة واضحة
-         * بدل إنشاء Profile غير مرتبط بحساب دخول.
+         * إنشاء حساب دخول جديد سيتم ربطه لاحقًا
+         * مع Supabase Auth.
          */
         setMessage(
-          "إضافة حساب دخول جديد تحتاج إنشاء مستخدم في Supabase Auth. سيتم تنفيذها في خطوة إنشاء المستخدمين القادمة."
+          "إضافة حساب دخول جديد تحتاج إلى إنشاء مستخدم في Supabase Auth. سننفذها في خطوة إنشاء المستخدمين."
         );
 
         setSaving(false);
         return;
       }
-
-      setShowModal(false);
-      setEditingUser(null);
-
-      await loadData();
     } catch (error) {
       console.error(error);
-      setMessage("حدث خطأ غير متوقع");
+      setMessage(
+        "حدث خطأ غير متوقع"
+      );
     }
 
     setSaving(false);
   }
 
-  async function toggleUserStatus(user: Profile) {
-    if (user.id === currentDirectorateId) {
+  async function toggleUserStatus(
+    user: Profile
+  ) {
+    const newStatus =
+      user.is_active === false;
+
+    const confirmed =
+      window.confirm(
+        newStatus
+          ? `هل تريد تفعيل المستخدم "${user.full_name}"؟`
+          : `هل تريد تعطيل المستخدم "${user.full_name}"؟`
+      );
+
+    if (!confirmed) {
       return;
     }
 
-    const newStatus = user.is_active === false;
-
-    const confirmed = window.confirm(
-      newStatus
-        ? `هل تريد تفعيل المستخدم "${user.full_name}"؟`
-        : `هل تريد تعطيل المستخدم "${user.full_name}"؟`
-    );
-
-    if (!confirmed) return;
-
     try {
-      const { error } = await supabase
+      const {
+        error,
+      } = await supabase
         .from("profiles")
         .update({
-          is_active: newStatus,
-          updated_at: new Date().toISOString(),
+          is_active:
+            newStatus,
+
+          updated_at:
+            new Date().toISOString(),
         })
-        .eq("id", user.id);
+        .eq(
+          "id",
+          user.id
+        );
 
       if (error) {
         console.error(error);
-        setMessage("تعذر تغيير حالة المستخدم");
+
+        setMessage(
+          "تعذر تغيير حالة المستخدم"
+        );
+
         return;
       }
 
@@ -439,7 +549,10 @@ function UsersManagement() {
       await loadData();
     } catch (error) {
       console.error(error);
-      setMessage("حدث خطأ غير متوقع");
+
+      setMessage(
+        "حدث خطأ غير متوقع"
+      );
     }
   }
 
@@ -469,18 +582,19 @@ function UsersManagement() {
 
           {/* Header */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
+
             <div>
               <h1 className="text-3xl font-bold text-gray-800">
                 إدارة المستخدمين
               </h1>
 
               <p className="text-gray-500 mt-2">
-                إدارة مستخدمي الإدارة التعليمية والمعاهد
-                التابعة لها
+                إدارة مستخدمي الإدارة التعليمية والمعاهد التابعة لها
               </p>
             </div>
 
             <div className="flex gap-3">
+
               <button
                 type="button"
                 onClick={loadData}
@@ -498,6 +612,7 @@ function UsersManagement() {
                 <UserPlus size={19} />
                 إضافة مستخدم
               </button>
+
             </div>
           </div>
 
@@ -551,15 +666,17 @@ function UsersManagement() {
 
           {/* Filters */}
           <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
               {/* Search */}
-              <div className="md:col-span-1">
+              <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   بحث
                 </label>
 
                 <div className="relative">
+
                   <Search
                     size={19}
                     className="absolute right-3 top-3 text-gray-400"
@@ -569,11 +686,14 @@ function UsersManagement() {
                     type="text"
                     value={searchTerm}
                     onChange={(e) =>
-                      setSearchTerm(e.target.value)
+                      setSearchTerm(
+                        e.target.value
+                      )
                     }
                     placeholder="الاسم أو البريد أو الهاتف..."
                     className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
+
                 </div>
               </div>
 
@@ -586,7 +706,9 @@ function UsersManagement() {
                 <select
                   value={roleFilter}
                   onChange={(e) =>
-                    setRoleFilter(e.target.value)
+                    setRoleFilter(
+                      e.target.value
+                    )
                   }
                   className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                 >
@@ -594,9 +716,14 @@ function UsersManagement() {
                     جميع الأدوار
                   </option>
 
-                  {Object.entries(roleLabels).map(
+                  {Object.entries(
+                    roleLabels
+                  ).map(
                     ([role, label]) => (
-                      <option key={role} value={role}>
+                      <option
+                        key={role}
+                        value={role}
+                      >
                         {label}
                       </option>
                     )
@@ -613,7 +740,9 @@ function UsersManagement() {
                 <select
                   value={instituteFilter}
                   onChange={(e) =>
-                    setInstituteFilter(e.target.value)
+                    setInstituteFilter(
+                      e.target.value
+                    )
                   }
                   className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                 >
@@ -621,31 +750,38 @@ function UsersManagement() {
                     جميع المعاهد
                   </option>
 
-                  {institutes.map((institute) => (
-                    <option
-                      key={institute.id}
-                      value={institute.id}
-                    >
-                      {institute.name}
-                    </option>
-                  ))}
+                  {institutes.map(
+                    (institute) => (
+                      <option
+                        key={institute.id}
+                        value={
+                          institute.id
+                        }
+                      >
+                        {institute.name}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
 
             </div>
           </div>
 
-          {/* Table */}
+          {/* Users Table */}
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
 
             <div className="p-6 border-b">
+
               <h2 className="text-xl font-bold text-gray-800">
                 المستخدمون
               </h2>
 
               <p className="text-gray-500 text-sm mt-1">
-                عدد النتائج: {filteredUsers.length}
+                عدد النتائج:{" "}
+                {filteredUsers.length}
               </p>
+
             </div>
 
             {filteredUsers.length === 0 ? (
@@ -658,7 +794,9 @@ function UsersManagement() {
                 <table className="w-full">
 
                   <thead className="bg-gray-50">
+
                     <tr>
+
                       <th className="text-right px-6 py-4">
                         المستخدم
                       </th>
@@ -678,110 +816,138 @@ function UsersManagement() {
                       <th className="text-center px-6 py-4">
                         الإجراءات
                       </th>
+
                     </tr>
+
                   </thead>
 
                   <tbody className="divide-y">
 
-                    {filteredUsers.map((user) => (
-                      <tr
-                        key={user.id}
-                        className="hover:bg-gray-50"
-                      >
+                    {filteredUsers.map(
+                      (user) => (
+                        <tr
+                          key={user.id}
+                          className="hover:bg-gray-50"
+                        >
 
-                        <td className="px-6 py-5">
-                          <div className="font-semibold text-gray-800">
-                            {user.full_name}
-                          </div>
+                          <td className="px-6 py-5">
 
-                          <div className="flex flex-col gap-1 mt-1 text-sm text-gray-500">
+                            <div className="font-semibold text-gray-800">
+                              {user.full_name}
+                            </div>
 
-                            {user.email && (
-                              <span className="flex items-center gap-1">
-                                <Mail size={14} />
-                                {user.email}
-                              </span>
-                            )}
+                            <div className="flex flex-col gap-1 mt-1 text-sm text-gray-500">
 
-                            {user.phone && (
-                              <span className="flex items-center gap-1">
-                                <Phone size={14} />
-                                {user.phone}
-                              </span>
-                            )}
+                              {user.email && (
+                                <span className="flex items-center gap-1">
+                                  <Mail size={14} />
+                                  {user.email}
+                                </span>
+                              )}
 
-                          </div>
-                        </td>
+                              {user.phone && (
+                                <span className="flex items-center gap-1">
+                                  <Phone size={14} />
+                                  {user.phone}
+                                </span>
+                              )}
 
-                        <td className="px-6 py-5">
-                          <span
-                            className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${
-                              roleColors[user.role]
-                            }`}
-                          >
-                            {roleLabels[user.role] ||
-                              user.role}
-                          </span>
-                        </td>
+                            </div>
 
-                        <td className="px-6 py-5 text-gray-600">
-                          {getInstituteName(
-                            user.institute_id
-                          )}
-                        </td>
+                          </td>
 
-                        <td className="px-6 py-5 text-center">
-                          {user.is_active !== false ? (
-                            <span className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
-                              <span className="w-2 h-2 bg-green-600 rounded-full" />
-                              نشط
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-2 bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-semibold">
-                              <span className="w-2 h-2 bg-red-600 rounded-full" />
-                              غير نشط
-                            </span>
-                          )}
-                        </td>
+                          <td className="px-6 py-5">
 
-                        <td className="px-6 py-5">
-                          <div className="flex justify-center gap-2">
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openEditModal(user)
-                              }
-                              className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"
-                              title="تعديل"
-                            >
-                              <Pencil size={18} />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleUserStatus(user)
-                              }
-                              className={`p-2 rounded-lg ${
-                                user.is_active !== false
-                                  ? "bg-red-50 text-red-700 hover:bg-red-100"
-                                  : "bg-green-50 text-green-700 hover:bg-green-100"
+                            <span
+                              className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${
+                                roleColors[
+                                  user.role
+                                ] ||
+                                "bg-gray-100 text-gray-800"
                               }`}
-                              title={
-                                user.is_active !== false
-                                  ? "تعطيل"
-                                  : "تفعيل"
-                              }
                             >
-                              <Power size={18} />
-                            </button>
+                              {roleLabels[
+                                user.role
+                              ] ||
+                                user.role}
+                            </span>
 
-                          </div>
-                        </td>
+                          </td>
 
-                      </tr>
-                    ))}
+                          <td className="px-6 py-5 text-gray-600">
+                            {getInstituteName(
+                              user.institute_id
+                            )}
+                          </td>
+
+                          <td className="px-6 py-5 text-center">
+
+                            {user.is_active !==
+                            false ? (
+                              <span className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
+                                <span className="w-2 h-2 bg-green-600 rounded-full" />
+                                نشط
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-2 bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-semibold">
+                                <span className="w-2 h-2 bg-red-600 rounded-full" />
+                                غير نشط
+                              </span>
+                            )}
+
+                          </td>
+
+                          <td className="px-6 py-5">
+
+                            <div className="flex justify-center gap-2">
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditModal(
+                                    user
+                                  )
+                                }
+                                className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                title="تعديل"
+                              >
+                                <Pencil
+                                  size={18}
+                                />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleUserStatus(
+                                    user
+                                  )
+                                }
+                                className={`p-2 rounded-lg ${
+                                  user.is_active !==
+                                  false
+                                    ? "bg-red-50 text-red-700 hover:bg-red-100"
+                                    : "bg-green-50 text-green-700 hover:bg-green-100"
+                                }`}
+                                title={
+                                  user.is_active !==
+                                  false
+                                    ? "تعطيل"
+                                    : "تفعيل"
+                                }
+                              >
+                                <Power
+                                  size={18}
+                                />
+                              </button>
+
+                            </div>
+
+                          </td>
+
+                        </tr>
+                      )
+                    )}
 
                   </tbody>
 
@@ -805,6 +971,7 @@ function UsersManagement() {
             <div className="flex items-center justify-between px-6 py-5 border-b">
 
               <div>
+
                 <h2 className="text-xl font-bold text-gray-800">
                   {editingUser
                     ? "تعديل المستخدم"
@@ -816,6 +983,7 @@ function UsersManagement() {
                     ? "تعديل بيانات المستخدم وصلاحياته"
                     : "إضافة مستخدم جديد للنظام"}
                 </p>
+
               </div>
 
               <button
@@ -835,116 +1003,167 @@ function UsersManagement() {
 
                 {/* Name */}
                 <div className="md:col-span-2">
+
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     الاسم الكامل *
                   </label>
 
                   <input
                     type="text"
-                    value={form.full_name}
+                    value={
+                      form.full_name
+                    }
                     onChange={(e) =>
-                      setForm((current) => ({
-                        ...current,
-                        full_name: e.target.value,
-                      }))
+                      setForm(
+                        (current) => ({
+                          ...current,
+                          full_name:
+                            e.target.value,
+                        })
+                      )
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
+
                 </div>
 
                 {/* Email */}
                 <div>
+
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     البريد الإلكتروني
                   </label>
 
                   <input
                     type="email"
-                    value={form.email}
+                    value={
+                      form.email
+                    }
                     onChange={(e) =>
-                      setForm((current) => ({
-                        ...current,
-                        email: e.target.value,
-                      }))
+                      setForm(
+                        (current) => ({
+                          ...current,
+                          email:
+                            e.target.value,
+                        })
+                      )
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
+
                 </div>
 
                 {/* Phone */}
                 <div>
+
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     الهاتف
                   </label>
 
                   <input
                     type="text"
-                    value={form.phone}
+                    value={
+                      form.phone
+                    }
                     onChange={(e) =>
-                      setForm((current) => ({
-                        ...current,
-                        phone: e.target.value,
-                      }))
+                      setForm(
+                        (current) => ({
+                          ...current,
+                          phone:
+                            e.target.value,
+                        })
+                      )
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
+
                 </div>
 
                 {/* Role */}
                 <div>
+
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     الدور
                   </label>
 
                   <select
-                    value={form.role}
+                    value={
+                      form.role
+                    }
                     onChange={(e) =>
-                      setForm((current) => ({
-                        ...current,
-                        role: e.target.value as Role,
-                      }))
+                      setForm(
+                        (current) => ({
+                          ...current,
+                          role: e.target
+                            .value as Role,
+                        })
+                      )
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {Object.entries(roleLabels).map(
+                    {Object.entries(
+                      roleLabels
+                    ).map(
                       ([role, label]) => (
-                        <option key={role} value={role}>
+                        <option
+                          key={role}
+                          value={role}
+                        >
                           {label}
                         </option>
                       )
                     )}
                   </select>
+
                 </div>
 
                 {/* Institute */}
                 <div>
+
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     المعهد
                   </label>
 
                   <select
-                    value={form.institute_id}
+                    value={
+                      form.institute_id
+                    }
                     onChange={(e) =>
-                      setForm((current) => ({
-                        ...current,
-                        institute_id: e.target.value,
-                      }))
+                      setForm(
+                        (current) => ({
+                          ...current,
+                          institute_id:
+                            e.target
+                              .value,
+                        })
+                      )
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   >
+
                     <option value="">
                       بدون معهد
                     </option>
 
-                    {institutes.map((institute) => (
-                      <option
-                        key={institute.id}
-                        value={institute.id}
-                      >
-                        {institute.name}
-                      </option>
-                    ))}
+                    {institutes.map(
+                      (institute) => (
+                        <option
+                          key={
+                            institute.id
+                          }
+                          value={
+                            institute.id
+                          }
+                        >
+                          {
+                            institute.name
+                          }
+                        </option>
+                      )
+                    )}
+
                   </select>
+
                 </div>
 
                 {/* Active */}
@@ -954,12 +1173,18 @@ function UsersManagement() {
 
                     <input
                       type="checkbox"
-                      checked={form.is_active}
+                      checked={
+                        form.is_active
+                      }
                       onChange={(e) =>
-                        setForm((current) => ({
-                          ...current,
-                          is_active: e.target.checked,
-                        }))
+                        setForm(
+                          (current) => ({
+                            ...current,
+                            is_active:
+                              e.target
+                                .checked,
+                          })
+                        )
                       }
                       className="w-5 h-5"
                     />
@@ -979,7 +1204,9 @@ function UsersManagement() {
 
                 <button
                   type="button"
-                  onClick={closeModal}
+                  onClick={
+                    closeModal
+                  }
                   disabled={saving}
                   className="px-5 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
@@ -988,7 +1215,9 @@ function UsersManagement() {
 
                 <button
                   type="button"
-                  onClick={saveUser}
+                  onClick={
+                    saveUser
+                  }
                   disabled={saving}
                   className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold"
                 >
@@ -1022,12 +1251,15 @@ function StatCard({
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
+
       <div className="flex items-center gap-3">
+
         <div className="text-blue-600">
           {icon}
         </div>
 
         <div>
+
           <p className="text-gray-500 text-sm">
             {title}
           </p>
@@ -1035,8 +1267,11 @@ function StatCard({
           <p className="text-2xl font-bold text-gray-800">
             {value}
           </p>
+
         </div>
+
       </div>
+
     </div>
   );
 }
