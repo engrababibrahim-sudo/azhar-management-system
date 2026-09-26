@@ -10,20 +10,21 @@ import {
   ShieldCheck,
   Bell,
   Database,
+  Settings as SettingsIcon,
+  MapPin,
+  Phone,
+  Mail,
+  UserCog,
 } from "lucide-react";
 
-import AppShell from "../../components/AppShell";
+import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
 
-type Role =
-  | "super_admin"
-  | "director"
-  | "deputy"
-  | "sheikh"
-  | "teacher"
-  | "employee"
-  | "student"
-  | "parent";
+type Profile = {
+  role: string;
+  full_name: string | null;
+  directorate_id: string | null;
+};
 
 type Directorate = {
   id: string;
@@ -37,40 +38,17 @@ type Directorate = {
   is_active: boolean | null;
 };
 
-type FormData = {
-  name: string;
-  code: string;
-  governorate: string;
-  city: string;
-  address: string;
-  phone: string;
-  email: string;
-  is_active: boolean;
-};
-
-const roleLabels: Record<Role, string> = {
-  super_admin: "مدير النظام",
-  director: "مدير الإدارة",
-  deputy: "وكيل الإدارة",
-  sheikh: "شيخ المعهد",
-  teacher: "مدرس",
-  employee: "موظف",
-  student: "طالب",
-  parent: "ولي أمر",
-};
-
 export default function SettingsPage() {
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [directorate, setDirectorate] = useState<Directorate | null>(null);
+
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [loadingData, setLoadingData] = useState(false);
 
-  const [role, setRole] = useState<Role | null>(null);
-  const [profileName, setProfileName] = useState("المستخدم");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  const [directorate, setDirectorate] =
-    useState<Directorate | null>(null);
-
-  const [form, setForm] = useState<FormData>({
+  const [form, setForm] = useState({
     name: "",
     code: "",
     governorate: "",
@@ -81,18 +59,19 @@ export default function SettingsPage() {
     is_active: true,
   });
 
-  const [message, setMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-
   const canEdit =
-    role === "director" || role === "super_admin";
+    profile?.role === "director" ||
+    profile?.role === "super_admin";
 
-  async function loadProfileAndSettings() {
-    setProfileLoading(true);
-    setErrorMessage("");
-    setMessage("");
-
+  // =========================
+  // تحميل البيانات
+  // =========================
+  async function loadSettings() {
     try {
+      setLoading(true);
+      setError("");
+      setMessage("");
+
       const {
         data: { user },
         error: userError,
@@ -103,94 +82,73 @@ export default function SettingsPage() {
       }
 
       if (!user) {
-        setErrorMessage("يجب تسجيل الدخول أولًا.");
-        return;
+        throw new Error("لم يتم العثور على المستخدم الحالي.");
       }
 
-      const { data: profile, error: profileError } =
+      const { data: profileData, error: profileError } =
         await supabase
           .from("profiles")
           .select("role, full_name, directorate_id")
           .eq("id", user.id)
-          .maybeSingle();
+          .single();
 
       if (profileError) {
         throw profileError;
       }
 
-      if (!profile) {
-        setErrorMessage("لم يتم العثور على بيانات المستخدم.");
+      setProfile(profileData);
+
+      if (!profileData.directorate_id) {
+        setDirectorate(null);
         return;
       }
 
-      const currentRole = profile.role as Role;
+      const { data: directorateData, error: directorateError } =
+        await supabase
+          .from("educational_directorates")
+          .select(
+            "id, name, code, governorate, city, address, phone, email, is_active"
+          )
+          .eq("id", profileData.directorate_id)
+          .single();
 
-      setRole(currentRole);
-      setProfileName(profile.full_name || "المستخدم");
-
-      if (!profile.directorate_id) {
-        setErrorMessage(
-          "هذا المستخدم غير مرتبط بإدارة تعليمية."
-        );
-        return;
+      if (directorateError) {
+        throw directorateError;
       }
 
-      const { data, error } = await supabase
-        .from("educational_directorates")
-        .select(
-          "id, name, code, governorate, city, address, phone, email, is_active"
-        )
-        .eq("id", profile.directorate_id)
-        .maybeSingle();
-
-      if (error) {
-        throw error;
-      }
-
-      if (!data) {
-        setErrorMessage(
-          "لم يتم العثور على بيانات الإدارة التعليمية."
-        );
-        return;
-      }
-
-      const currentDirectorate = data as Directorate;
-
-      setDirectorate(currentDirectorate);
+      setDirectorate(directorateData);
 
       setForm({
-        name: currentDirectorate.name || "",
-        code: currentDirectorate.code || "",
-        governorate:
-          currentDirectorate.governorate || "",
-        city: currentDirectorate.city || "",
-        address: currentDirectorate.address || "",
-        phone: currentDirectorate.phone || "",
-        email: currentDirectorate.email || "",
-        is_active:
-          currentDirectorate.is_active ?? true,
+        name: directorateData.name || "",
+        code: directorateData.code || "",
+        governorate: directorateData.governorate || "",
+        city: directorateData.city || "",
+        address: directorateData.address || "",
+        phone: directorateData.phone || "",
+        email: directorateData.email || "",
+        is_active: directorateData.is_active ?? true,
       });
-    } catch (error: any) {
-      console.error(
-        "Settings loading error:",
-        error
-      );
+    } catch (err: any) {
+      console.error("Settings load error:", err);
 
-      setErrorMessage(
-        error?.message ||
-          "حدث خطأ أثناء تحميل إعدادات الإدارة."
+      setError(
+        err?.message ||
+          "حدث خطأ أثناء تحميل إعدادات الإدارة التعليمية."
       );
     } finally {
-      setProfileLoading(false);
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadProfileAndSettings();
+    loadSettings();
   }, []);
 
+  // =========================
+  // تغيير الحقول
+  // =========================
   function updateField(
-    field: keyof FormData,
+    field: keyof typeof form,
     value: string | boolean
   ) {
     setForm((previous) => ({
@@ -199,40 +157,38 @@ export default function SettingsPage() {
     }));
   }
 
+  // =========================
+  // حفظ البيانات
+  // =========================
   async function handleSave() {
     if (!directorate) {
-      setErrorMessage(
-        "لا توجد إدارة تعليمية للحفظ."
-      );
+      setError("لا توجد إدارة تعليمية مرتبطة بهذا الحساب.");
       return;
     }
 
     if (!canEdit) {
-      setErrorMessage(
-        "ليس لديك صلاحية تعديل بيانات الإدارة التعليمية."
+      setError(
+        "ليس لديك صلاحية تعديل إعدادات الإدارة التعليمية."
       );
       return;
     }
 
     if (!form.name.trim()) {
-      setErrorMessage(
-        "اسم الإدارة التعليمية مطلوب."
-      );
+      setError("اسم الإدارة التعليمية مطلوب.");
       return;
     }
 
-    setSaving(true);
-    setMessage("");
-    setErrorMessage("");
-
     try {
-      const { error } = await supabase
+      setSaving(true);
+      setError("");
+      setMessage("");
+
+      const { data, error: updateError } = await supabase
         .from("educational_directorates")
         .update({
           name: form.name.trim(),
           code: form.code.trim() || null,
-          governorate:
-            form.governorate.trim() || null,
+          governorate: form.governorate.trim() || null,
           city: form.city.trim() || null,
           address: form.address.trim() || null,
           phone: form.phone.trim() || null,
@@ -240,83 +196,95 @@ export default function SettingsPage() {
           is_active: form.is_active,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", directorate.id);
+        .eq("id", directorate.id)
+        .select()
+        .single();
 
-      if (error) {
-        throw error;
+      if (updateError) {
+        throw updateError;
       }
 
-      setDirectorate((previous) =>
-        previous
-          ? {
-              ...previous,
-              name: form.name.trim(),
-              code: form.code.trim() || null,
-              governorate:
-                form.governorate.trim() || null,
-              city: form.city.trim() || null,
-              address:
-                form.address.trim() || null,
-              phone:
-                form.phone.trim() || null,
-              email:
-                form.email.trim() || null,
-              is_active: form.is_active,
-            }
-          : previous
-      );
+      setDirectorate(data);
 
-      setMessage(
-        "تم حفظ بيانات الإدارة التعليمية بنجاح ✅"
-      );
-    } catch (error: any) {
-      console.error(
-        "Settings save error:",
-        error
-      );
+      setForm({
+        name: data.name || "",
+        code: data.code || "",
+        governorate: data.governorate || "",
+        city: data.city || "",
+        address: data.address || "",
+        phone: data.phone || "",
+        email: data.email || "",
+        is_active: data.is_active ?? true,
+      });
 
-      setErrorMessage(
-        error?.message ||
-          "حدث خطأ أثناء حفظ بيانات الإدارة التعليمية."
+      setMessage("تم حفظ إعدادات الإدارة التعليمية بنجاح ✅");
+    } catch (err: any) {
+      console.error("Settings save error:", err);
+
+      setError(
+        err?.message ||
+          "حدث خطأ أثناء حفظ إعدادات الإدارة التعليمية."
       );
     } finally {
       setSaving(false);
     }
   }
 
+  // =========================
+  // إعادة تحميل
+  // =========================
   async function handleRefresh() {
-    setLoadingData(true);
+    await loadSettings();
+  }
 
-    try {
-      await loadProfileAndSettings();
-    } finally {
-      setLoadingData(false);
-    }
+  // =========================
+  // Loading
+  // =========================
+  if (loading) {
+    return (
+      <AppShell>
+        <div
+          dir="rtl"
+          className="min-h-[70vh] flex items-center justify-center"
+        >
+          <div className="flex flex-col items-center gap-4">
+            <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+
+            <p className="text-gray-600">
+              جاري تحميل إعدادات النظام...
+            </p>
+          </div>
+        </div>
+      </AppShell>
+    );
   }
 
   return (
     <AppShell>
       <div
-        className="min-h-screen bg-slate-100"
         dir="rtl"
+        className="min-h-screen bg-gray-50 p-4 md:p-6"
       >
-        {/* Header */}
-        <div className="border-b border-slate-200 bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
-                  <Building2 size={24} />
+        <div className="max-w-7xl mx-auto space-y-6">
+
+          {/* =========================
+              Header
+          ========================= */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center">
+                  <SettingsIcon className="w-7 h-7 text-blue-600" />
                 </div>
 
                 <div>
-                  <h1 className="text-2xl font-extrabold text-slate-900">
-                    الإعدادات
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    إعدادات النظام
                   </h1>
 
-                  <p className="mt-1 text-sm text-slate-500">
-                    إدارة بيانات الإدارة التعليمية
-                    وإعدادات المنصة
+                  <p className="text-gray-500 mt-1">
+                    إدارة بيانات الإدارة التعليمية وإعدادات المنصة
                   </p>
                 </div>
               </div>
@@ -324,142 +292,167 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={handleRefresh}
-                disabled={loadingData}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={loading || saving}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 transition disabled:opacity-50"
               >
                 <RefreshCw
-                  size={18}
-                  className={
-                    loadingData
-                      ? "animate-spin"
-                      : ""
-                  }
+                  className={`w-4 h-4 ${
+                    loading ? "animate-spin" : ""
+                  }`}
                 />
 
-                تحديث البيانات
+                تحديث
               </button>
             </div>
           </div>
-        </div>
 
-        {/* Main */}
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          {/* Current User */}
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-lg font-extrabold text-slate-900">
-                  المستخدم الحالي
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  بيانات الحساب والصلاحية المستخدمة
-                  في المنصة
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700">
-                {role
-                  ? roleLabels[role]
-                  : profileLoading
-                    ? "جاري التحميل..."
-                    : "غير معروف"}
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs font-semibold text-slate-500">
-                اسم المستخدم
-              </div>
-
-              <div className="mt-1 text-sm font-bold text-slate-900">
-                {profileName}
-              </div>
-            </div>
-          </div>
-
-          {/* Success */}
+          {/* =========================
+              Messages
+          ========================= */}
           {message && (
-            <div className="mb-6 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-              <CheckCircle2 size={20} />
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 text-green-700 rounded-xl p-4">
+              <CheckCircle2 className="w-5 h-5 shrink-0" />
 
               <span>{message}</span>
             </div>
           )}
 
-          {/* Error */}
-          {errorMessage && (
-            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
-              <AlertCircle
-                size={20}
-                className="mt-0.5 shrink-0"
-              />
+          {error && (
+            <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl p-4">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
 
-              <span>{errorMessage}</span>
+              <div>
+                <div className="font-semibold">
+                  حدث خطأ
+                </div>
+
+                <div className="text-sm mt-1">
+                  {error}
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Loading */}
-          {profileLoading ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-              <RefreshCw
-                size={28}
-                className="mx-auto animate-spin text-slate-500"
-              />
+          {/* =========================
+              User information
+          ========================= */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                <UserCog className="w-5 h-5 text-purple-600" />
+              </div>
 
-              <p className="mt-3 text-sm font-semibold text-slate-500">
-                جاري تحميل إعدادات الإدارة...
-              </p>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  الحساب الحالي
+                </h2>
+
+                <p className="text-sm text-gray-500">
+                  معلومات الحساب والصلاحيات
+                </p>
+              </div>
             </div>
-          ) : (
-            <>
-              {/* Directorate */}
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-5 py-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                      <Building2 size={22} />
-                    </div>
 
-                    <div>
-                      <h2 className="text-lg font-extrabold text-slate-900">
-                        بيانات الإدارة التعليمية
-                      </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        البيانات الأساسية للإدارة
-                        المرتبطة بحسابك
-                      </p>
-                    </div>
-                  </div>
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="text-sm text-gray-500 mb-1">
+                  الاسم
                 </div>
 
-                <div className="p-5">
-                  <div className="grid gap-5 md:grid-cols-2">
-                    {/* Name */}
+                <div className="font-semibold text-gray-900">
+                  {profile?.full_name || "غير محدد"}
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="text-sm text-gray-500 mb-1">
+                  نوع الحساب
+                </div>
+
+                <div className="font-semibold text-gray-900">
+                  {profile?.role === "director"
+                    ? "مدير الإدارة التعليمية"
+                    : profile?.role === "super_admin"
+                    ? "مدير النظام"
+                    : profile?.role || "غير محدد"}
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="text-sm text-gray-500 mb-1">
+                  صلاحية التعديل
+                </div>
+
+                <div
+                  className={`font-semibold ${
+                    canEdit
+                      ? "text-green-600"
+                      : "text-orange-600"
+                  }`}
+                >
+                  {canEdit
+                    ? "مسموح بالتعديل"
+                    : "عرض فقط"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* =========================
+              Directorate settings
+          ========================= */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                  <Building2 className="w-5 h-5 text-blue-600" />
+                </div>
+
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">
+                    بيانات الإدارة التعليمية
+                  </h2>
+
+                  <p className="text-sm text-gray-500 mt-1">
+                    البيانات الأساسية للإدارة التعليمية الأزهرية
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+
+              {!directorate ? (
+                <div className="text-center py-10 text-gray-500">
+                  لا توجد إدارة تعليمية مرتبطة بهذا الحساب.
+                </div>
+              ) : (
+                <div className="space-y-6">
+
+                  {/* Row 1 */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
                     <div>
-                      <label className="mb-2 block text-sm font-bold text-slate-700">
-                        اسم الإدارة التعليمية
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        اسم الإدارة التعليمية *
                       </label>
 
                       <input
                         type="text"
                         value={form.name}
                         onChange={(e) =>
-                          updateField(
-                            "name",
-                            e.target.value
-                          )
+                          updateField("name", e.target.value)
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                        placeholder="إدارة دمياط الجديدة التعليمية الأزهرية"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        placeholder="مثال: إدارة دمياط الجديدة التعليمية الأزهرية"
                       />
                     </div>
 
-                    {/* Code */}
                     <div>
-                      <label className="mb-2 block text-sm font-bold text-slate-700">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
                         كود الإدارة
                       </label>
 
@@ -467,20 +460,21 @@ export default function SettingsPage() {
                         type="text"
                         value={form.code}
                         onChange={(e) =>
-                          updateField(
-                            "code",
-                            e.target.value
-                          )
+                          updateField("code", e.target.value)
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
                         placeholder="AZ-DAM-NEW"
                       />
                     </div>
 
-                    {/* Governorate */}
+                  </div>
+
+                  {/* Row 2 */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
                     <div>
-                      <label className="mb-2 block text-sm font-bold text-slate-700">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
                         المحافظة
                       </label>
 
@@ -494,14 +488,13 @@ export default function SettingsPage() {
                           )
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
                         placeholder="دمياط"
                       />
                     </div>
 
-                    {/* City */}
                     <div>
-                      <label className="mb-2 block text-sm font-bold text-slate-700">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
                         المدينة
                       </label>
 
@@ -509,62 +502,59 @@ export default function SettingsPage() {
                         type="text"
                         value={form.city}
                         onChange={(e) =>
-                          updateField(
-                            "city",
-                            e.target.value
-                          )
+                          updateField("city", e.target.value)
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
                         placeholder="دمياط الجديدة"
                       />
                     </div>
 
-                    {/* Address */}
-                    <div className="md:col-span-2">
-                      <label className="mb-2 block text-sm font-bold text-slate-700">
-                        العنوان
-                      </label>
+                  </div>
 
-                      <textarea
-                        value={form.address}
-                        onChange={(e) =>
-                          updateField(
-                            "address",
-                            e.target.value
-                          )
-                        }
-                        disabled={!canEdit}
-                        rows={3}
-                        className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                        placeholder="عنوان الإدارة التعليمية"
-                      />
-                    </div>
+                  {/* Address */}
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                      <MapPin className="w-4 h-4 text-gray-500" />
+                      العنوان
+                    </label>
 
-                    {/* Phone */}
+                    <textarea
+                      value={form.address}
+                      onChange={(e) =>
+                        updateField("address", e.target.value)
+                      }
+                      disabled={!canEdit}
+                      rows={3}
+                      className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500 resize-none"
+                      placeholder="العنوان التفصيلي للإدارة التعليمية"
+                    />
+                  </div>
+
+                  {/* Contact */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
                     <div>
-                      <label className="mb-2 block text-sm font-bold text-slate-700">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                        <Phone className="w-4 h-4 text-gray-500" />
                         رقم الهاتف
                       </label>
 
                       <input
-                        type="tel"
+                        type="text"
                         value={form.phone}
                         onChange={(e) =>
-                          updateField(
-                            "phone",
-                            e.target.value
-                          )
+                          updateField("phone", e.target.value)
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                        placeholder="0500000000"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        placeholder="01000000000"
                       />
                     </div>
 
-                    {/* Email */}
                     <div>
-                      <label className="mb-2 block text-sm font-bold text-slate-700">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                        <Mail className="w-4 h-4 text-gray-500" />
                         البريد الإلكتروني
                       </label>
 
@@ -572,21 +562,21 @@ export default function SettingsPage() {
                         type="email"
                         value={form.email}
                         onChange={(e) =>
-                          updateField(
-                            "email",
-                            e.target.value
-                          )
+                          updateField("email", e.target.value)
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                        placeholder="admin@example.com"
+                        className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                        placeholder="example@azhar.eg"
                       />
                     </div>
+
                   </div>
 
-                  {/* Active */}
-                  <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <label className="flex cursor-pointer items-center gap-3">
+                  {/* Status */}
+                  <div className="border-t border-gray-200 pt-5">
+
+                    <label className="flex items-center gap-3 cursor-pointer">
+
                       <input
                         type="checkbox"
                         checked={form.is_active}
@@ -597,142 +587,269 @@ export default function SettingsPage() {
                           )
                         }
                         disabled={!canEdit}
-                        className="h-5 w-5 rounded border-slate-300 text-slate-900 focus:ring-slate-400 disabled:cursor-not-allowed"
+                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
 
                       <div>
-                        <div className="text-sm font-bold text-slate-800">
+                        <div className="font-semibold text-gray-800">
                           الإدارة التعليمية نشطة
                         </div>
 
-                        <div className="mt-1 text-xs text-slate-500">
-                          حالة الإدارة التعليمية داخل
-                          النظام.
+                        <div className="text-sm text-gray-500">
+                          عند إلغاء التفعيل يتم اعتبار الإدارة غير نشطة
                         </div>
                       </div>
+
                     </label>
                   </div>
 
                   {/* Save */}
-                  {canEdit ? (
-                    <div className="mt-6 flex justify-end">
+                  {canEdit && (
+                    <div className="flex justify-end pt-2">
+
                       <button
                         type="button"
                         onClick={handleSave}
                         disabled={saving}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
+
                         {saving ? (
                           <>
-                            <RefreshCw
-                              size={18}
-                              className="animate-spin"
-                            />
-
+                            <RefreshCw className="w-5 h-5 animate-spin" />
                             جاري الحفظ...
                           </>
                         ) : (
                           <>
-                            <Save size={18} />
-
-                            حفظ التعديلات
+                            <Save className="w-5 h-5" />
+                            حفظ الإعدادات
                           </>
                         )}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-6 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-700">
-                      <ShieldCheck size={20} />
 
-                      <span>
-                        حسابك لديه صلاحية عرض الإعدادات
-                        فقط. التعديل متاح لمدير الإدارة
-                        ومدير النظام.
-                      </span>
+                      </button>
+
                     </div>
                   )}
+
+                </div>
+              )}
+
+            </div>
+          </div>
+
+          {/* =========================
+              Permissions
+          ========================= */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+
+            <div className="flex items-center gap-3 mb-5">
+
+              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-green-600" />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  الصلاحيات وإدارة المستخدمين
+                </h2>
+
+                <p className="text-sm text-gray-500 mt-1">
+                  إدارة أدوار المستخدمين وصلاحيات الوصول للنظام
+                </p>
+              </div>
+
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-5">
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div className="font-semibold text-gray-900">
+                    مدير الإدارة
+                  </div>
+
+                  <div className="text-sm text-gray-500 mt-1">
+                    صلاحيات إدارية كاملة
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div className="font-semibold text-gray-900">
+                    شيخ المعهد
+                  </div>
+
+                  <div className="text-sm text-gray-500 mt-1">
+                    إدارة المعهد التابع له
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div className="font-semibold text-gray-900">
+                    المدرس
+                  </div>
+
+                  <div className="text-sm text-gray-500 mt-1">
+                    الخدمات التعليمية المسموح بها
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div className="font-semibold text-gray-900">
+                    ولي الأمر
+                  </div>
+
+                  <div className="text-sm text-gray-500 mt-1">
+                    متابعة الأبناء والخدمات المتاحة
+                  </div>
+                </div>
+
+              </div>
+
+              <div className="mt-4 text-sm text-gray-500">
+                سيتم تطوير شاشة مستقلة لإدارة المستخدمين والصلاحيات بالتفصيل في المرحلة التالية.
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* =========================
+              Notifications
+          ========================= */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+
+            <div className="flex items-center gap-3 mb-5">
+
+              <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+                <Bell className="w-5 h-5 text-orange-600" />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  الإشعارات
+                </h2>
+
+                <p className="text-sm text-gray-500 mt-1">
+                  إعدادات الإشعارات والتنبيهات
+                </p>
+              </div>
+
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+              <div className="border border-gray-200 rounded-xl p-4">
+                <div className="font-semibold text-gray-800">
+                  الإعلانات
+                </div>
+
+                <div className="text-sm text-gray-500 mt-1">
+                  استقبال ومتابعة إعلانات الإدارة
                 </div>
               </div>
 
-              {/* Future Settings */}
-              <div className="mt-6 grid gap-5 md:grid-cols-2">
-                {/* Permissions */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                      <ShieldCheck size={22} />
-                    </div>
-
-                    <div>
-                      <h3 className="font-extrabold text-slate-900">
-                        الصلاحيات وإدارة المستخدمين
-                      </h3>
-
-                      <p className="mt-1 text-sm text-slate-500">
-                        إدارة المستخدمين والأدوار
-                        والصلاحيات.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-500">
-                    سيتم تطوير هذه الوحدة في المرحلة
-                    التالية.
-                  </div>
+              <div className="border border-gray-200 rounded-xl p-4">
+                <div className="font-semibold text-gray-800">
+                  الطلبات
                 </div>
 
-                {/* Notifications */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                      <Bell size={22} />
-                    </div>
-
-                    <div>
-                      <h3 className="font-extrabold text-slate-900">
-                        الإشعارات
-                      </h3>
-
-                      <p className="mt-1 text-sm text-slate-500">
-                        إعدادات التنبيهات والإشعارات داخل
-                        المنصة.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-500">
-                    سيتم تطوير هذه الوحدة في المرحلة
-                    التالية.
-                  </div>
-                </div>
-
-                {/* System */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                      <Database size={22} />
-                    </div>
-
-                    <div>
-                      <h3 className="font-extrabold text-slate-900">
-                        إعدادات النظام والبيانات
-                      </h3>
-
-                      <p className="mt-1 text-sm text-slate-500">
-                        إعدادات الاستيراد والتقارير وسجل
-                        العمليات وإدارة النظام.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-500">
-                    سيتم تطوير هذه الوحدة ضمن مراحل
-                    النظام القادمة.
-                  </div>
+                <div className="text-sm text-gray-500 mt-1">
+                  تنبيهات طلبات المعاهد
                 </div>
               </div>
-            </>
-          )}
+
+              <div className="border border-gray-200 rounded-xl p-4">
+                <div className="font-semibold text-gray-800">
+                  الشكاوى
+                </div>
+
+                <div className="text-sm text-gray-500 mt-1">
+                  تنبيهات الشكاوى والبلاغات
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* =========================
+              Database
+          ========================= */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+
+            <div className="flex items-center gap-3 mb-5">
+
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                <Database className="w-5 h-5 text-indigo-600" />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  حالة النظام وقاعدة البيانات
+                </h2>
+
+                <p className="text-sm text-gray-500 mt-1">
+                  معلومات تشغيل النظام
+                </p>
+              </div>
+
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+
+                  <span className="font-semibold text-green-800">
+                    قاعدة البيانات
+                  </span>
+                </div>
+
+                <div className="text-sm text-green-700 mt-2">
+                  متصلة وتعمل
+                </div>
+
+              </div>
+
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+
+                  <span className="font-semibold text-green-800">
+                    نظام الدخول
+                  </span>
+                </div>
+
+                <div className="text-sm text-green-700 mt-2">
+                  يعمل
+                </div>
+
+              </div>
+
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+
+                  <span className="font-semibold text-green-800">
+                    حماية الصفحات
+                  </span>
+                </div>
+
+                <div className="text-sm text-green-700 mt-2">
+                  مفعلة
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
         </div>
       </div>
     </AppShell>
