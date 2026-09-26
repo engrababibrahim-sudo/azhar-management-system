@@ -4,7 +4,6 @@ import {
   Activity,
   ArrowLeft,
   Bell,
-  BookOpenCheck,
   Building2,
   CheckCircle2,
   ClipboardList,
@@ -146,7 +145,7 @@ export default function HomePage() {
         .from("profiles")
         .select("role, full_name, institute_id, directorate_id")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError) {
         throw profileError;
@@ -156,7 +155,7 @@ export default function HomePage() {
         throw new Error("لم يتم العثور على ملف المستخدم");
       }
 
-      setProfile(profileData);
+      setProfile(profileData as Profile);
 
       let query = supabase
         .from("institutes")
@@ -165,7 +164,17 @@ export default function HomePage() {
         )
         .order("name", { ascending: true });
 
+      /*
+       * مدير الإدارة التعليمية الأزهرية:
+       * super_admin هو الدور الأساسي الحالي.
+       *
+       * director موجود فقط للتوافق مع البيانات القديمة.
+       *
+       * لذلك جميع هذه الأدوار على مستوى الإدارة
+       * يجب أن ترى المعاهد التابعة لـ directorate_id.
+       */
       if (
+        profileData.role === "super_admin" ||
         profileData.role === "director" ||
         profileData.role === "deputy"
       ) {
@@ -177,16 +186,23 @@ export default function HomePage() {
           "directorate_id",
           profileData.directorate_id
         );
-      } else if (profileData.role === "sheikh") {
+      } else if (
+        profileData.role === "sheikh" ||
+        profileData.role === "institute_deputy" ||
+        profileData.role === "teacher" ||
+        profileData.role === "employee"
+      ) {
         if (!profileData.institute_id) {
-          throw new Error("حساب شيخ المعهد غير مرتبط بمعهد");
+          throw new Error("الحساب غير مرتبط بمعهد");
         }
 
         query = query.eq("id", profileData.institute_id);
       }
 
-      const { data: instituteData, error: instituteError } =
-        await query;
+      const {
+        data: instituteData,
+        error: instituteError,
+      } = await query;
 
       if (instituteError) {
         throw instituteError;
@@ -237,11 +253,15 @@ export default function HomePage() {
   const roleTitle =
     profile?.role === "sheikh"
       ? "شيخ المعهد"
-      : profile?.role === "deputy"
-        ? "وكيل الإدارة التعليمية الأزهرية"
-        : profile?.role === "super_admin"
-          ? "مدير النظام"
-          : "مدير الإدارة التعليمية الأزهرية";
+      : profile?.role === "institute_deputy"
+        ? "وكيل شيخ المعهد"
+        : profile?.role === "teacher"
+          ? "المدرس"
+          : profile?.role === "employee"
+            ? "الموظف"
+            : profile?.role === "deputy"
+              ? "وكيل الإدارة التعليمية الأزهرية"
+              : "مدير الإدارة التعليمية الأزهرية";
 
   const welcomeName =
     profile?.full_name || roleTitle;
