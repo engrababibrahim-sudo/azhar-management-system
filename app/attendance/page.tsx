@@ -35,17 +35,20 @@ type AttendanceRecord = {
 export default function AttendancePage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
+
   const [attendance, setAttendance] = useState<
     Record<string, AttendanceRecord>
   >({});
 
   const [instituteId, setInstituteId] = useState<string | null>(null);
+
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0]
   );
 
   const [searchTerm, setSearchTerm] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -83,6 +86,7 @@ export default function AttendancePage() {
         .single();
 
       if (profileError || !profile) {
+        console.error(profileError);
         setMessage("لم يتم العثور على بيانات المستخدم");
         setLoading(false);
         return;
@@ -160,7 +164,7 @@ export default function AttendancePage() {
     (data || []).forEach((item) => {
       records[item.student_id] = {
         student_id: item.student_id,
-        status: item.status,
+        status: item.status as AttendanceStatus,
         notes: item.notes || "",
       };
     });
@@ -172,14 +176,20 @@ export default function AttendancePage() {
     studentId: string,
     status: AttendanceStatus
   ) {
-    setAttendance((current) => ({
-      ...current,
-      [studentId]: {
-        student_id: studentId,
-        status,
-        notes: current[studentId]?.notes || "",
-      },
-    }));
+    setAttendance((current) => {
+      const existing = current[studentId];
+
+      return {
+        ...current,
+        [studentId]: {
+          student_id: studentId,
+          status,
+          notes: existing?.notes || "",
+        },
+      };
+    });
+
+    setMessage("");
   }
 
   function getStudentStatus(studentId: string): AttendanceStatus {
@@ -222,6 +232,9 @@ export default function AttendancePage() {
       }
 
       setMessage("تم حفظ الحضور والغياب بنجاح ✅");
+
+      // إعادة تحميل السجلات بعد الحفظ
+      await loadAttendance();
     } catch (error) {
       console.error(error);
       setMessage("حدث خطأ غير متوقع");
@@ -234,13 +247,14 @@ export default function AttendancePage() {
     const matchesClass =
       !selectedClass || student.class_id === selectedClass;
 
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
     const matchesSearch =
-      student.full_name
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
+      !normalizedSearch ||
+      student.full_name.toLowerCase().includes(normalizedSearch) ||
       (student.student_code || "")
         .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+        .includes(normalizedSearch);
 
     return matchesClass && matchesSearch;
   });
@@ -265,8 +279,14 @@ export default function AttendancePage() {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
         <div className="max-w-7xl mx-auto text-center py-20">
-          <RefreshCw className="mx-auto animate-spin mb-4" size={32} />
-          <p className="text-gray-600">جاري تحميل بيانات الحضور...</p>
+          <RefreshCw
+            className="mx-auto animate-spin mb-4"
+            size={32}
+          />
+
+          <p className="text-gray-600">
+            جاري تحميل بيانات الحضور...
+          </p>
         </div>
       </main>
     );
@@ -278,7 +298,6 @@ export default function AttendancePage() {
 
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-
           <div>
             <h1 className="text-3xl font-bold text-gray-800">
               الحضور والغياب
@@ -290,6 +309,7 @@ export default function AttendancePage() {
           </div>
 
           <button
+            type="button"
             onClick={saveAttendance}
             disabled={saving}
             className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl font-semibold"
@@ -309,7 +329,6 @@ export default function AttendancePage() {
 
         {/* Filters */}
         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
             {/* Date */}
@@ -327,7 +346,9 @@ export default function AttendancePage() {
                 <input
                   type="date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
+                  onChange={(e) =>
+                    setSelectedDate(e.target.value)
+                  }
                   className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -341,13 +362,18 @@ export default function AttendancePage() {
 
               <select
                 value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
+                onChange={(e) =>
+                  setSelectedClass(e.target.value)
+                }
                 className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">كل الفصول</option>
 
                 {classes.map((classItem) => (
-                  <option key={classItem.id} value={classItem.id}>
+                  <option
+                    key={classItem.id}
+                    value={classItem.id}
+                  >
                     {classItem.name}
                   </option>
                 ))}
@@ -370,7 +396,9 @@ export default function AttendancePage() {
                   type="text"
                   placeholder="اسم الطالب أو الكود..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) =>
+                    setSearchTerm(e.target.value)
+                  }
                   className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -385,9 +413,15 @@ export default function AttendancePage() {
           <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-green-500">
             <div className="flex items-center gap-3">
               <Check className="text-green-600" />
+
               <div>
-                <p className="text-gray-500 text-sm">حاضر</p>
-                <p className="text-2xl font-bold">{presentCount}</p>
+                <p className="text-gray-500 text-sm">
+                  حاضر
+                </p>
+
+                <p className="text-2xl font-bold">
+                  {presentCount}
+                </p>
               </div>
             </div>
           </div>
@@ -395,9 +429,15 @@ export default function AttendancePage() {
           <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-red-500">
             <div className="flex items-center gap-3">
               <UserX className="text-red-600" />
+
               <div>
-                <p className="text-gray-500 text-sm">غائب</p>
-                <p className="text-2xl font-bold">{absentCount}</p>
+                <p className="text-gray-500 text-sm">
+                  غائب
+                </p>
+
+                <p className="text-2xl font-bold">
+                  {absentCount}
+                </p>
               </div>
             </div>
           </div>
@@ -405,9 +445,15 @@ export default function AttendancePage() {
           <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-yellow-500">
             <div className="flex items-center gap-3">
               <Clock className="text-yellow-600" />
+
               <div>
-                <p className="text-gray-500 text-sm">متأخر</p>
-                <p className="text-2xl font-bold">{lateCount}</p>
+                <p className="text-gray-500 text-sm">
+                  متأخر
+                </p>
+
+                <p className="text-2xl font-bold">
+                  {lateCount}
+                </p>
               </div>
             </div>
           </div>
@@ -415,9 +461,15 @@ export default function AttendancePage() {
           <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-blue-500">
             <div className="flex items-center gap-3">
               <CalendarDays className="text-blue-600" />
+
               <div>
-                <p className="text-gray-500 text-sm">معذور</p>
-                <p className="text-2xl font-bold">{excusedCount}</p>
+                <p className="text-gray-500 text-sm">
+                  معذور
+                </p>
+
+                <p className="text-2xl font-bold">
+                  {excusedCount}
+                </p>
               </div>
             </div>
           </div>
@@ -465,7 +517,6 @@ export default function AttendancePage() {
                 <tbody className="divide-y">
 
                   {filteredStudents.map((student) => {
-
                     const status = getStudentStatus(student.id);
 
                     return (
@@ -488,64 +539,72 @@ export default function AttendancePage() {
 
                           <div className="flex flex-wrap justify-center gap-2">
 
+                            {/* حاضر */}
                             <button
+                              type="button"
                               onClick={() =>
                                 setStudentStatus(
                                   student.id,
                                   "present"
                                 )
                               }
-                              className={`px-4 py-2 rounded-lg font-medium ${
+                              className={`px-4 py-2 rounded-lg font-medium transition ${
                                 status === "present"
-                                  ? "bg-green-600 text-white"
+                                  ? "bg-green-600 text-white shadow-sm"
                                   : "bg-green-50 text-green-700 hover:bg-green-100"
                               }`}
                             >
                               حاضر
                             </button>
 
+                            {/* غائب */}
                             <button
+                              type="button"
                               onClick={() =>
                                 setStudentStatus(
                                   student.id,
                                   "absent"
                                 )
                               }
-                              className={`px-4 py-2 rounded-lg font-medium ${
+                              className={`px-4 py-2 rounded-lg font-medium transition ${
                                 status === "absent"
-                                  ? "bg-red-600 text-white"
+                                  ? "bg-red-600 text-white shadow-sm"
                                   : "bg-red-50 text-red-700 hover:bg-red-100"
                               }`}
                             >
                               غائب
                             </button>
 
+                            {/* متأخر */}
                             <button
+                              type="button"
                               onClick={() =>
                                 setStudentStatus(
                                   student.id,
                                   "late"
                                 )
                               }
-                              className={`px-4 py-2 rounded-lg font-medium ${
+                              className={`px-4 py-2 rounded-lg font-medium transition ${
                                 status === "late"
-                                  ? "bg-yellow-500 text-white"
+                                  ? "bg-yellow-500 text-white shadow-sm"
                                   : "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
                               }`}
                             >
                               متأخر
                             </button>
 
+                            {/* معذور */}
                             <button
+                              type="button"
                               onClick={() =>
                                 setStudentStatus(
                                   student.id,
                                   "excused"
                                 )
                               }
-                              className={`px-4 py-2 rounded-lg font-medium ${
+                              className={`px-4 py-2 rounded-lg font-medium transition ${
                                 status === "excused"
-                                  ? "bg-blue-600 text-white"
+                                  ? "bg-blue-600 text-white shadow-sm"
                                   : "bg-blue-50 text-blue-700 hover:bg-blue-100"
                               }`}
                             >
