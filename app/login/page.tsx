@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase/client";
 
@@ -11,9 +10,10 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [parentLoading, setParentLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleLogin(e: FormEvent) {
+  async function handleLogin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setLoading(true);
@@ -39,7 +39,9 @@ export default function LoginPage() {
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("role, institute_id, directorate_id, full_name, is_active")
+      .select(
+        "role, institute_id, directorate_id, full_name, is_active"
+      )
       .eq("id", authData.user.id)
       .maybeSingle();
 
@@ -54,11 +56,13 @@ export default function LoginPage() {
       return;
     }
 
-    // التأكد أن الحساب مفعل
+    // الحساب غير مفعل
     if (profile.is_active === false) {
       await supabase.auth.signOut();
 
-      setError("هذا الحساب غير مفعل حاليًا. يرجى التواصل مع الإدارة.");
+      setError(
+        "هذا الحساب غير مفعل حاليًا. يرجى التواصل مع الإدارة."
+      );
 
       setLoading(false);
       return;
@@ -66,13 +70,14 @@ export default function LoginPage() {
 
     // =====================================================
     // مدير الإدارة التعليمية الأزهرية
-    // super_admin هو الدور الرسمي لمدير الإدارة
     // =====================================================
     if (profile.role === "super_admin") {
       if (!profile.directorate_id) {
         await supabase.auth.signOut();
 
-        setError("حساب مدير الإدارة غير مرتبط بإدارة تعليمية");
+        setError(
+          "حساب مدير الإدارة غير مرتبط بإدارة تعليمية"
+        );
 
         setLoading(false);
         return;
@@ -84,13 +89,15 @@ export default function LoginPage() {
     }
 
     // =====================================================
-    // التوافق مع الحسابات القديمة التي ما زالت تحمل director
+    // التوافق مع الحسابات القديمة
     // =====================================================
     if (profile.role === "director") {
       if (!profile.directorate_id) {
         await supabase.auth.signOut();
 
-        setError("حساب مدير الإدارة غير مرتبط بإدارة تعليمية");
+        setError(
+          "حساب مدير الإدارة غير مرتبط بإدارة تعليمية"
+        );
 
         setLoading(false);
         return;
@@ -114,13 +121,16 @@ export default function LoginPage() {
         return;
       }
 
-      router.push(`/institutes/${profile.institute_id}`);
+      router.push(
+        `/institutes/${profile.institute_id}`
+      );
+
       router.refresh();
       return;
     }
 
     // =====================================================
-    // ولي الأمر
+    // ولي الأمر إذا كان لديه حساب Auth
     // =====================================================
     if (profile.role === "parent") {
       router.push("/parent");
@@ -129,13 +139,25 @@ export default function LoginPage() {
     }
 
     // =====================================================
-    // الأدوار الأخرى سيتم تفعيل واجهاتها تباعًا
+    // أدوار أخرى
     // =====================================================
     await supabase.auth.signOut();
 
     setError("هذا الدور لم يتم تفعيل واجهته بعد");
 
     setLoading(false);
+  }
+
+  // =====================================================
+  // دخول ولي الأمر
+  // =====================================================
+  function handleParentLogin() {
+    if (parentLoading) return;
+
+    setParentLoading(true);
+    setError("");
+
+    router.push("/parent-login");
   }
 
   return (
@@ -162,7 +184,10 @@ export default function LoginPage() {
           </div>
 
           {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form
+            onSubmit={handleLogin}
+            className="space-y-5"
+          >
 
             {/* Email */}
             <div>
@@ -173,7 +198,9 @@ export default function LoginPage() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) =>
+                  setEmail(e.target.value)
+                }
                 placeholder="أدخل البريد الإلكتروني"
                 required
                 autoComplete="email"
@@ -190,7 +217,9 @@ export default function LoginPage() {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) =>
+                  setPassword(e.target.value)
+                }
                 placeholder="أدخل كلمة المرور"
                 required
                 autoComplete="current-password"
@@ -211,18 +240,26 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-400 text-white font-bold py-3 transition"
             >
-              {loading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
+              {loading
+                ? "جاري تسجيل الدخول..."
+                : "تسجيل الدخول"}
             </button>
           </form>
 
-          {/* Parent Login */}
+          {/* =================================================
+              Parent Login
+          ================================================= */}
           <div className="mt-4">
-            <Link
-              href="/parent-login"
-              className="block w-full rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 font-bold py-3 text-center hover:bg-emerald-100 transition"
+            <button
+              type="button"
+              onClick={handleParentLogin}
+              disabled={parentLoading}
+              className="w-full rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 font-bold py-3 text-center hover:bg-emerald-100 disabled:opacity-60 transition cursor-pointer"
             >
-              دخول ولي الأمر
-            </Link>
+              {parentLoading
+                ? "جاري فتح صفحة ولي الأمر..."
+                : "دخول ولي الأمر"}
+            </button>
           </div>
 
           {/* Footer */}
