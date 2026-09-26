@@ -29,9 +29,11 @@ export default async function proxy(request: NextRequest) {
             },
           });
 
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
+          cookiesToSet.forEach(
+            ({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            }
+          );
         },
       },
     }
@@ -50,42 +52,56 @@ export default async function proxy(request: NextRequest) {
     user?.id
   );
 
-  // =====================================================
-  // المسارات العامة
-  // =====================================================
+  /*
+   * ============================================================
+   * المسارات العامة
+   * ============================================================
+   *
+   * هذه الصفحات لا تعتمد على Supabase Auth:
+   *
+   * 1. login
+   * 2. parent-login
+   * 3. parent dashboard
+   * 4. صفحات ولي الأمر الداخلية
+   * 5. شكاوى أولياء الأمور
+   *
+   * ولي الأمر الحالي يعتمد على sessionStorage + RPC
+   * وليس على Supabase Auth.
+   */
 
   const isPublicPath =
     pathname === "/login" ||
     pathname === "/parent-login" ||
     pathname === "/parent" ||
-    pathname.startsWith("/parent/");
-
-  // =====================================================
-  // السماح بمسارات ولي الأمر
-  //
-  // ولي الأمر لا يستخدم Supabase Auth،
-  // وإنما يتم التحقق من هويته داخل صفحات ولي الأمر.
-  // =====================================================
+    pathname.startsWith("/parent/") ||
+    pathname === "/parent-complaints";
 
   if (isPublicPath) {
     return response;
   }
 
-  // =====================================================
-  // حماية باقي النظام
-  // =====================================================
+  /*
+   * ============================================================
+   * باقي النظام
+   * ============================================================
+   *
+   * كل مستخدم آخر يجب أن يكون مسجل دخول
+   * عن طريق Supabase Auth.
+   */
 
   if (!user) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = new URL(
+      "/login",
+      request.url
+    );
 
-    loginUrl.searchParams.set("redirect", pathname);
+    loginUrl.searchParams.set(
+      "redirect",
+      pathname
+    );
 
     return NextResponse.redirect(loginUrl);
   }
-
-  // =====================================================
-  // المستخدم مسجل الدخول
-  // =====================================================
 
   return response;
 }
