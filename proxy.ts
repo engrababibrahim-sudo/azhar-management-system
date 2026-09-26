@@ -43,14 +43,28 @@ export default async function proxy(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-console.log("PROXY WORKING:", pathname, "USER:", user?.id);
+  console.log(
+    "PROXY WORKING:",
+    pathname,
+    "USER:",
+    user?.id
+  );
 
-  // صفحة تسجيل الدخول متاحة للجميع
-  if (pathname === "/login") {
+  // =====================================================
+  // الصفحات العامة التي يمكن الوصول إليها بدون تسجيل دخول
+  // =====================================================
+  const publicPaths = [
+    "/login",
+    "/parent-login",
+  ];
+
+  if (publicPaths.includes(pathname)) {
     return response;
   }
 
+  // =====================================================
   // أي مستخدم غير مسجل دخوله يتم تحويله إلى Login
+  // =====================================================
   if (!user) {
     const loginUrl = new URL("/login", request.url);
 
@@ -59,6 +73,9 @@ console.log("PROXY WORKING:", pathname, "USER:", user?.id);
     return NextResponse.redirect(loginUrl);
   }
 
+  // =====================================================
+  // المستخدم مسجل الدخول
+  // =====================================================
   return response;
 }
 
