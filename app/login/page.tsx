@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase/client";
 
@@ -117,6 +118,7 @@ export default function LoginPage() {
           {/* Login Form */}
           <form onSubmit={handleLogin} className="space-y-5">
 
+            {/* Email */}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 البريد الإلكتروني
@@ -132,6 +134,7 @@ export default function LoginPage() {
               />
             </div>
 
+            {/* Password */}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 كلمة المرور
@@ -147,12 +150,14 @@ export default function LoginPage() {
               />
             </div>
 
+            {/* Error */}
             {error && (
               <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 p-3 text-sm text-center">
                 {error}
               </div>
             )}
 
+            {/* Main Login */}
             <button
               type="submit"
               disabled={loading}
@@ -163,6 +168,17 @@ export default function LoginPage() {
 
           </form>
 
+          {/* Parent Login */}
+          <div className="mt-4">
+            <Link
+              href="/parent-login"
+              className="block w-full rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 font-bold py-3 text-center hover:bg-emerald-100 transition"
+            >
+              دخول ولي الأمر
+            </Link>
+          </div>
+
+          {/* Footer */}
           <div className="mt-8 pt-6 border-t border-slate-200 text-center">
             <p className="text-xs text-slate-400">
               نظام الإدارة والمتابعة المركزية للمعاهد الأزهرية
