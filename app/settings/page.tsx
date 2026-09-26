@@ -67,7 +67,8 @@ export default function SettingsPage() {
   const [role, setRole] = useState<Role | null>(null);
   const [profileName, setProfileName] = useState("المستخدم");
 
-  const [directorate, setDirectorate] = useState<Directorate | null>(null);
+  const [directorate, setDirectorate] =
+    useState<Directorate | null>(null);
 
   const [form, setForm] = useState<FormData>({
     name: "",
@@ -106,11 +107,12 @@ export default function SettingsPage() {
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role, full_name, directorate_id")
-        .eq("id", user.id)
-        .maybeSingle();
+      const { data: profile, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select("role, full_name, directorate_id")
+          .eq("id", user.id)
+          .maybeSingle();
 
       if (profileError) {
         throw profileError;
@@ -159,15 +161,20 @@ export default function SettingsPage() {
       setForm({
         name: currentDirectorate.name || "",
         code: currentDirectorate.code || "",
-        governorate: currentDirectorate.governorate || "",
+        governorate:
+          currentDirectorate.governorate || "",
         city: currentDirectorate.city || "",
         address: currentDirectorate.address || "",
         phone: currentDirectorate.phone || "",
         email: currentDirectorate.email || "",
-        is_active: currentDirectorate.is_active ?? true,
+        is_active:
+          currentDirectorate.is_active ?? true,
       });
     } catch (error: any) {
-      console.error("Settings loading error:", error);
+      console.error(
+        "Settings loading error:",
+        error
+      );
 
       setErrorMessage(
         error?.message ||
@@ -194,7 +201,9 @@ export default function SettingsPage() {
 
   async function handleSave() {
     if (!directorate) {
-      setErrorMessage("لا توجد إدارة تعليمية للحفظ.");
+      setErrorMessage(
+        "لا توجد إدارة تعليمية للحفظ."
+      );
       return;
     }
 
@@ -206,7 +215,9 @@ export default function SettingsPage() {
     }
 
     if (!form.name.trim()) {
-      setErrorMessage("اسم الإدارة التعليمية مطلوب.");
+      setErrorMessage(
+        "اسم الإدارة التعليمية مطلوب."
+      );
       return;
     }
 
@@ -220,7 +231,8 @@ export default function SettingsPage() {
         .update({
           name: form.name.trim(),
           code: form.code.trim() || null,
-          governorate: form.governorate.trim() || null,
+          governorate:
+            form.governorate.trim() || null,
           city: form.city.trim() || null,
           address: form.address.trim() || null,
           phone: form.phone.trim() || null,
@@ -240,19 +252,28 @@ export default function SettingsPage() {
               ...previous,
               name: form.name.trim(),
               code: form.code.trim() || null,
-              governorate: form.governorate.trim() || null,
+              governorate:
+                form.governorate.trim() || null,
               city: form.city.trim() || null,
-              address: form.address.trim() || null,
-              phone: form.phone.trim() || null,
-              email: form.email.trim() || null,
+              address:
+                form.address.trim() || null,
+              phone:
+                form.phone.trim() || null,
+              email:
+                form.email.trim() || null,
               is_active: form.is_active,
             }
           : previous
       );
 
-      setMessage("تم حفظ بيانات الإدارة التعليمية بنجاح ✅");
+      setMessage(
+        "تم حفظ بيانات الإدارة التعليمية بنجاح ✅"
+      );
     } catch (error: any) {
-      console.error("Settings save error:", error);
+      console.error(
+        "Settings save error:",
+        error
+      );
 
       setErrorMessage(
         error?.message ||
@@ -275,26 +296,28 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <div className="min-h-screen bg-slate-100">
+      <div
+        className="min-h-screen bg-slate-100"
+        dir="rtl"
+      >
         {/* Header */}
         <div className="border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
-                    <Building2 size={24} />
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
+                  <Building2 size={24} />
+                </div>
 
-                  <div>
-                    <h1 className="text-2xl font-extrabold text-slate-900">
-                      الإعدادات
-                    </h1>
+                <div>
+                  <h1 className="text-2xl font-extrabold text-slate-900">
+                    الإعدادات
+                  </h1>
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      إدارة بيانات الإدارة التعليمية وإعدادات المنصة
-                    </p>
-                  </div>
+                  <p className="mt-1 text-sm text-slate-500">
+                    إدارة بيانات الإدارة التعليمية
+                    وإعدادات المنصة
+                  </p>
                 </div>
               </div>
 
@@ -306,7 +329,11 @@ export default function SettingsPage() {
               >
                 <RefreshCw
                   size={18}
-                  className={loadingData ? "animate-spin" : ""}
+                  className={
+                    loadingData
+                      ? "animate-spin"
+                      : ""
+                  }
                 />
 
                 تحديث البيانات
@@ -315,18 +342,19 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Content */}
+        {/* Main */}
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          {/* Profile information */}
+          {/* Current User */}
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">
                   المستخدم الحالي
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  بيانات الحساب والصلاحية المستخدمة في المنصة
+                  بيانات الحساب والصلاحية المستخدمة
+                  في المنصة
                 </p>
               </div>
 
@@ -350,14 +378,16 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Messages */}
+          {/* Success */}
           {message && (
             <div className="mb-6 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
               <CheckCircle2 size={20} />
+
               <span>{message}</span>
             </div>
           )}
 
+          {/* Error */}
           {errorMessage && (
             <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
               <AlertCircle
@@ -383,7 +413,7 @@ export default function SettingsPage() {
             </div>
           ) : (
             <>
-              {/* Directorate settings */}
+              {/* Directorate */}
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-5 py-5">
                   <div className="flex items-center gap-3">
@@ -397,7 +427,8 @@ export default function SettingsPage() {
                       </h2>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        البيانات الأساسية للإدارة المرتبطة بحسابك
+                        البيانات الأساسية للإدارة
+                        المرتبطة بحسابك
                       </p>
                     </div>
                   </div>
@@ -415,11 +446,14 @@ export default function SettingsPage() {
                         type="text"
                         value={form.name}
                         onChange={(e) =>
-                          updateField("name", e.target.value)
+                          updateField(
+                            "name",
+                            e.target.value
+                          )
                         }
                         disabled={!canEdit}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-                        placeholder="مثال: إدارة دمياط الجديدة التعليمية الأزهرية"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        placeholder="إدارة دمياط الجديدة التعليمية الأزهرية"
                       />
                     </div>
 
@@ -433,7 +467,10 @@ export default function SettingsPage() {
                         type="text"
                         value={form.code}
                         onChange={(e) =>
-                          updateField("code", e.target.value)
+                          updateField(
+                            "code",
+                            e.target.value
+                          )
                         }
                         disabled={!canEdit}
                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
@@ -472,7 +509,10 @@ export default function SettingsPage() {
                         type="text"
                         value={form.city}
                         onChange={(e) =>
-                          updateField("city", e.target.value)
+                          updateField(
+                            "city",
+                            e.target.value
+                          )
                         }
                         disabled={!canEdit}
                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
@@ -511,7 +551,10 @@ export default function SettingsPage() {
                         type="tel"
                         value={form.phone}
                         onChange={(e) =>
-                          updateField("phone", e.target.value)
+                          updateField(
+                            "phone",
+                            e.target.value
+                          )
                         }
                         disabled={!canEdit}
                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
@@ -529,7 +572,10 @@ export default function SettingsPage() {
                         type="email"
                         value={form.email}
                         onChange={(e) =>
-                          updateField("email", e.target.value)
+                          updateField(
+                            "email",
+                            e.target.value
+                          )
                         }
                         disabled={!canEdit}
                         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100"
@@ -560,8 +606,8 @@ export default function SettingsPage() {
                         </div>
 
                         <div className="mt-1 text-xs text-slate-500">
-                          عند تعطيل الإدارة يمكن منع استخدامها في
-                          العمليات المستقبلية.
+                          حالة الإدارة التعليمية داخل
+                          النظام.
                         </div>
                       </div>
                     </label>
@@ -599,16 +645,18 @@ export default function SettingsPage() {
                       <ShieldCheck size={20} />
 
                       <span>
-                        حسابك لديه صلاحية عرض الإعدادات فقط.
-                        التعديل متاح لمدير الإدارة ومدير النظام.
+                        حسابك لديه صلاحية عرض الإعدادات
+                        فقط. التعديل متاح لمدير الإدارة
+                        ومدير النظام.
                       </span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Future settings */}
+              {/* Future Settings */}
               <div className="mt-6 grid gap-5 md:grid-cols-2">
+                {/* Permissions */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-center gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
@@ -621,16 +669,19 @@ export default function SettingsPage() {
                       </h3>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        إدارة المستخدمين والأدوار والصلاحيات.
+                        إدارة المستخدمين والأدوار
+                        والصلاحيات.
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-500">
-                    سيتم تفعيل هذه الوحدة في المرحلة التالية.
+                    سيتم تطوير هذه الوحدة في المرحلة
+                    التالية.
                   </div>
                 </div>
 
+                {/* Notifications */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-center gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
@@ -643,16 +694,19 @@ export default function SettingsPage() {
                       </h3>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        إعدادات التنبيهات والإشعارات داخل المنصة.
+                        إعدادات التنبيهات والإشعارات داخل
+                        المنصة.
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-500">
-                    سيتم تفعيل هذه الوحدة في المرحلة التالية.
+                    سيتم تطوير هذه الوحدة في المرحلة
+                    التالية.
                   </div>
                 </div>
 
+                {/* System */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2">
                   <div className="flex items-center gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
@@ -665,14 +719,15 @@ export default function SettingsPage() {
                       </h3>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        إعدادات الاستيراد والتقارير وسجل العمليات
-                        وإدارة النظام.
+                        إعدادات الاستيراد والتقارير وسجل
+                        العمليات وإدارة النظام.
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs font-semibold text-slate-500">
-                    سيتم تطوير هذه الوحدة ضمن مراحل النظام القادمة.
+                    سيتم تطوير هذه الوحدة ضمن مراحل
+                    النظام القادمة.
                   </div>
                 </div>
               </div>
