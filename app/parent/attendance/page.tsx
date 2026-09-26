@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -82,10 +82,35 @@ const statusInfo = {
 };
 
 export default function ParentAttendancePage() {
+  return (
+    <Suspense
+      fallback={
+        <main
+          dir="rtl"
+          className="min-h-screen bg-slate-100 flex items-center justify-center"
+        >
+          <div className="flex flex-col items-center gap-4 text-slate-600">
+            <Loader2
+              size={34}
+              className="animate-spin text-emerald-700"
+            />
+
+            <span className="font-semibold">
+              جاري تحميل صفحة الحضور...
+            </span>
+          </div>
+        </main>
+      }
+    >
+      <ParentAttendanceContent />
+    </Suspense>
+  );
+}
+
+function ParentAttendanceContent() {
   const searchParams = useSearchParams();
 
-  const studentId =
-    searchParams.get("student_id");
+  const studentId = searchParams.get("student_id");
 
   const [parent, setParent] =
     useState<ParentProfile | null>(null);
@@ -148,9 +173,6 @@ export default function ParentAttendancePage() {
         return;
       }
 
-      // ---------------------------------------------
-      // تحميل بيانات ولي الأمر وأبنائه
-      // ---------------------------------------------
       const {
         data,
         error: rpcError,
@@ -205,9 +227,6 @@ export default function ParentAttendancePage() {
         return;
       }
 
-      // ---------------------------------------------
-      // البحث عن الطالب داخل أبناء ولي الأمر فقط
-      // ---------------------------------------------
       const linkedStudent =
         (result.students || []).find(
           (item) => item.id === studentId
@@ -419,9 +438,6 @@ export default function ParentAttendancePage() {
       className="min-h-screen bg-slate-100"
     >
 
-      {/* ==================================================
-          Header
-      ================================================== */}
       <header className="bg-white border-b border-slate-200">
 
         <div className="max-w-7xl mx-auto px-6 py-5">
@@ -474,9 +490,6 @@ export default function ParentAttendancePage() {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
 
-        {/* ==================================================
-            Error
-        ================================================== */}
         {error && student && (
           <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700 font-semibold flex items-center gap-3">
             <AlertCircle size={20} />
@@ -484,9 +497,6 @@ export default function ParentAttendancePage() {
           </div>
         )}
 
-        {/* ==================================================
-            Student Information
-        ================================================== */}
         {student && (
           <section className="bg-white rounded-3xl border border-slate-200 p-6 mb-6">
 
@@ -547,9 +557,6 @@ export default function ParentAttendancePage() {
           </section>
         )}
 
-        {/* ==================================================
-            Month Filter
-        ================================================== */}
         <section className="bg-white rounded-3xl border border-slate-200 p-6 mb-6">
 
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5">
@@ -594,136 +601,51 @@ export default function ParentAttendancePage() {
 
         </section>
 
-        {/* ==================================================
-            Statistics
-        ================================================== */}
         <section className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <StatCard
+            icon={
+              <CalendarDays size={23} />
+            }
+            label="السجلات"
+            value={attendance.length}
+            className="slate"
+          />
 
-            <div className="flex items-center gap-3">
+          <StatCard
+            icon={
+              <CheckCircle2 size={23} />
+            }
+            label="حاضر"
+            value={statistics.present}
+            className="emerald"
+          />
 
-              <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
-                <CalendarDays size={23} />
-              </div>
+          <StatCard
+            icon={<XCircle size={23} />}
+            label="غائب"
+            value={statistics.absent}
+            className="red"
+          />
 
-              <div>
+          <StatCard
+            icon={<Clock3 size={23} />}
+            label="متأخر"
+            value={statistics.late}
+            className="amber"
+          />
 
-                <p className="text-xs text-slate-500">
-                  السجلات
-                </p>
-
-                <p className="text-2xl font-bold text-slate-800">
-                  {attendance.length}
-                </p>
-
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="bg-white rounded-2xl border border-emerald-200 p-5">
-
-            <div className="flex items-center gap-3">
-
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                <CheckCircle2 size={23} />
-              </div>
-
-              <div>
-
-                <p className="text-xs text-slate-500">
-                  حاضر
-                </p>
-
-                <p className="text-2xl font-bold text-emerald-700">
-                  {statistics.present}
-                </p>
-
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="bg-white rounded-2xl border border-red-200 p-5">
-
-            <div className="flex items-center gap-3">
-
-              <div className="w-11 h-11 rounded-xl bg-red-50 text-red-700 flex items-center justify-center">
-                <XCircle size={23} />
-              </div>
-
-              <div>
-
-                <p className="text-xs text-slate-500">
-                  غائب
-                </p>
-
-                <p className="text-2xl font-bold text-red-700">
-                  {statistics.absent}
-                </p>
-
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="bg-white rounded-2xl border border-amber-200 p-5">
-
-            <div className="flex items-center gap-3">
-
-              <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
-                <Clock3 size={23} />
-              </div>
-
-              <div>
-
-                <p className="text-xs text-slate-500">
-                  متأخر
-                </p>
-
-                <p className="text-2xl font-bold text-amber-700">
-                  {statistics.late}
-                </p>
-
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="bg-white rounded-2xl border border-blue-200 p-5">
-
-            <div className="flex items-center gap-3">
-
-              <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
-                <GraduationCap size={23} />
-              </div>
-
-              <div>
-
-                <p className="text-xs text-slate-500">
-                  نسبة الحضور
-                </p>
-
-                <p className="text-2xl font-bold text-blue-700">
-                  {attendanceRate}%
-                </p>
-
-              </div>
-
-            </div>
-
-          </div>
+          <StatCard
+            icon={
+              <GraduationCap size={23} />
+            }
+            label="نسبة الحضور"
+            value={`${attendanceRate}%`}
+            className="blue"
+          />
 
         </section>
 
-        {/* ==================================================
-            Attendance Table
-        ================================================== */}
         <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
 
           <div className="px-6 py-5 border-b border-slate-200">
@@ -890,9 +812,6 @@ export default function ParentAttendancePage() {
 
         </section>
 
-        {/* ==================================================
-            Bottom Information
-        ================================================== */}
         <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800 text-sm">
 
           <div className="flex items-start gap-3">
@@ -921,6 +840,88 @@ export default function ParentAttendancePage() {
       </div>
 
     </main>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  className,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  className:
+    | "slate"
+    | "emerald"
+    | "red"
+    | "amber"
+    | "blue";
+}) {
+  const styles = {
+    slate: {
+      border: "border-slate-200",
+      bg: "bg-slate-100",
+      text: "text-slate-600",
+      value: "text-slate-800",
+    },
+    emerald: {
+      border: "border-emerald-200",
+      bg: "bg-emerald-50",
+      text: "text-emerald-700",
+      value: "text-emerald-700",
+    },
+    red: {
+      border: "border-red-200",
+      bg: "bg-red-50",
+      text: "text-red-700",
+      value: "text-red-700",
+    },
+    amber: {
+      border: "border-amber-200",
+      bg: "bg-amber-50",
+      text: "text-amber-700",
+      value: "text-amber-700",
+    },
+    blue: {
+      border: "border-blue-200",
+      bg: "bg-blue-50",
+      text: "text-blue-700",
+      value: "text-blue-700",
+    },
+  };
+
+  const style = styles[className];
+
+  return (
+    <div
+      className={`bg-white rounded-2xl border ${style.border} p-5`}
+    >
+      <div className="flex items-center gap-3">
+
+        <div
+          className={`w-11 h-11 rounded-xl ${style.bg} ${style.text} flex items-center justify-center`}
+        >
+          {icon}
+        </div>
+
+        <div>
+
+          <p className="text-xs text-slate-500">
+            {label}
+          </p>
+
+          <p
+            className={`text-2xl font-bold ${style.value}`}
+          >
+            {value}
+          </p>
+
+        </div>
+
+      </div>
+    </div>
   );
 }
 
