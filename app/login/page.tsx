@@ -70,6 +70,7 @@ export default function LoginPage() {
 
     // =====================================================
     // مدير الإدارة التعليمية الأزهرية
+    // الدور الرسمي: super_admin
     // =====================================================
     if (profile.role === "super_admin") {
       if (!profile.directorate_id) {
@@ -130,7 +131,7 @@ export default function LoginPage() {
     }
 
     // =====================================================
-    // ولي الأمر إذا كان لديه حساب Auth
+    // ولي الأمر
     // =====================================================
     if (profile.role === "parent") {
       router.push("/parent");
@@ -139,7 +140,7 @@ export default function LoginPage() {
     }
 
     // =====================================================
-    // أدوار أخرى
+    // الأدوار الأخرى
     // =====================================================
     await supabase.auth.signOut();
 
@@ -149,7 +150,7 @@ export default function LoginPage() {
   }
 
   // =====================================================
-  // دخول ولي الأمر
+  // فتح صفحة دخول ولي الأمر
   // =====================================================
   function handleParentLogin() {
     if (parentLoading) return;
@@ -157,7 +158,9 @@ export default function LoginPage() {
     setParentLoading(true);
     setError("");
 
-    router.push("/parent-login");
+    // استخدام انتقال المتصفح المباشر
+    // حتى لا يتأثر الانتقال بمشكلة في Next Router
+    window.location.href = "/parent-login";
   }
 
   return (
