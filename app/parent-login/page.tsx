@@ -13,14 +13,12 @@ export default function ParentLoginPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   async function handleParentLogin(e: FormEvent) {
     e.preventDefault();
 
     setLoading(true);
     setError("");
-    setSuccess("");
 
     const cleanNationalId = nationalId.trim();
     const cleanEmail = email.trim().toLowerCase();
@@ -38,8 +36,7 @@ export default function ParentLoginPage() {
     }
 
     try {
-      // التحقق من أن الرقم القومي للطالب مرتبط بالفعل
-      // بحساب ولي الأمر صاحب البريد الإلكتروني
+      // التحقق من أن الرقم القومي للطالب مرتبط بولي الأمر
       const { data: verified, error: verifyError } =
         await supabase.rpc("verify_parent_identity", {
           p_national_id: cleanNationalId,
@@ -59,50 +56,34 @@ export default function ParentLoginPage() {
 
       if (!verified) {
         setError(
-          "الرقم القومي أو البريد الإلكتروني غير مرتبط بحساب ولي أمر."
+          "الرقم القومي أو البريد الإلكتروني غير مرتبط بولي أمر مسجل بالنظام."
         );
 
         setLoading(false);
         return;
       }
 
-      // إرسال رمز دخول OTP إلى بريد ولي الأمر
-      const { error: otpError } =
-        await supabase.auth.signInWithOtp({
-          email: cleanEmail,
-          options: {
-            shouldCreateUser: false,
-          },
-        });
-
-      if (otpError) {
-        console.error("OTP error:", otpError);
-
-        setError(
-          "تعذر إرسال رمز الدخول. تأكد من البريد الإلكتروني وحاول مرة أخرى."
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      // حفظ البريد مؤقتًا للصفحة التالية
+      // حفظ الرقم القومي مؤقتًا لاستخدامه في لوحة ولي الأمر
       sessionStorage.setItem(
-        "parent_login_email",
+        "parent_national_id",
+        cleanNationalId
+      );
+
+      sessionStorage.setItem(
+        "parent_email",
         cleanEmail
       );
 
-      setSuccess(
-        "تم التحقق من البيانات وإرسال رمز الدخول إلى بريد ولي الأمر."
+      // الدخول مباشرة إلى لوحة ولي الأمر
+      router.push("/parent");
+      router.refresh();
+    } catch (error) {
+      console.error("Parent login error:", error);
+
+      setError(
+        "حدث خطأ غير متوقع أثناء تسجيل الدخول."
       );
 
-      setTimeout(() => {
-        router.push("/parent-login/verify");
-      }, 1000);
-    } catch (error) {
-      console.error(error);
-
-      setError("حدث خطأ غير متوقع. حاول مرة أخرى.");
       setLoading(false);
     }
   }
@@ -133,11 +114,13 @@ export default function ParentLoginPage() {
 
           </div>
 
+          {/* Information */}
           <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4 mb-6">
 
             <p className="text-sm text-emerald-800 leading-7">
-              أدخل الرقم القومي لأحد أبنائك المسجلين بالمعهد،
-              بالإضافة إلى البريد الإلكتروني المسجل لولي الأمر.
+              أدخل الرقم القومي لأحد أبنائك المسجلين
+              بالنظام والبريد الإلكتروني لولي الأمر
+              للدخول مباشرة إلى لوحة ولي الأمر.
             </p>
 
           </div>
@@ -197,20 +180,14 @@ export default function ParentLoginPage() {
               </div>
             )}
 
-            {success && (
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 p-3 text-sm text-center leading-6">
-                {success}
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={loading}
               className="w-full rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-400 text-white font-bold py-3 transition"
             >
               {loading
-                ? "جاري التحقق..."
-                : "التحقق والدخول"}
+                ? "جاري الدخول..."
+                : "دخول ولي الأمر"}
             </button>
 
           </form>
@@ -229,7 +206,7 @@ export default function ParentLoginPage() {
           <div className="mt-8 pt-6 border-t border-slate-200 text-center">
 
             <p className="text-xs text-slate-400">
-              دخول آمن لأولياء الأمور
+              نظام الإدارة والمتابعة المركزية للمعاهد الأزهرية
             </p>
 
           </div>
