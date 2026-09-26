@@ -14,6 +14,7 @@ import {
   Mail,
   Phone,
 } from "lucide-react";
+
 import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
 
@@ -48,9 +49,15 @@ type Institute = {
   directorate_id: string | null;
 };
 
+/*
+|--------------------------------------------------------------------------
+| أسماء الأدوار
+|--------------------------------------------------------------------------
+*/
+
 const roleLabels: Record<Role, string> = {
   super_admin: "مدير الإدارة التعليمية",
-  director: "مدير الإدارة التعليمية",
+  director: "مدير الإدارة التعليمية (قديم)",
   deputy: "وكيل الإدارة التعليمية",
   sheikh: "شيخ المعهد",
   institute_deputy: "وكيل شيخ المعهد",
@@ -62,7 +69,7 @@ const roleLabels: Record<Role, string> = {
 
 const roleColors: Record<Role, string> = {
   super_admin: "bg-purple-100 text-purple-800",
-  director: "bg-purple-100 text-purple-800",
+  director: "bg-gray-100 text-gray-700",
   deputy: "bg-indigo-100 text-indigo-800",
   sheikh: "bg-blue-100 text-blue-800",
   institute_deputy: "bg-cyan-100 text-cyan-800",
@@ -72,6 +79,103 @@ const roleColors: Record<Role, string> = {
   student: "bg-orange-100 text-orange-800",
 };
 
+/*
+|--------------------------------------------------------------------------
+| الأدوار المسموح بإضافتها من الشاشة
+|--------------------------------------------------------------------------
+| مهم:
+| director غير موجود هنا حتى لا يظهر "مدير الإدارة التعليمية" مرتين.
+| الدور الرسمي الجديد هو super_admin.
+*/
+
+const selectableRoles: {
+  value: Role;
+  label: string;
+}[] = [
+  {
+    value: "super_admin",
+    label: "مدير الإدارة التعليمية",
+  },
+  {
+    value: "deputy",
+    label: "وكيل الإدارة التعليمية",
+  },
+  {
+    value: "sheikh",
+    label: "شيخ المعهد",
+  },
+  {
+    value: "institute_deputy",
+    label: "وكيل شيخ المعهد",
+  },
+  {
+    value: "employee",
+    label: "موظف",
+  },
+  {
+    value: "teacher",
+    label: "مدرس",
+  },
+  {
+    value: "parent",
+    label: "ولي أمر",
+  },
+  {
+    value: "student",
+    label: "طالب",
+  },
+];
+
+/*
+|--------------------------------------------------------------------------
+| أدوار فلتر البحث
+|--------------------------------------------------------------------------
+*/
+
+const filterRoles: {
+  value: string;
+  label: string;
+}[] = [
+  {
+    value: "super_admin",
+    label: "مدير الإدارة التعليمية",
+  },
+  {
+    value: "deputy",
+    label: "وكيل الإدارة التعليمية",
+  },
+  {
+    value: "sheikh",
+    label: "شيخ المعهد",
+  },
+  {
+    value: "institute_deputy",
+    label: "وكيل شيخ المعهد",
+  },
+  {
+    value: "employee",
+    label: "موظف",
+  },
+  {
+    value: "teacher",
+    label: "مدرس",
+  },
+  {
+    value: "parent",
+    label: "ولي أمر",
+  },
+  {
+    value: "student",
+    label: "طالب",
+  },
+];
+
+/*
+|--------------------------------------------------------------------------
+| الصفحة
+|--------------------------------------------------------------------------
+*/
+
 export default function UsersPage() {
   return (
     <AppShell>
@@ -80,6 +184,12 @@ export default function UsersPage() {
   );
 }
 
+/*
+|--------------------------------------------------------------------------
+| إدارة المستخدمين
+|--------------------------------------------------------------------------
+*/
+
 function UsersManagement() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [institutes, setInstitutes] = useState<Institute[]>([]);
@@ -87,7 +197,7 @@ function UsersManagement() {
   const [currentUserRole, setCurrentUserRole] =
     useState<Role | null>(null);
 
-  const [currentDirectorateId, setCurrentDirectorateId] =
+  const [currentAuthUserId, setCurrentAuthUserId] =
     useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -98,6 +208,7 @@ function UsersManagement() {
   const [instituteFilter, setInstituteFilter] = useState("all");
 
   const [showModal, setShowModal] = useState(false);
+
   const [editingUser, setEditingUser] =
     useState<Profile | null>(null);
 
@@ -111,6 +222,12 @@ function UsersManagement() {
   });
 
   const [message, setMessage] = useState("");
+
+  /*
+  |--------------------------------------------------------------------------
+  | تحميل البيانات
+  |--------------------------------------------------------------------------
+  */
 
   useEffect(() => {
     loadData();
@@ -132,16 +249,30 @@ function UsersManagement() {
         return;
       }
 
-      const { data: currentProfile, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select("role, directorate_id")
-          .eq("id", user.id)
-          .maybeSingle();
+      setCurrentAuthUserId(user.id);
+
+      /*
+      |--------------------------------------------------------------------------
+      | بيانات المستخدم الحالي
+      |--------------------------------------------------------------------------
+      */
+
+      const {
+        data: currentProfile,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select("role, directorate_id")
+        .eq("id", user.id)
+        .maybeSingle();
 
       if (profileError || !currentProfile) {
         console.error(profileError);
-        setMessage("لم يتم العثور على بيانات المستخدم الحالي");
+
+        setMessage(
+          "لم يتم العثور على بيانات المستخدم الحالي"
+        );
+
         setLoading(false);
         return;
       }
@@ -149,12 +280,17 @@ function UsersManagement() {
       const role = currentProfile.role as Role;
 
       /*
-       * مدير الإدارة التعليمية:
-       * super_admin
-       *
-       * ونحتفظ بالدور director لأن هذا الدور موجود بالفعل
-       * في قاعدة البيانات الحالية، بدون اعتباره الدور الأساسي.
-       */
+      |--------------------------------------------------------------------------
+      | صلاحية إدارة المستخدمين
+      |--------------------------------------------------------------------------
+      |
+      | super_admin هو الدور الرسمي لمدير الإدارة.
+      |
+      | director موجود فقط للتوافق مع الحساب القديم
+      | الموجود حاليًا في قاعدة البيانات.
+      |
+      */
+
       if (
         role !== "super_admin" &&
         role !== "director"
@@ -162,19 +298,19 @@ function UsersManagement() {
         setMessage(
           "ليس لديك صلاحية الوصول إلى إدارة المستخدمين"
         );
+
         setLoading(false);
         return;
       }
 
       setCurrentUserRole(role);
 
-      setCurrentDirectorateId(
-        currentProfile.directorate_id || null
-      );
-
       /*
-       * تحميل المعاهد التابعة للإدارة الحالية
-       */
+      |--------------------------------------------------------------------------
+      | تحميل المعاهد التابعة للإدارة
+      |--------------------------------------------------------------------------
+      */
+
       let institutesQuery = supabase
         .from("institutes")
         .select(
@@ -183,10 +319,11 @@ function UsersManagement() {
         .order("name");
 
       if (currentProfile.directorate_id) {
-        institutesQuery = institutesQuery.eq(
-          "directorate_id",
-          currentProfile.directorate_id
-        );
+        institutesQuery =
+          institutesQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
+          );
       }
 
       const {
@@ -196,16 +333,26 @@ function UsersManagement() {
 
       if (institutesError) {
         console.error(institutesError);
-        setMessage("حدث خطأ أثناء تحميل المعاهد");
+
+        setMessage(
+          "حدث خطأ أثناء تحميل المعاهد"
+        );
+
         setLoading(false);
         return;
       }
 
-      setInstitutes(institutesData || []);
+      setInstitutes(
+        (institutesData ||
+          []) as Institute[]
+      );
 
       /*
-       * تحميل المستخدمين التابعين للإدارة
-       */
+      |--------------------------------------------------------------------------
+      | تحميل المستخدمين
+      |--------------------------------------------------------------------------
+      */
+
       let usersQuery = supabase
         .from("profiles")
         .select(
@@ -225,10 +372,11 @@ function UsersManagement() {
         .order("full_name");
 
       if (currentProfile.directorate_id) {
-        usersQuery = usersQuery.eq(
-          "directorate_id",
-          currentProfile.directorate_id
-        );
+        usersQuery =
+          usersQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
+          );
       }
 
       const {
@@ -238,7 +386,11 @@ function UsersManagement() {
 
       if (usersError) {
         console.error(usersError);
-        setMessage("حدث خطأ أثناء تحميل المستخدمين");
+
+        setMessage(
+          "حدث خطأ أثناء تحميل المستخدمين"
+        );
+
         setLoading(false);
         return;
       }
@@ -248,16 +400,26 @@ function UsersManagement() {
       );
     } catch (error) {
       console.error(error);
-      setMessage("حدث خطأ غير متوقع");
+
+      setMessage(
+        "حدث خطأ غير متوقع"
+      );
     }
 
     setLoading(false);
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | فلترة المستخدمين
+  |--------------------------------------------------------------------------
+  */
+
   const filteredUsers = useMemo(() => {
-    const search = searchTerm
-      .trim()
-      .toLowerCase();
+    const search =
+      searchTerm
+        .trim()
+        .toLowerCase();
 
     return users.filter((user) => {
       const matchesSearch =
@@ -278,7 +440,8 @@ function UsersManagement() {
 
       const matchesInstitute =
         instituteFilter === "all" ||
-        user.institute_id === instituteFilter;
+        user.institute_id ===
+          instituteFilter;
 
       return (
         matchesSearch &&
@@ -292,6 +455,12 @@ function UsersManagement() {
     roleFilter,
     instituteFilter,
   ]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | الإحصائيات
+  |--------------------------------------------------------------------------
+  */
 
   const statistics = useMemo(() => {
     return {
@@ -319,6 +488,12 @@ function UsersManagement() {
     };
   }, [users]);
 
+  /*
+  |--------------------------------------------------------------------------
+  | اسم المعهد
+  |--------------------------------------------------------------------------
+  */
+
   function getInstituteName(
     instituteId: string | null
   ) {
@@ -326,14 +501,22 @@ function UsersManagement() {
       return "—";
     }
 
-    const institute = institutes.find(
-      (item) => item.id === instituteId
-    );
+    const institute =
+      institutes.find(
+        (item) =>
+          item.id === instituteId
+      );
 
     return institute
       ? institute.name
       : "غير محدد";
   }
+
+  /*
+  |--------------------------------------------------------------------------
+  | فتح إضافة مستخدم
+  |--------------------------------------------------------------------------
+  */
 
   function openAddModal() {
     setEditingUser(null);
@@ -351,21 +534,45 @@ function UsersManagement() {
     setShowModal(true);
   }
 
-  function openEditModal(user: Profile) {
+  /*
+  |--------------------------------------------------------------------------
+  | فتح تعديل مستخدم
+  |--------------------------------------------------------------------------
+  */
+
+  function openEditModal(
+    user: Profile
+  ) {
     setEditingUser(user);
 
     setForm({
-      full_name: user.full_name || "",
-      phone: user.phone || "",
-      email: user.email || "",
+      full_name:
+        user.full_name || "",
+
+      phone:
+        user.phone || "",
+
+      email:
+        user.email || "",
+
       role: user.role,
-      institute_id: user.institute_id || "",
-      is_active: user.is_active !== false,
+
+      institute_id:
+        user.institute_id || "",
+
+      is_active:
+        user.is_active !== false,
     });
 
     setMessage("");
     setShowModal(true);
   }
+
+  /*
+  |--------------------------------------------------------------------------
+  | إغلاق النافذة
+  |--------------------------------------------------------------------------
+  */
 
   function closeModal() {
     if (saving) {
@@ -376,9 +583,18 @@ function UsersManagement() {
     setEditingUser(null);
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | حفظ المستخدم
+  |--------------------------------------------------------------------------
+  */
+
   async function saveUser() {
     if (!form.full_name.trim()) {
-      setMessage("يرجى إدخال اسم المستخدم");
+      setMessage(
+        "يرجى إدخال اسم المستخدم"
+      );
+
       return;
     }
 
@@ -394,6 +610,7 @@ function UsersManagement() {
         setMessage(
           "انتهت جلسة تسجيل الدخول"
         );
+
         setSaving(false);
         return;
       }
@@ -415,14 +632,18 @@ function UsersManagement() {
         setMessage(
           "تعذر التحقق من صلاحيات المستخدم"
         );
+
         setSaving(false);
         return;
       }
 
+      /*
+      |--------------------------------------------------------------------------
+      | تعديل مستخدم موجود
+      |--------------------------------------------------------------------------
+      */
+
       if (editingUser) {
-        /*
-         * تعديل مستخدم موجود
-         */
         const updateData = {
           full_name:
             form.full_name.trim(),
@@ -476,9 +697,15 @@ function UsersManagement() {
         await loadData();
       } else {
         /*
-         * إنشاء حساب دخول جديد سيتم ربطه لاحقًا
-         * مع Supabase Auth.
-         */
+        |--------------------------------------------------------------------------
+        | إضافة مستخدم جديد
+        |--------------------------------------------------------------------------
+        |
+        | إنشاء حساب Auth حقيقي سيتم تنفيذه في المرحلة
+        | الخاصة بإنشاء المستخدمين.
+        |
+        */
+
         setMessage(
           "إضافة حساب دخول جديد تحتاج إلى إنشاء مستخدم في Supabase Auth. سننفذها في خطوة إنشاء المستخدمين."
         );
@@ -488,6 +715,7 @@ function UsersManagement() {
       }
     } catch (error) {
       console.error(error);
+
       setMessage(
         "حدث خطأ غير متوقع"
       );
@@ -496,9 +724,30 @@ function UsersManagement() {
     setSaving(false);
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | تفعيل / تعطيل المستخدم
+  |--------------------------------------------------------------------------
+  */
+
   async function toggleUserStatus(
     user: Profile
   ) {
+    /*
+     * لا نسمح للمستخدم بتعطيل حسابه الحالي.
+     */
+
+    if (
+      currentAuthUserId &&
+      user.id === currentAuthUserId
+    ) {
+      setMessage(
+        "لا يمكن تعطيل حساب المستخدم الحالي"
+      );
+
+      return;
+    }
+
     const newStatus =
       user.is_active === false;
 
@@ -556,6 +805,12 @@ function UsersManagement() {
     }
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | شاشة التحميل
+  |--------------------------------------------------------------------------
+  */
+
   if (loading) {
     return (
       <AppShell>
@@ -575,12 +830,19 @@ function UsersManagement() {
     );
   }
 
+  /*
+  |--------------------------------------------------------------------------
+  | الواجهة
+  |--------------------------------------------------------------------------
+  */
+
   return (
     <AppShell>
       <main className="min-h-screen bg-gray-50 p-6 md:p-8">
         <div className="max-w-7xl mx-auto">
 
           {/* Header */}
+
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
 
             <div>
@@ -617,6 +879,7 @@ function UsersManagement() {
           </div>
 
           {/* Message */}
+
           {message && (
             <div className="mb-6 bg-white border border-blue-200 text-blue-700 rounded-xl p-4">
               {message}
@@ -624,6 +887,7 @@ function UsersManagement() {
           )}
 
           {/* Statistics */}
+
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
 
             <StatCard
@@ -665,11 +929,13 @@ function UsersManagement() {
           </div>
 
           {/* Filters */}
+
           <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
               {/* Search */}
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   بحث
@@ -697,7 +963,8 @@ function UsersManagement() {
                 </div>
               </div>
 
-              {/* Role */}
+              {/* Role Filter */}
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   الدور
@@ -712,26 +979,31 @@ function UsersManagement() {
                   }
                   className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                 >
+
                   <option value="all">
                     جميع الأدوار
                   </option>
 
-                  {Object.entries(
-                    roleLabels
-                  ).map(
-                    ([role, label]) => (
+                  {filterRoles.map(
+                    (role) => (
                       <option
-                        key={role}
-                        value={role}
+                        key={
+                          role.value
+                        }
+                        value={
+                          role.value
+                        }
                       >
-                        {label}
+                        {role.label}
                       </option>
                     )
                   )}
+
                 </select>
               </div>
 
-              {/* Institute */}
+              {/* Institute Filter */}
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   المعهد
@@ -746,6 +1018,7 @@ function UsersManagement() {
                   }
                   className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                 >
+
                   <option value="all">
                     جميع المعاهد
                   </option>
@@ -753,15 +1026,20 @@ function UsersManagement() {
                   {institutes.map(
                     (institute) => (
                       <option
-                        key={institute.id}
+                        key={
+                          institute.id
+                        }
                         value={
                           institute.id
                         }
                       >
-                        {institute.name}
+                        {
+                          institute.name
+                        }
                       </option>
                     )
                   )}
+
                 </select>
               </div>
 
@@ -769,6 +1047,7 @@ function UsersManagement() {
           </div>
 
           {/* Users Table */}
+
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
 
             <div className="p-6 border-b">
@@ -784,7 +1063,8 @@ function UsersManagement() {
 
             </div>
 
-            {filteredUsers.length === 0 ? (
+            {filteredUsers.length ===
+            0 ? (
               <div className="text-center py-16 text-gray-500">
                 لا توجد بيانات مطابقة
               </div>
@@ -833,7 +1113,9 @@ function UsersManagement() {
                           <td className="px-6 py-5">
 
                             <div className="font-semibold text-gray-800">
-                              {user.full_name}
+                              {
+                                user.full_name
+                              }
                             </div>
 
                             <div className="flex flex-col gap-1 mt-1 text-sm text-gray-500">
@@ -841,14 +1123,18 @@ function UsersManagement() {
                               {user.email && (
                                 <span className="flex items-center gap-1">
                                   <Mail size={14} />
-                                  {user.email}
+                                  {
+                                    user.email
+                                  }
                                 </span>
                               )}
 
                               {user.phone && (
                                 <span className="flex items-center gap-1">
                                   <Phone size={14} />
-                                  {user.phone}
+                                  {
+                                    user.phone
+                                  }
                                 </span>
                               )}
 
@@ -866,10 +1152,12 @@ function UsersManagement() {
                                 "bg-gray-100 text-gray-800"
                               }`}
                             >
-                              {roleLabels[
+                              {
+                                roleLabels[
+                                  user.role
+                                ] ||
                                 user.role
-                              ] ||
-                                user.role}
+                              }
                             </span>
 
                           </td>
@@ -962,12 +1250,14 @@ function UsersManagement() {
       </main>
 
       {/* Modal */}
+
       {showModal && (
         <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4">
 
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden">
 
             {/* Modal Header */}
+
             <div className="flex items-center justify-between px-6 py-5 border-b">
 
               <div>
@@ -997,11 +1287,13 @@ function UsersManagement() {
             </div>
 
             {/* Modal Body */}
+
             <div className="p-6">
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                {/* Name */}
+                {/* Full Name */}
+
                 <div className="md:col-span-2">
 
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1028,6 +1320,7 @@ function UsersManagement() {
                 </div>
 
                 {/* Email */}
+
                 <div>
 
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1054,6 +1347,7 @@ function UsersManagement() {
                 </div>
 
                 {/* Phone */}
+
                 <div>
 
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1080,6 +1374,7 @@ function UsersManagement() {
                 </div>
 
                 {/* Role */}
+
                 <div>
 
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1101,23 +1396,43 @@ function UsersManagement() {
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {Object.entries(
-                      roleLabels
-                    ).map(
-                      ([role, label]) => (
+
+                    {/*
+                     * عند تعديل حساب قديم يحمل director
+                     * نظهره فقط لهذا الحساب.
+                     * لن يظهر عند إضافة مستخدم جديد.
+                     */}
+
+                    {editingUser?.role ===
+                      "director" && (
+                      <option value="director">
+                        مدير الإدارة التعليمية (قديم)
+                      </option>
+                    )}
+
+                    {selectableRoles.map(
+                      (role) => (
                         <option
-                          key={role}
-                          value={role}
+                          key={
+                            role.value
+                          }
+                          value={
+                            role.value
+                          }
                         >
-                          {label}
+                          {
+                            role.label
+                          }
                         </option>
                       )
                     )}
+
                   </select>
 
                 </div>
 
                 {/* Institute */}
+
                 <div>
 
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1167,6 +1482,7 @@ function UsersManagement() {
                 </div>
 
                 {/* Active */}
+
                 <div className="md:col-span-2">
 
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -1199,7 +1515,8 @@ function UsersManagement() {
 
               </div>
 
-              {/* Modal Actions */}
+              {/* Actions */}
+
               <div className="flex justify-end gap-3 mt-8 pt-5 border-t">
 
                 <button
@@ -1239,6 +1556,12 @@ function UsersManagement() {
     </AppShell>
   );
 }
+
+/*
+|--------------------------------------------------------------------------
+| بطاقة الإحصائيات
+|--------------------------------------------------------------------------
+*/
 
 function StatCard({
   title,
