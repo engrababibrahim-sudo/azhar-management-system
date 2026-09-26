@@ -16,6 +16,11 @@ import {
   LogOut,
   Mail,
   Phone,
+  X,
+  UserRound,
+  School,
+  Hash,
+  VenusAndMars,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase/client";
@@ -56,6 +61,10 @@ export default function ParentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // الطالب المختار لعرض التفاصيل
+  const [selectedStudent, setSelectedStudent] =
+    useState<Student | null>(null);
+
   useEffect(() => {
     loadParentData();
   }, []);
@@ -66,7 +75,7 @@ export default function ParentPage() {
 
     try {
       // --------------------------------------------------
-      // 1) قراءة بيانات الدخول التي تم حفظها في parent-login
+      // 1) بيانات دخول ولي الأمر
       // --------------------------------------------------
       const nationalId = sessionStorage.getItem("parent_national_id");
       const email = sessionStorage.getItem("parent_email");
@@ -77,7 +86,7 @@ export default function ParentPage() {
       }
 
       // --------------------------------------------------
-      // 2) التحقق وتحميل لوحة ولي الأمر من RPC
+      // 2) تحميل لوحة ولي الأمر
       // --------------------------------------------------
       const { data, error: rpcError } = await supabase.rpc(
         "get_parent_dashboard",
@@ -89,9 +98,11 @@ export default function ParentPage() {
 
       if (rpcError) {
         console.error("Parent dashboard RPC error:", rpcError);
+
         setError(
           "تعذر تحميل بيانات ولي الأمر. يرجى المحاولة مرة أخرى."
         );
+
         setLoading(false);
         return;
       }
@@ -123,7 +134,10 @@ export default function ParentPage() {
       setStudents(result.students || []);
     } catch (err) {
       console.error("Parent dashboard error:", err);
-      setError("حدث خطأ غير متوقع أثناء تحميل لوحة ولي الأمر.");
+
+      setError(
+        "حدث خطأ غير متوقع أثناء تحميل لوحة ولي الأمر."
+      );
     } finally {
       setLoading(false);
     }
@@ -137,6 +151,29 @@ export default function ParentPage() {
     sessionStorage.removeItem("parent_email");
 
     router.replace("/parent-login");
+  }
+
+  // --------------------------------------------------
+  // متابعة حضور الطالب
+  // --------------------------------------------------
+  function handleAttendance(student: Student) {
+    /*
+      نرسل بيانات الطالب في الرابط.
+      سننشئ صفحة /parent/attendance في الخطوة التالية
+      لتعرض حضور هذا الطالب فقط.
+    */
+    router.push(
+      `/parent/attendance?student_id=${encodeURIComponent(
+        student.id
+      )}`
+    );
+  }
+
+  // --------------------------------------------------
+  // عرض تفاصيل الطالب
+  // --------------------------------------------------
+  function handleStudentDetails(student: Student) {
+    setSelectedStudent(student);
   }
 
   // --------------------------------------------------
@@ -166,9 +203,6 @@ export default function ParentPage() {
     (student) => student.is_active
   ).length;
 
-  // --------------------------------------------------
-  // Dashboard
-  // --------------------------------------------------
   return (
     <main dir="rtl" className="min-h-screen bg-slate-100">
 
@@ -192,7 +226,6 @@ export default function ParentPage() {
 
             <div className="flex items-center gap-3">
 
-              {/* الشكاوى */}
               <Link
                 href="/parent-complaints"
                 className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm"
@@ -201,7 +234,6 @@ export default function ParentPage() {
                 شكاوى أولياء الأمور
               </Link>
 
-              {/* تسجيل الخروج */}
               <button
                 type="button"
                 onClick={handleLogout}
@@ -259,7 +291,6 @@ export default function ParentPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
               <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
-
                 <div className="flex items-center gap-3">
 
                   <Users
@@ -278,11 +309,9 @@ export default function ParentPage() {
                   </div>
 
                 </div>
-
               </div>
 
               <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
-
                 <div className="flex items-center gap-3">
 
                   <Mail
@@ -301,11 +330,9 @@ export default function ParentPage() {
                   </div>
 
                 </div>
-
               </div>
 
               <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
-
                 <div className="flex items-center gap-3">
 
                   <Phone
@@ -324,11 +351,9 @@ export default function ParentPage() {
                   </div>
 
                 </div>
-
               </div>
 
               <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
-
                 <div className="flex items-center gap-3">
 
                   <GraduationCap
@@ -347,11 +372,9 @@ export default function ParentPage() {
                   </div>
 
                 </div>
-
               </div>
 
             </div>
-
           </section>
         )}
 
@@ -360,9 +383,7 @@ export default function ParentPage() {
         ================================================== */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
 
-          {/* Linked children */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
-
             <div className="flex items-center justify-between">
 
               <div>
@@ -380,12 +401,9 @@ export default function ParentPage() {
               </div>
 
             </div>
-
           </div>
 
-          {/* Active children */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
-
             <div className="flex items-center justify-between">
 
               <div>
@@ -403,12 +421,9 @@ export default function ParentPage() {
               </div>
 
             </div>
-
           </div>
 
-          {/* Attendance */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
-
             <div className="flex items-center justify-between">
 
               <div>
@@ -426,10 +441,8 @@ export default function ParentPage() {
               </div>
 
             </div>
-
           </div>
 
-          {/* Complaints */}
           <Link
             href="/parent-complaints"
             className="group bg-white rounded-2xl border border-red-200 p-5 hover:border-red-400 hover:shadow-md transition cursor-pointer"
@@ -451,7 +464,7 @@ export default function ParentPage() {
                 </p>
               </div>
 
-              <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center group-hover:bg-red-100 transition">
+              <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center">
                 <MessageSquareWarning size={24} />
               </div>
 
@@ -625,9 +638,7 @@ export default function ParentPage() {
 
                   <div className="mt-5 space-y-3">
 
-                    {/* Institute */}
                     <div className="flex items-start gap-3 text-sm">
-
                       <BookOpen
                         size={18}
                         className="text-slate-400 mt-0.5 shrink-0"
@@ -640,10 +651,8 @@ export default function ParentPage() {
                       <span className="font-semibold text-slate-800">
                         {student.institute_name || "غير محدد"}
                       </span>
-
                     </div>
 
-                    {/* Institute code */}
                     {student.institute_code && (
                       <div className="text-sm text-slate-500">
                         كود المعهد:{" "}
@@ -653,7 +662,6 @@ export default function ParentPage() {
                       </div>
                     )}
 
-                    {/* Gender */}
                     {student.gender && (
                       <div className="text-sm text-slate-600">
                         النوع:{" "}
@@ -663,7 +671,6 @@ export default function ParentPage() {
                       </div>
                     )}
 
-                    {/* Date of birth */}
                     {student.date_of_birth && (
                       <div className="text-sm text-slate-600">
                         تاريخ الميلاد:{" "}
@@ -675,20 +682,28 @@ export default function ParentPage() {
 
                   </div>
 
-                  {/* Actions */}
+                  {/* ==================================================
+                      Actions
+                  ================================================== */}
                   <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 gap-3">
 
+                    {/* متابعة الحضور */}
                     <button
                       type="button"
-                      className="rounded-xl bg-emerald-50 text-emerald-700 py-2.5 text-sm font-semibold hover:bg-emerald-100 transition"
+                      onClick={() => handleAttendance(student)}
+                      className="rounded-xl bg-emerald-50 text-emerald-700 py-2.5 text-sm font-semibold hover:bg-emerald-100 transition flex items-center justify-center gap-2"
                     >
+                      <CalendarCheck size={17} />
                       متابعة الحضور
                     </button>
 
+                    {/* التفاصيل */}
                     <button
                       type="button"
-                      className="rounded-xl bg-slate-100 text-slate-700 py-2.5 text-sm font-semibold hover:bg-slate-200 transition"
+                      onClick={() => handleStudentDetails(student)}
+                      className="rounded-xl bg-slate-100 text-slate-700 py-2.5 text-sm font-semibold hover:bg-slate-200 transition flex items-center justify-center gap-2"
                     >
+                      <UserRound size={17} />
                       التفاصيل
                     </button>
 
@@ -705,6 +720,261 @@ export default function ParentPage() {
         </section>
 
       </div>
+
+      {/* ==================================================
+          Student Details Modal
+      ================================================== */}
+      {selectedStudent && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setSelectedStudent(null)}
+        >
+
+          <div
+            className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden"
+            onClick={(event) => event.stopPropagation()}
+          >
+
+            {/* Modal Header */}
+            <div className="bg-emerald-700 text-white px-6 py-5">
+
+              <div className="flex items-center justify-between gap-4">
+
+                <div className="flex items-center gap-3">
+
+                  <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
+                    <GraduationCap size={25} />
+                  </div>
+
+                  <div>
+
+                    <h2 className="text-xl font-bold">
+                      بيانات الطالب
+                    </h2>
+
+                    <p className="text-sm text-emerald-100 mt-1">
+                      {selectedStudent.full_name}
+                    </p>
+
+                  </div>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudent(null)}
+                  className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition"
+                  aria-label="إغلاق"
+                >
+                  <X size={22} />
+                </button>
+
+              </div>
+
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                {/* Name */}
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                  <div className="flex items-center gap-3">
+
+                    <UserRound
+                      size={20}
+                      className="text-emerald-700"
+                    />
+
+                    <div>
+
+                      <p className="text-xs text-slate-500">
+                        اسم الطالب
+                      </p>
+
+                      <p className="font-bold text-slate-800 mt-1">
+                        {selectedStudent.full_name}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* Student Code */}
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                  <div className="flex items-center gap-3">
+
+                    <Hash
+                      size={20}
+                      className="text-blue-700"
+                    />
+
+                    <div>
+
+                      <p className="text-xs text-slate-500">
+                        كود الطالب
+                      </p>
+
+                      <p className="font-bold text-slate-800 mt-1">
+                        {selectedStudent.student_code || "غير مسجل"}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* Gender */}
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                  <div className="flex items-center gap-3">
+
+                    <VenusAndMars
+                      size={20}
+                      className="text-purple-700"
+                    />
+
+                    <div>
+
+                      <p className="text-xs text-slate-500">
+                        النوع
+                      </p>
+
+                      <p className="font-bold text-slate-800 mt-1">
+                        {selectedStudent.gender || "غير محدد"}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* Institute */}
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                  <div className="flex items-center gap-3">
+
+                    <School
+                      size={20}
+                      className="text-amber-700"
+                    />
+
+                    <div>
+
+                      <p className="text-xs text-slate-500">
+                        المعهد
+                      </p>
+
+                      <p className="font-bold text-slate-800 mt-1">
+                        {selectedStudent.institute_name ||
+                          "غير محدد"}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* Institute Code */}
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                  <div className="flex items-center gap-3">
+
+                    <BookOpen
+                      size={20}
+                      className="text-cyan-700"
+                    />
+
+                    <div>
+
+                      <p className="text-xs text-slate-500">
+                        كود المعهد
+                      </p>
+
+                      <p className="font-bold text-slate-800 mt-1">
+                        {selectedStudent.institute_code ||
+                          "غير مسجل"}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* Status */}
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+
+                  <div className="flex items-center gap-3">
+
+                    <GraduationCap
+                      size={20}
+                      className="text-emerald-700"
+                    />
+
+                    <div>
+
+                      <p className="text-xs text-slate-500">
+                        حالة الطالب
+                      </p>
+
+                      <p
+                        className={
+                          "font-bold mt-1 " +
+                          (selectedStudent.is_active
+                            ? "text-emerald-700"
+                            : "text-slate-500")
+                        }
+                      >
+                        {selectedStudent.is_active
+                          ? "نشط"
+                          : "غير نشط"}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* Modal Actions */}
+              <div className="mt-6 pt-5 border-t border-slate-200 flex flex-col sm:flex-row gap-3">
+
+                <button
+                  type="button"
+                  onClick={() => handleAttendance(selectedStudent)}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white px-5 py-3 font-bold transition"
+                >
+                  <CalendarCheck size={19} />
+                  متابعة الحضور والغياب
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudent(null)}
+                  className="sm:w-32 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-3 font-bold transition"
+                >
+                  إغلاق
+                </button>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
 
     </main>
   );
