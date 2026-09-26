@@ -21,7 +21,7 @@ export default function LoginPage() {
 
     const { data: authData, error: authError } =
       await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
@@ -39,9 +39,9 @@ export default function LoginPage() {
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("role, institute_id, directorate_id, full_name")
+      .select("role, institute_id, directorate_id, full_name, is_active")
       .eq("id", authData.user.id)
-      .single();
+      .maybeSingle();
 
     if (profileError || !profile) {
       await supabase.auth.signOut();
@@ -54,14 +54,56 @@ export default function LoginPage() {
       return;
     }
 
-    // مدير الإدارة
-    if (profile.role === "director") {
+    // التأكد أن الحساب مفعل
+    if (profile.is_active === false) {
+      await supabase.auth.signOut();
+
+      setError("هذا الحساب غير مفعل حاليًا. يرجى التواصل مع الإدارة.");
+
+      setLoading(false);
+      return;
+    }
+
+    // =====================================================
+    // مدير الإدارة التعليمية الأزهرية
+    // super_admin هو الدور الرسمي لمدير الإدارة
+    // =====================================================
+    if (profile.role === "super_admin") {
+      if (!profile.directorate_id) {
+        await supabase.auth.signOut();
+
+        setError("حساب مدير الإدارة غير مرتبط بإدارة تعليمية");
+
+        setLoading(false);
+        return;
+      }
+
       router.push("/");
       router.refresh();
       return;
     }
 
+    // =====================================================
+    // التوافق مع الحسابات القديمة التي ما زالت تحمل director
+    // =====================================================
+    if (profile.role === "director") {
+      if (!profile.directorate_id) {
+        await supabase.auth.signOut();
+
+        setError("حساب مدير الإدارة غير مرتبط بإدارة تعليمية");
+
+        setLoading(false);
+        return;
+      }
+
+      router.push("/");
+      router.refresh();
+      return;
+    }
+
+    // =====================================================
     // شيخ المعهد
+    // =====================================================
     if (profile.role === "sheikh") {
       if (!profile.institute_id) {
         await supabase.auth.signOut();
@@ -77,14 +119,18 @@ export default function LoginPage() {
       return;
     }
 
+    // =====================================================
     // ولي الأمر
+    // =====================================================
     if (profile.role === "parent") {
       router.push("/parent");
       router.refresh();
       return;
     }
 
-    // أدوار أخرى سيتم تفعيلها لاحقًا
+    // =====================================================
+    // الأدوار الأخرى سيتم تفعيل واجهاتها تباعًا
+    // =====================================================
     await supabase.auth.signOut();
 
     setError("هذا الدور لم يتم تفعيل واجهته بعد");
@@ -130,6 +176,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="أدخل البريد الإلكتروني"
                 required
+                autoComplete="email"
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
               />
             </div>
@@ -146,6 +193,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="أدخل كلمة المرور"
                 required
+                autoComplete="current-password"
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
               />
             </div>
@@ -165,7 +213,6 @@ export default function LoginPage() {
             >
               {loading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
             </button>
-
           </form>
 
           {/* Parent Login */}
