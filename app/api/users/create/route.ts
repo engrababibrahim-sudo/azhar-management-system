@@ -1,63 +1,37 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-type StaffRole =
+type Role =
   | "super_admin"
+  | "director"
   | "deputy"
+  | "it_admin"
   | "sheikh"
   | "institute_deputy"
   | "teacher"
-  | "employee";
+  | "employee"
+  | "parent"
+  | "student";
 
-type LegacyRole = "director";
-
-type AllowedRole = StaffRole | LegacyRole;
-
-const STAFF_ROLES: StaffRole[] = [
-  "super_admin",
-  "deputy",
+const INSTITUTE_ROLES = [
+  "it_admin",
   "sheikh",
   "institute_deputy",
   "teacher",
   "employee",
-];
+] as const;
 
-const ALLOWED_ROLES: AllowedRole[] = [
-  ...STAFF_ROLES,
-  "director",
-];
-
-const CENTRAL_ROLES: AllowedRole[] = [
-  "super_admin",
-  "director",
-  "deputy",
-];
-
-const INSTITUTE_ROLES: AllowedRole[] = [
-  "sheikh",
-  "institute_deputy",
-  "teacher",
-  "employee",
-];
-
-function getSupabaseAdmin() {
+function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!url) {
+  if (!url || !key) {
     throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL is not configured"
+      "إعدادات Supabase الخاصة بالسيرفر غير مكتملة"
     );
   }
 
-  if (!serviceRoleKey) {
-    throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY is not configured"
-    );
-  }
-
-  return createClient(url, serviceRoleKey, {
+  return createClient(url, key, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -65,24 +39,18 @@ function getSupabaseAdmin() {
   });
 }
 
-function getSupabaseAuthClient() {
+function getAuthClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey =
+  const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-  if (!url) {
+  if (!url || !key) {
     throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL is not configured"
+      "إعدادات Supabase للمصادقة غير مكتملة"
     );
   }
 
-  if (!publishableKey) {
-    throw new Error(
-      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is not configured"
-    );
-  }
-
-  return createClient(url, publishableKey, {
+  return createClient(url, key, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -94,25 +62,30 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-function isAllowedRole(
-  role: string
-): role is AllowedRole {
-  return ALLOWED_ROLES.includes(
-    role as AllowedRole
+function isInstituteRole(role: string) {
+  return INSTITUTE_ROLES.includes(
+    role as (typeof INSTITUTE_ROLES)[number]
   );
 }
 
-function isCentralRole(
-  role: AllowedRole
-) {
-  return CENTRAL_ROLES.includes(role);
+function validRole(role: string): role is Role {
+  return [
+    "super_admin",
+    "director",
+    "deputy",
+    "it_admin",
+    "sheikh",
+    "institute_deputy",
+    "teacher",
+    "employee",
+    "parent",
+    "student",
+  ].includes(role);
 }
 
-function isInstituteRole(
-  role: AllowedRole
-) {
-  return INSTITUTE_ROLES.includes(role);
-}
+/* =========================================================
+   التحقق من المستخدم الحالي
+   ========================================================= */
 
 async function getCaller(request: Request) {
   const authorization =
@@ -137,19 +110,16 @@ async function getCaller(request: Request) {
     };
   }
 
-  const accessToken = match[1];
+  const token = match[1];
 
-  const authClient =
-    getSupabaseAuthClient();
+  const authClient = getAuthClient();
 
   const {
     data: { user },
-    error: userError,
-  } = await authClient.auth.getUser(
-    accessToken
-  );
+    error,
+  } = await authClient.auth.getUser(token);
 
-  if (userError || !user) {
+  if (error || !user) {
     return {
       error: "جلسة الدخول غير صالحة",
       user: null,
@@ -157,18 +127,24 @@ async function getCaller(request: Request) {
     };
   }
 
-  const admin = getSupabaseAdmin();
+  const admin = getAdminClient();
 
-  const {
-    data: profile,
-    error: profileError,
-  } = await admin
-    .from("profiles")
-    .select(
-      "id, full_name, role, directorate_id, institute_id, is_active, email"
-    )
-    .eq("id", user.id)
-    .maybeSingle();
+  const { data: profile, error: profileError } =
+    await admin
+      .from("profiles")
+      .select(
+        `
+        id,
+        full_name,
+        email,
+        role,
+        directorate_id,
+        institute_id,
+        is_active
+        `
+      )
+      .eq("id", user.id)
+      .maybeSingle();
 
   if (profileError || !profile) {
     return {
@@ -187,10 +163,12 @@ async function getCaller(request: Request) {
     };
   }
 
-  if (
-    profile.role !== "super_admin" &&
-    profile.role !== "director"
-  ) {
+  const allowedCaller =
+    profile.role === "super_admin" ||
+    profile.role === "director" ||
+    profile.role === "it_admin";
+
+  if (!allowedCaller) {
     return {
       error:
         "ليس لديك صلاحية إدارة حسابات المستخدمين",
@@ -199,7 +177,27 @@ async function getCaller(request: Request) {
     };
   }
 
-  if (!profile.directorate_id) {
+  /*
+   * مدير الإدارة يجب أن يكون مرتبطًا بإدارة.
+   *
+   * مسؤول IT يجب أن يكون مرتبطًا بمعهد.
+   */
+  if (
+    profile.role === "it_admin" &&
+    !profile.institute_id
+  ) {
+    return {
+      error:
+        "مسؤول تكنولوجيا المعلومات يجب أن يكون مرتبطًا بمعهد",
+      user,
+      profile: null,
+    };
+  }
+
+  if (
+    profile.role !== "it_admin" &&
+    !profile.directorate_id
+  ) {
     return {
       error:
         "حساب الإدارة غير مرتبط بإدارة تعليمية",
@@ -215,54 +213,26 @@ async function getCaller(request: Request) {
   };
 }
 
-async function validateTargetScope(
-  admin: ReturnType<typeof getSupabaseAdmin>,
-  callerProfile: {
-    role: string;
-    directorate_id: string | null;
-  },
-  targetRole: AllowedRole,
-  instituteId: string | null
+/* =========================================================
+   التحقق من المعهد
+   ========================================================= */
+
+async function validateInstitute(
+  admin: ReturnType<typeof getAdminClient>,
+  instituteId: string | null,
+  directorateId: string | null,
+  callerInstituteId: string | null,
+  callerRole: string
 ) {
-  if (!callerProfile.directorate_id) {
+  if (!instituteId) {
     return {
       valid: false,
-      error:
-        "حساب الإدارة غير مرتبط بإدارة تعليمية",
+      error: "يجب اختيار المعهد",
     };
   }
 
-  if (
-    targetRole === "super_admin" &&
-    callerProfile.role !== "super_admin"
-  ) {
-    return {
-      valid: false,
-      error:
-        "فقط مدير الإدارة يمكنه إنشاء أو تعديل حساب مدير الإدارة",
-    };
-  }
-
-  if (isCentralRole(targetRole)) {
-    return {
-      valid: true,
-      error: null,
-    };
-  }
-
-  if (isInstituteRole(targetRole)) {
-    if (!instituteId) {
-      return {
-        valid: false,
-        error:
-          "يجب اختيار المعهد لهذا الدور",
-      };
-    }
-
-    const {
-      data: institute,
-      error: instituteError,
-    } = await admin
+  const { data: institute, error } =
+    await admin
       .from("institutes")
       .select(
         "id, name, directorate_id"
@@ -270,25 +240,135 @@ async function validateTargetScope(
       .eq("id", instituteId)
       .maybeSingle();
 
-    if (instituteError || !institute) {
-      return {
-        valid: false,
-        error:
-          "المعهد المحدد غير موجود",
-      };
-    }
+  if (error || !institute) {
+    return {
+      valid: false,
+      error: "المعهد المحدد غير موجود",
+    };
+  }
 
+  if (callerRole === "it_admin") {
     if (
-      institute.directorate_id !==
-      callerProfile.directorate_id
+      institute.id !== callerInstituteId
     ) {
       return {
         valid: false,
         error:
-          "لا يمكن إنشاء حساب لمعهد تابع لإدارة أخرى",
+          "مسؤول IT يستطيع إدارة معهده فقط",
+      };
+    }
+  }
+
+  if (
+    directorateId &&
+    institute.directorate_id !==
+      directorateId
+  ) {
+    return {
+      valid: false,
+      error:
+        "المعهد لا يتبع الإدارة التعليمية الحالية",
+    };
+  }
+
+  return {
+    valid: true,
+    error: null,
+  };
+}
+
+/* =========================================================
+   التحقق من نطاق المستخدم المستهدف
+   ========================================================= */
+
+async function validateTarget(
+  admin: ReturnType<typeof getAdminClient>,
+  caller: any,
+  targetRole: Role,
+  instituteId: string | null
+) {
+  /*
+   * مسؤول IT يستطيع فقط التعامل مع أدوار المعهد.
+   */
+  if (caller.role === "it_admin") {
+    if (!isInstituteRole(targetRole)) {
+      return {
+        valid: false,
+        error:
+          "مسؤول IT يستطيع إدارة مستخدمي معهده فقط",
       };
     }
 
+    const instituteCheck =
+      await validateInstitute(
+        admin,
+        instituteId,
+        caller.directorate_id,
+        caller.institute_id,
+        caller.role
+      );
+
+    return instituteCheck;
+  }
+
+  /*
+   * مدير الإدارة لديه كل الصلاحيات.
+   *
+   * الدور القديم director لا ننشئه من جديد.
+   */
+  if (
+    targetRole === "director"
+  ) {
+    return {
+      valid: false,
+      error:
+        "دور مدير الإدارة القديم غير متاح للحسابات الجديدة",
+    };
+  }
+
+  /*
+   * it_admin يجب أن يكون تابعًا لمعهد.
+   */
+  if (
+    targetRole === "it_admin"
+  ) {
+    if (caller.role !== "super_admin") {
+      return {
+        valid: false,
+        error:
+          "فقط مدير الإدارة يستطيع إنشاء أو تعديل مسؤول IT",
+      };
+    }
+
+    return validateInstitute(
+      admin,
+      instituteId,
+      caller.directorate_id,
+      null,
+      caller.role
+    );
+  }
+
+  /*
+   * الأدوار التي تخص المعهد.
+   */
+  if (isInstituteRole(targetRole)) {
+    return validateInstitute(
+      admin,
+      instituteId,
+      caller.directorate_id,
+      null,
+      caller.role
+    );
+  }
+
+  /*
+   * الأدوار المركزية.
+   */
+  if (
+    targetRole === "super_admin" ||
+    targetRole === "deputy"
+  ) {
     return {
       valid: true,
       error: null,
@@ -297,14 +377,294 @@ async function validateTargetScope(
 
   return {
     valid: false,
-    error:
-      "الدور المحدد غير مدعوم",
+    error: "الدور المحدد غير مدعوم",
   };
 }
 
 /* =========================================================
+   GET
+   تحميل المستخدمين
+   ========================================================= */
+
+export async function GET(
+  request: Request
+) {
+  try {
+    const caller =
+      await getCaller(request);
+
+    if (
+      caller.error ||
+      !caller.profile
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            caller.error ||
+            "غير مصرح",
+        },
+        { status: 403 }
+      );
+    }
+
+    const admin =
+      getAdminClient();
+
+    const profile =
+      caller.profile;
+
+    let institutesQuery =
+      admin
+        .from("institutes")
+        .select(
+          "id, name, code, directorate_id"
+        )
+        .order("name");
+
+    /*
+     * مدير الإدارة يرى كل معاهد إدارته.
+     *
+     * IT Admin يرى معهده فقط.
+     */
+    if (
+      profile.role === "it_admin"
+    ) {
+      institutesQuery =
+        institutesQuery.eq(
+          "id",
+          profile.institute_id
+        );
+    } else {
+      institutesQuery =
+        institutesQuery.eq(
+          "directorate_id",
+          profile.directorate_id
+        );
+    }
+
+    const {
+      data: institutes,
+      error: institutesError,
+    } =
+      await institutesQuery;
+
+    if (institutesError) {
+      return NextResponse.json(
+        {
+          error:
+            "تعذر تحميل المعاهد",
+        },
+        { status: 500 }
+      );
+    }
+
+    const instituteIds =
+      (institutes || []).map(
+        (item) => item.id
+      );
+
+    /*
+     * المستخدمون الأساسيون.
+     */
+    let profilesQuery =
+      admin
+        .from("profiles")
+        .select(
+          `
+          id,
+          full_name,
+          phone,
+          email,
+          role,
+          directorate_id,
+          institute_id,
+          is_active,
+          created_at,
+          updated_at
+          `
+        )
+        .order("full_name");
+
+    if (
+      profile.role === "it_admin"
+    ) {
+      profilesQuery =
+        profilesQuery.eq(
+          "institute_id",
+          profile.institute_id
+        );
+    } else {
+      profilesQuery =
+        profilesQuery.eq(
+          "directorate_id",
+          profile.directorate_id
+        );
+    }
+
+    const {
+      data: directUsers,
+      error: usersError,
+    } =
+      await profilesQuery;
+
+    if (usersError) {
+      return NextResponse.json(
+        {
+          error:
+            "تعذر تحميل المستخدمين",
+        },
+        { status: 500 }
+      );
+    }
+
+    /*
+     * الطلاب وأولياء الأمور.
+     */
+    let relatedUsers: any[] = [];
+
+    if (instituteIds.length > 0) {
+      const {
+        data: students,
+      } = await admin
+        .from("students")
+        .select(
+          "id, parent_id, institute_id"
+        )
+        .in(
+          "institute_id",
+          instituteIds
+        );
+
+      const studentIds =
+        (students || []).map(
+          (s) => s.id
+        );
+
+      const parentIds =
+        Array.from(
+          new Set(
+            (students || [])
+              .map(
+                (s) => s.parent_id
+              )
+              .filter(Boolean)
+          )
+        );
+
+      if (studentIds.length > 0) {
+        const {
+          data: studentProfiles,
+        } = await admin
+          .from("profiles")
+          .select(
+            `
+            id,
+            full_name,
+            phone,
+            email,
+            role,
+            directorate_id,
+            institute_id,
+            is_active,
+            created_at,
+            updated_at
+            `
+          )
+          .in(
+            "id",
+            studentIds
+          );
+
+        relatedUsers.push(
+          ...(studentProfiles || [])
+        );
+      }
+
+      if (parentIds.length > 0) {
+        const {
+          data: parentProfiles,
+        } = await admin
+          .from("profiles")
+          .select(
+            `
+            id,
+            full_name,
+            phone,
+            email,
+            role,
+            directorate_id,
+            institute_id,
+            is_active,
+            created_at,
+            updated_at
+            `
+          )
+          .in(
+            "id",
+            parentIds
+          );
+
+        relatedUsers.push(
+          ...(parentProfiles || [])
+        );
+      }
+    }
+
+    const map =
+      new Map<string, any>();
+
+    [
+      ...(directUsers || []),
+      ...relatedUsers,
+    ].forEach((user) => {
+      map.set(user.id, user);
+    });
+
+    const users =
+      Array.from(
+        map.values()
+      ).sort((a, b) =>
+        String(a.full_name || "").localeCompare(
+          String(b.full_name || ""),
+          "ar"
+        )
+      );
+
+    return NextResponse.json({
+      success: true,
+      users,
+      institutes:
+        institutes || [],
+      current_user: {
+        id: profile.id,
+        role: profile.role,
+        institute_id:
+          profile.institute_id,
+        directorate_id:
+          profile.directorate_id,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "GET USERS ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "حدث خطأ غير متوقع",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/* =========================================================
    POST
-   إنشاء حساب دخول جديد
+   إنشاء مستخدم
    ========================================================= */
 
 export async function POST(
@@ -314,20 +674,22 @@ export async function POST(
     const caller =
       await getCaller(request);
 
-    if (caller.error || !caller.profile) {
+    if (
+      caller.error ||
+      !caller.profile
+    ) {
       return NextResponse.json(
         {
           error:
             caller.error ||
             "غير مصرح",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
-    const body = await request.json();
+    const body =
+      await request.json();
 
     const fullName =
       typeof body.full_name === "string"
@@ -355,8 +717,9 @@ export async function POST(
         : "";
 
     const instituteId =
-      typeof body.institute_id === "string" &&
-      body.institute_id.trim() !== ""
+      typeof body.institute_id ===
+        "string" &&
+      body.institute_id.trim()
         ? body.institute_id.trim()
         : null;
 
@@ -369,9 +732,7 @@ export async function POST(
           error:
             "اسم المستخدم مطلوب",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -381,9 +742,7 @@ export async function POST(
           error:
             "البريد الإلكتروني مطلوب",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -393,9 +752,7 @@ export async function POST(
           error:
             "كلمة المرور مطلوبة",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -405,45 +762,25 @@ export async function POST(
           error:
             "كلمة المرور يجب أن تكون 8 أحرف على الأقل",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    if (!isAllowedRole(role)) {
+    if (!validRole(role)) {
       return NextResponse.json(
         {
           error:
             "الدور المحدد غير صالح",
         },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * لا نسمح بإنشاء دور director جديد.
-     * هذا الدور موجود فقط للتوافق مع الحسابات القديمة.
-     */
-    if (role === "director") {
-      return NextResponse.json(
-        {
-          error:
-            "دور مدير الإدارة القديم غير متاح لإنشاء حسابات جديدة. استخدم مدير الإدارة التعليمية.",
-        },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     const admin =
-      getSupabaseAdmin();
+      getAdminClient();
 
     const scope =
-      await validateTargetScope(
+      await validateTarget(
         admin,
         caller.profile,
         role,
@@ -457,47 +794,28 @@ export async function POST(
             scope.error ||
             "النطاق الإداري غير صالح",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
     const {
-      data: existingProfile,
-      error:
-        existingProfileError,
+      data: existing,
     } = await admin
       .from("profiles")
-      .select("id, email")
-      .ilike("email", email)
+      .select("id")
+      .ilike(
+        "email",
+        email
+      )
       .maybeSingle();
 
-    if (
-      existingProfileError &&
-      existingProfileError.code !==
-        "PGRST116"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            existingProfileError.message,
-        },
-        {
-          status: 500,
-        }
-      );
-    }
-
-    if (existingProfile) {
+    if (existing) {
       return NextResponse.json(
         {
           error:
             "يوجد مستخدم مسجل بالفعل بهذا البريد الإلكتروني",
         },
-        {
-          status: 409,
-        }
+        { status: 409 }
       );
     }
 
@@ -510,21 +828,23 @@ export async function POST(
         password,
         email_confirm: true,
         user_metadata: {
-          full_name: fullName,
+          full_name:
+            fullName,
           role,
         },
       });
 
-    if (authError || !authResult.user) {
+    if (
+      authError ||
+      !authResult.user
+    ) {
       return NextResponse.json(
         {
           error:
             authError?.message ||
             "تعذر إنشاء حساب الدخول",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -560,12 +880,10 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "تم إنشاء حساب الدخول لكن تعذر إنشاء ملف المستخدم: " +
+            "تعذر إنشاء ملف المستخدم: " +
             profileError.message,
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       );
     }
 
@@ -583,9 +901,7 @@ export async function POST(
             profileData.institute_id,
         },
       },
-      {
-        status: 201,
-      }
+      { status: 201 }
     );
   } catch (error) {
     console.error(
@@ -600,16 +916,14 @@ export async function POST(
             ? error.message
             : "حدث خطأ غير متوقع",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
 
 /* =========================================================
    PATCH
-   تعديل حساب مستخدم موجود
+   تعديل المستخدم
    ========================================================= */
 
 export async function PATCH(
@@ -619,20 +933,22 @@ export async function PATCH(
     const caller =
       await getCaller(request);
 
-    if (caller.error || !caller.profile) {
+    if (
+      caller.error ||
+      !caller.profile
+    ) {
       return NextResponse.json(
         {
           error:
             caller.error ||
             "غير مصرح",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
-    const body = await request.json();
+    const body =
+      await request.json();
 
     const userId =
       typeof body.id === "string"
@@ -645,76 +961,98 @@ export async function PATCH(
           error:
             "معرف المستخدم مطلوب",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     const admin =
-      getSupabaseAdmin();
+      getAdminClient();
 
     const {
-      data: targetProfile,
-      error:
-        targetProfileError,
+      data: target,
     } = await admin
       .from("profiles")
       .select(
-        "id, full_name, phone, email, role, directorate_id, institute_id, is_active"
+        `
+        id,
+        full_name,
+        phone,
+        email,
+        role,
+        directorate_id,
+        institute_id,
+        is_active
+        `
       )
       .eq("id", userId)
       .maybeSingle();
 
-    if (
-      targetProfileError ||
-      !targetProfile
-    ) {
+    if (!target) {
       return NextResponse.json(
         {
           error:
             "المستخدم المطلوب غير موجود",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
 
+    /*
+     * لا يستطيع IT Admin تعديل مستخدم خارج معهده.
+     */
     if (
-      targetProfile.directorate_id !==
-      caller.profile.directorate_id
+      caller.profile.role ===
+      "it_admin"
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "لا يمكنك تعديل مستخدم تابع لإدارة أخرى",
-        },
-        {
-          status: 403,
-        }
-      );
+      if (
+        target.institute_id !==
+        caller.profile.institute_id
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "لا يمكنك تعديل مستخدم خارج معهدك",
+          },
+          { status: 403 }
+        );
+      }
+    } else {
+      /*
+       * مدير الإدارة يستطيع تعديل مستخدمي إدارته.
+       */
+      if (
+        target.directorate_id !==
+        caller.profile.directorate_id
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "لا يمكنك تعديل مستخدم تابع لإدارة أخرى",
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const fullName =
       typeof body.full_name === "string"
         ? body.full_name.trim()
-        : targetProfile.full_name;
+        : target.full_name;
 
     const phone =
       typeof body.phone === "string"
         ? body.phone.trim()
-        : targetProfile.phone;
+        : target.phone;
 
     const email =
       typeof body.email === "string"
         ? normalizeEmail(body.email)
-        : targetProfile.email;
+        : target.email;
 
     const role =
       typeof body.role === "string"
         ? body.role.trim()
-        : targetProfile.role;
+        : target.role;
 
     const password =
       typeof body.password === "string"
@@ -722,83 +1060,83 @@ export async function PATCH(
         : "";
 
     const instituteId =
-      typeof body.institute_id === "string" &&
-      body.institute_id.trim() !== ""
+      typeof body.institute_id ===
+        "string" &&
+      body.institute_id.trim()
         ? body.institute_id.trim()
         : null;
 
     const isActive =
       body.is_active !== false;
 
-    if (!fullName) {
-      return NextResponse.json(
-        {
-          error:
-            "اسم المستخدم مطلوب",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    if (!email) {
-      return NextResponse.json(
-        {
-          error:
-            "البريد الإلكتروني مطلوب لحسابات الدخول",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    if (!isAllowedRole(role)) {
+    if (!validRole(role)) {
       return NextResponse.json(
         {
           error:
             "الدور المحدد غير صالح",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
+    /*
+     * منع IT Admin من رفع صلاحياته.
+     */
     if (
-      role === "director" &&
-      targetProfile.role !== "director"
+      caller.profile.role ===
+      "it_admin"
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "لا يمكن تعيين دور مدير الإدارة القديم لحساب جديد",
-        },
-        {
-          status: 400,
-        }
-      );
+      if (
+        !isInstituteRole(role)
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "مسؤول IT يستطيع إدارة أدوار المعهد فقط",
+          },
+          { status: 403 }
+        );
+      }
     }
 
+    /*
+     * فقط super_admin يستطيع تعديل it_admin.
+     */
     if (
-      role === "super_admin" &&
+      role === "it_admin" &&
       caller.profile.role !==
         "super_admin"
     ) {
       return NextResponse.json(
         {
           error:
-            "فقط مدير الإدارة يمكنه تعديل حساب مدير الإدارة",
+            "فقط مدير الإدارة يستطيع إدارة مسؤولي IT",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
+    /*
+     * منع إنشاء/تحويل إلى الدور القديم.
+     */
     if (
-      userId === caller.profile.id &&
+      role === "director"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "دور مدير الإدارة القديم غير متاح",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * منع تعطيل الحساب الحالي.
+     */
+    if (
+      userId ===
+        caller.profile.id &&
       !isActive
     ) {
       return NextResponse.json(
@@ -806,45 +1144,61 @@ export async function PATCH(
           error:
             "لا يمكنك تعطيل حسابك الحالي",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
+    /*
+     * مدير الإدارة فقط يستطيع تعديل super_admin.
+     */
     if (
-      userId === caller.profile.id &&
-      role !== caller.profile.role
+      target.role ===
+        "super_admin" &&
+      caller.profile.role !==
+        "super_admin"
     ) {
       return NextResponse.json(
         {
           error:
-            "لا يمكنك تغيير دور حسابك الحالي",
+            "لا يمكن تعديل حساب مدير الإدارة",
         },
-        {
-          status: 400,
-        }
+        { status: 403 }
       );
     }
 
+    /*
+     * IT Admin لا يستطيع تعديل حساب super_admin.
+     */
     if (
-      userId === caller.profile.id &&
-      instituteId !==
-        caller.profile.institute_id
+      caller.profile.role ===
+        "it_admin" &&
+      target.role ===
+        "super_admin"
     ) {
       return NextResponse.json(
         {
           error:
-            "لا يمكنك تغيير نطاق حسابك الحالي",
+            "لا يمكنك تعديل حساب مدير الإدارة",
         },
+        { status: 403 }
+      );
+    }
+
+    if (
+      password &&
+      password.length < 8
+    ) {
+      return NextResponse.json(
         {
-          status: 400,
-        }
+          error:
+            "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل",
+        },
+        { status: 400 }
       );
     }
 
     const scope =
-      await validateTargetScope(
+      await validateTarget(
         admin,
         caller.profile,
         role,
@@ -858,44 +1212,25 @@ export async function PATCH(
             scope.error ||
             "النطاق الإداري غير صالح",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
-
-    if (password && password.length < 8) {
-      return NextResponse.json(
-        {
-          error:
-            "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * نحدث profile أولًا.
-     * إذا فشل تحديث Auth سنعيد profile إلى حالته السابقة.
-     */
 
     const oldProfile = {
       full_name:
-        targetProfile.full_name,
+        target.full_name,
       phone:
-        targetProfile.phone,
+        target.phone,
       email:
-        targetProfile.email,
+        target.email,
       role:
-        targetProfile.role,
+        target.role,
       directorate_id:
-        targetProfile.directorate_id,
+        target.directorate_id,
       institute_id:
-        targetProfile.institute_id,
+        target.institute_id,
       is_active:
-        targetProfile.is_active,
+        target.is_active,
     };
 
     const newProfile = {
@@ -913,42 +1248,32 @@ export async function PATCH(
     };
 
     const {
-      error: profileUpdateError,
+      error: profileError,
     } = await admin
       .from("profiles")
       .update(newProfile)
       .eq("id", userId);
 
-    if (profileUpdateError) {
+    if (profileError) {
       return NextResponse.json(
         {
           error:
             "تعذر تحديث ملف المستخدم: " +
-            profileUpdateError.message,
+            profileError.message,
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       );
     }
 
-    const authUpdate: {
-      email?: string;
-      password?: string;
-      email_confirm?: boolean;
-      user_metadata?: {
-        full_name: string;
-        role: string;
-      };
-    } = {
+    const emailChanged =
+      email !== target.email;
+
+    const authUpdate: any = {
       user_metadata: {
         full_name: fullName,
         role,
       },
     };
-
-    const emailChanged =
-      email !== targetProfile.email;
 
     if (emailChanged) {
       authUpdate.email = email;
@@ -963,22 +1288,20 @@ export async function PATCH(
     const shouldUpdateAuth =
       emailChanged ||
       Boolean(password) ||
-      Boolean(
-        targetProfile.full_name !==
-          fullName
-      ) ||
-      targetProfile.role !== role;
+      target.full_name !==
+        fullName ||
+      target.role !== role;
 
     if (shouldUpdateAuth) {
       const {
-        error: authUpdateError,
+        error: authError,
       } =
         await admin.auth.admin.updateUserById(
           userId,
           authUpdate
         );
 
-      if (authUpdateError) {
+      if (authError) {
         await admin
           .from("profiles")
           .update(oldProfile)
@@ -988,28 +1311,21 @@ export async function PATCH(
           {
             error:
               "تعذر تحديث حساب تسجيل الدخول: " +
-              authUpdateError.message,
+              authError.message,
           },
-          {
-            status: 400,
-          }
+          { status: 400 }
         );
       }
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        message:
-          "تم تحديث حساب المستخدم بنجاح",
-      },
-      {
-        status: 200,
-      }
-    );
+    return NextResponse.json({
+      success: true,
+      message:
+        "تم تحديث حساب المستخدم بنجاح",
+    });
   } catch (error) {
     console.error(
-      "UPDATE USER ERROR:",
+      "PATCH USER ERROR:",
       error
     );
 
@@ -1020,9 +1336,7 @@ export async function PATCH(
             ? error.message
             : "حدث خطأ غير متوقع",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
