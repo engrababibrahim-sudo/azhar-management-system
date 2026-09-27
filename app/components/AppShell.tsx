@@ -3,22 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity,
   Bell,
   BookOpenCheck,
   Building2,
   ClipboardList,
-  FileBarChart3,
+  FileBarChart,
   FileText,
   GraduationCap,
   LayoutDashboard,
-  LogOut,
   MessageSquareWarning,
   Settings,
   ShieldCheck,
   UserCog,
-  Users,
   UserRound,
+  Users,
   Upload,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -48,7 +46,10 @@ type Profile = {
 type NavItem = {
   href: string;
   label: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  icon: React.ComponentType<{
+    size?: number;
+    strokeWidth?: number;
+  }>;
   roles?: AppRole[];
 };
 
@@ -89,6 +90,7 @@ export default function AppShell({
             setProfile(null);
             setLoadingProfile(false);
           }
+
           return;
         }
 
@@ -127,15 +129,6 @@ export default function AppShell({
 
   const role = profile?.role;
 
-  /*
-   * القائمة الجانبية
-   *
-   * إدارة المستخدمين:
-   * - تظهر لمدير الإدارة super_admin
-   * - تظهر أيضًا لمسؤول IT الخاص بالمعهد it_admin
-   *
-   * صلاحيات الوصول الفعلية يتم تأمينها أيضًا من الـ API.
-   */
   const navItems: NavItem[] = [
     {
       href: "/",
@@ -148,14 +141,28 @@ export default function AppShell({
       href: "/institutes",
       label: "إدارة المعاهد",
       icon: Building2,
-      roles: ["super_admin", "director", "deputy", "it_admin"],
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "it_admin",
+      ],
     },
 
+    /*
+     * إدارة المستخدمين
+     * مدير الإدارة: إدارة جميع المستخدمين
+     * مسؤول IT: إدارة مستخدمي معهده فقط
+     */
     {
       href: "/users",
       label: "إدارة المستخدمين",
       icon: UserCog,
-      roles: ["super_admin", "director", "it_admin"],
+      roles: [
+        "super_admin",
+        "director",
+        "it_admin",
+      ],
     },
 
     {
@@ -206,7 +213,7 @@ export default function AppShell({
     {
       href: "/attendance-report",
       label: "التقارير والإحصائيات",
-      icon: FileBarChart3,
+      icon: FileBarChart,
       roles: [
         "super_admin",
         "director",
@@ -306,8 +313,13 @@ export default function AppShell({
   ];
 
   const visibleNavItems = navItems.filter((item) => {
-    if (!item.roles) return true;
-    if (!role) return false;
+    if (!item.roles) {
+      return true;
+    }
+
+    if (!role) {
+      return false;
+    }
 
     return item.roles.includes(role);
   });
@@ -354,7 +366,10 @@ export default function AppShell({
       return pathname === "/";
     }
 
-    return pathname === href || pathname.startsWith(`${href}/`);
+    return (
+      pathname === href ||
+      pathname.startsWith(`${href}/`)
+    );
   };
 
   return (
@@ -362,15 +377,20 @@ export default function AppShell({
       dir="rtl"
       className="min-h-screen bg-slate-50 text-slate-900"
     >
-      {/* =========================
-          Sidebar
-      ========================== */}
+      {/* =========================================
+          القائمة الجانبية
+      ========================================== */}
       <aside className="fixed right-0 top-0 z-40 flex h-screen w-72 flex-col border-l border-slate-200 bg-white shadow-sm">
-        {/* Logo / Brand */}
+
+        {/* الشعار */}
         <div className="flex h-20 shrink-0 items-center border-b border-slate-200 px-5">
           <div className="flex w-full items-center gap-3">
+
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
-              <ShieldCheck size={24} strokeWidth={2} />
+              <ShieldCheck
+                size={24}
+                strokeWidth={2}
+              />
             </div>
 
             <div className="min-w-0">
@@ -382,31 +402,39 @@ export default function AppShell({
                 منصة الإدارة التعليمية الأزهرية
               </div>
             </div>
+
           </div>
         </div>
 
-        {/* User Info */}
+        {/* بيانات المستخدم */}
         <div className="border-b border-slate-200 p-4">
           <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
               <UserRound size={20} />
             </div>
 
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-slate-800">
-                {profile?.full_name || "المستخدم"}
+                {loadingProfile
+                  ? "جاري التحميل..."
+                  : profile?.full_name || "المستخدم"}
               </div>
 
               <div className="mt-1 truncate text-xs text-slate-500">
                 {roleLabel}
               </div>
             </div>
+
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* =========================================
+            روابط القائمة
+        ========================================== */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <div className="space-y-1">
+
             {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
@@ -429,6 +457,7 @@ export default function AppShell({
 
                   <span>{item.label}</span>
 
+                  {/* علامة خاصة بإدارة المستخدمين */}
                   {item.href === "/users" &&
                     role === "super_admin" && (
                       <span
@@ -445,21 +474,25 @@ export default function AppShell({
                 </Link>
               );
             })}
+
           </div>
         </nav>
 
-        {/* Bottom Area */}
+        {/* تسجيل الخروج */}
         <div className="shrink-0 border-t border-slate-200 p-3">
           <LogoutButton />
         </div>
+
       </aside>
 
-      {/* =========================
-          Main Content
-      ========================== */}
+      {/* =========================================
+          المحتوى الرئيسي
+      ========================================== */}
       <div className="min-h-screen pr-72">
-        {/* Header */}
+
+        {/* الهيدر */}
         <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200 bg-white/95 px-8 shadow-sm backdrop-blur">
+
           <div>
             <div className="text-lg font-bold text-slate-900">
               {roleLabel}
@@ -471,6 +504,8 @@ export default function AppShell({
           </div>
 
           <div className="flex items-center gap-3">
+
+            {/* الإشعارات */}
             <button
               type="button"
               className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
@@ -481,6 +516,7 @@ export default function AppShell({
               <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
             </button>
 
+            {/* بيانات المستخدم */}
             <div className="hidden text-right sm:block">
               <div className="text-sm font-semibold text-slate-800">
                 {profile?.full_name || "المستخدم"}
@@ -494,13 +530,17 @@ export default function AppShell({
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
               <UserRound size={20} />
             </div>
+
           </div>
         </header>
 
-        {/* Page Content */}
+        {/* =========================================
+            محتوى الصفحة
+        ========================================== */}
         <main className="min-h-[calc(100vh-5rem)] p-6 lg:p-8">
           {children}
         </main>
+
       </div>
     </div>
   );
