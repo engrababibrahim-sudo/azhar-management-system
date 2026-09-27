@@ -3,127 +3,67 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  Building2,
-  Users,
-  GraduationCap,
-  ClipboardCheck,
-  BarChart3,
-  ListTodo,
-  MessageSquarePlus,
-  Megaphone,
-  MessageSquareWarning,
-  Upload,
-  Settings,
+  Activity,
   Bell,
-  Menu,
-  X,
-  MessageCircleWarning,
+  BookOpenCheck,
+  Building2,
+  ClipboardList,
+  FileBarChart3,
+  FileText,
+  GraduationCap,
+  LayoutDashboard,
+  LogOut,
+  MessageSquareWarning,
+  Settings,
+  ShieldCheck,
+  UserCog,
+  Users,
+  UserRound,
+  Upload,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import LogoutButton from "./LogoutButton";
 import { supabase } from "../../lib/supabase/client";
 
-type Role =
+type AppRole =
   | "super_admin"
   | "director"
   | "deputy"
+  | "it_admin"
   | "sheikh"
+  | "institute_deputy"
   | "teacher"
   | "employee"
   | "student"
   | "parent";
 
-type MenuItem = {
-  label: string;
+type Profile = {
+  role: AppRole;
+  full_name: string | null;
+  institute_id: string | null;
+  directorate_id: string | null;
+};
+
+type NavItem = {
   href: string;
-  icon: React.ComponentType<{
-    size?: number;
-    strokeWidth?: number;
-  }>;
-  roles?: Role[];
+  label: string;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  roles?: AppRole[];
 };
 
-const allMenuItems: MenuItem[] = [
-  {
-    label: "لوحة التحكم",
-    href: "/",
-    icon: LayoutDashboard,
-  },
-  {
-    label: "إدارة المعاهد",
-    href: "/institutes",
-    icon: Building2,
-  },
-  {
-    label: "الطلاب",
-    href: "/students",
-    icon: Users,
-  },
-  {
-    label: "المدرسون",
-    href: "/teachers",
-    icon: GraduationCap,
-  },
-  {
-    label: "الحضور والغياب",
-    href: "/attendance",
-    icon: ClipboardCheck,
-  },
-  {
-    label: "التقارير والإحصائيات",
-    href: "/attendance-report",
-    icon: BarChart3,
-  },
-  {
-    label: "المهام والمتابعة",
-    href: "/institute-tasks",
-    icon: ListTodo,
-  },
-  {
-    label: "طلبات المعاهد",
-    href: "/institute-requests",
-    icon: MessageSquarePlus,
-  },
-  {
-    label: "الإعلانات",
-    href: "/announcements",
-    icon: Megaphone,
-  },
-  {
-    label: "الشكاوى والبلاغات",
-    href: "/complaints",
-    icon: MessageSquareWarning,
-  },
-  {
-    label: "📢 شكاوى أولياء الأمور",
-    href: "/parent-complaints",
-    icon: MessageCircleWarning,
-    roles: ["parent", "sheikh", "director", "super_admin"],
-  },
-  {
-    label: "استيراد البيانات",
-    href: "/import",
-    icon: Upload,
-  },
-  {
-    label: "الإعدادات",
-    href: "/settings",
-    icon: Settings,
-  },
+const ALL_MANAGEMENT_ROLES: AppRole[] = [
+  "super_admin",
+  "director",
+  "deputy",
+  "it_admin",
+  "sheikh",
+  "institute_deputy",
+  "teacher",
+  "employee",
+  "student",
+  "parent",
 ];
-
-const roleLabels: Record<Role, string> = {
-  super_admin: "مدير النظام",
-  director: "مدير الإدارة",
-  deputy: "وكيل الإدارة",
-  sheikh: "شيخ المعهد",
-  teacher: "مدرس",
-  employee: "موظف",
-  student: "طالب",
-  parent: "ولي أمر",
-};
 
 export default function AppShell({
   children,
@@ -132,65 +72,51 @@ export default function AppShell({
 }) {
   const pathname = usePathname();
 
-  const [role, setRole] = useState<Role | null>(null);
-  const [fullName, setFullName] = useState("المستخدم");
-  const [loading, setLoading] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
-    async function loadProfile() {
+    const loadProfile = async () => {
       try {
         const {
           data: { user },
         } = await supabase.auth.getUser();
 
-        if (!mounted) return;
-
         if (!user) {
-          setRole(null);
-          setFullName("المستخدم");
-          setLoading(false);
+          if (mounted) {
+            setProfile(null);
+            setLoadingProfile(false);
+          }
           return;
         }
 
-        const { data: profile, error } = await supabase
+        const { data, error } = await supabase
           .from("profiles")
-          .select("role, full_name")
+          .select(
+            "role, full_name, institute_id, directorate_id"
+          )
           .eq("id", user.id)
           .maybeSingle();
 
-        if (!mounted) return;
-
         if (error) {
-          console.error("Profile loading error:", error);
-          setRole(null);
-          setFullName("المستخدم");
-          setLoading(false);
-          return;
+          console.error("AppShell profile error:", error);
         }
 
-        if (profile) {
-          setRole(profile.role as Role);
-          setFullName(profile.full_name || "المستخدم");
-        } else {
-          setRole(null);
-          setFullName("المستخدم");
+        if (mounted) {
+          setProfile(data as Profile | null);
+          setLoadingProfile(false);
         }
       } catch (error) {
-        console.error("Unexpected profile error:", error);
+        console.error("AppShell error:", error);
 
         if (mounted) {
-          setRole(null);
-          setFullName("المستخدم");
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
+          setProfile(null);
+          setLoadingProfile(false);
         }
       }
-    }
+    };
 
     loadProfile();
 
@@ -199,119 +125,289 @@ export default function AppShell({
     };
   }, []);
 
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [pathname]);
+  const role = profile?.role;
 
-  const visibleMenuItems = allMenuItems.filter((item) => {
-    if (!item.roles || item.roles.length === 0) {
-      return true;
-    }
+  /*
+   * القائمة الجانبية
+   *
+   * إدارة المستخدمين:
+   * - تظهر لمدير الإدارة super_admin
+   * - تظهر أيضًا لمسؤول IT الخاص بالمعهد it_admin
+   *
+   * صلاحيات الوصول الفعلية يتم تأمينها أيضًا من الـ API.
+   */
+  const navItems: NavItem[] = [
+    {
+      href: "/",
+      label: "لوحة التحكم",
+      icon: LayoutDashboard,
+      roles: ALL_MANAGEMENT_ROLES,
+    },
 
-    if (!role) {
-      return false;
-    }
+    {
+      href: "/institutes",
+      label: "إدارة المعاهد",
+      icon: Building2,
+      roles: ["super_admin", "director", "deputy", "it_admin"],
+    },
+
+    {
+      href: "/users",
+      label: "إدارة المستخدمين",
+      icon: UserCog,
+      roles: ["super_admin", "director", "it_admin"],
+    },
+
+    {
+      href: "/students",
+      label: "الطلاب",
+      icon: GraduationCap,
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "sheikh",
+        "institute_deputy",
+        "it_admin",
+        "teacher",
+        "employee",
+      ],
+    },
+
+    {
+      href: "/teachers",
+      label: "المدرسون",
+      icon: Users,
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "sheikh",
+        "institute_deputy",
+        "it_admin",
+        "employee",
+      ],
+    },
+
+    {
+      href: "/attendance",
+      label: "الحضور والغياب",
+      icon: ClipboardList,
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "sheikh",
+        "institute_deputy",
+        "teacher",
+      ],
+    },
+
+    {
+      href: "/attendance-report",
+      label: "التقارير والإحصائيات",
+      icon: FileBarChart3,
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "sheikh",
+        "institute_deputy",
+        "it_admin",
+      ],
+    },
+
+    {
+      href: "/institute-tasks",
+      label: "المهام والمتابعة",
+      icon: BookOpenCheck,
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "sheikh",
+        "institute_deputy",
+        "it_admin",
+        "employee",
+      ],
+    },
+
+    {
+      href: "/institute-requests",
+      label: "طلبات المعاهد",
+      icon: FileText,
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "sheikh",
+        "institute_deputy",
+        "it_admin",
+        "employee",
+      ],
+    },
+
+    {
+      href: "/announcements",
+      label: "الإعلانات",
+      icon: Bell,
+      roles: ALL_MANAGEMENT_ROLES,
+    },
+
+    {
+      href: "/complaints",
+      label: "الشكاوى والبلاغات",
+      icon: MessageSquareWarning,
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "sheikh",
+        "institute_deputy",
+        "it_admin",
+        "employee",
+      ],
+    },
+
+    {
+      href: "/parent-complaints",
+      label: "شكاوى أولياء الأمور",
+      icon: MessageSquareWarning,
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "sheikh",
+        "institute_deputy",
+        "employee",
+      ],
+    },
+
+    {
+      href: "/import",
+      label: "استيراد البيانات",
+      icon: Upload,
+      roles: [
+        "super_admin",
+        "director",
+        "deputy",
+        "sheikh",
+        "institute_deputy",
+        "it_admin",
+      ],
+    },
+
+    {
+      href: "/settings",
+      label: "الإعدادات",
+      icon: Settings,
+      roles: ALL_MANAGEMENT_ROLES,
+    },
+  ];
+
+  const visibleNavItems = navItems.filter((item) => {
+    if (!item.roles) return true;
+    if (!role) return false;
 
     return item.roles.includes(role);
   });
 
-  function isActive(href: string) {
+  const roleLabel = (() => {
+    switch (role) {
+      case "super_admin":
+        return "مدير الإدارة التعليمية الأزهرية";
+
+      case "director":
+        return "مدير الإدارة التعليمية الأزهرية";
+
+      case "deputy":
+        return "وكيل الإدارة التعليمية الأزهرية";
+
+      case "it_admin":
+        return "مسؤول تكنولوجيا المعلومات";
+
+      case "sheikh":
+        return "شيخ المعهد";
+
+      case "institute_deputy":
+        return "وكيل شيخ المعهد";
+
+      case "teacher":
+        return "مدرس";
+
+      case "employee":
+        return "موظف";
+
+      case "student":
+        return "طالب";
+
+      case "parent":
+        return "ولي أمر";
+
+      default:
+        return "نظام إدارة المعاهد الأزهرية";
+    }
+  })();
+
+  const isActive = (href: string) => {
     if (href === "/") {
       return pathname === "/";
     }
 
-    return pathname === href || pathname.startsWith(href + "/");
-  }
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
 
   return (
-    <div className="min-h-screen bg-slate-100" dir="rtl">
-      {/* Mobile Header */}
-      <div className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen(true)}
-          className="rounded-xl p-2 text-slate-700 transition hover:bg-slate-100"
-          aria-label="فتح القائمة"
-        >
-          <Menu size={24} />
-        </button>
-
-        <div className="text-center">
-          <div className="text-sm font-bold text-slate-900">
-            نظام إدارة المعاهد الأزهرية
-          </div>
-
-          <div className="text-xs text-slate-500">
-            الإدارة والمتابعة المركزية
-          </div>
-        </div>
-
-        <Link
-          href="/announcements"
-          className="relative rounded-xl p-2 text-slate-700 transition hover:bg-slate-100"
-          aria-label="الإشعارات"
-        >
-          <Bell size={22} />
-        </Link>
-      </div>
-
-      {/* Mobile Overlay */}
-      {mobileMenuOpen && (
-        <button
-          type="button"
-          aria-label="إغلاق القائمة"
-          onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={[
-          "fixed right-0 top-0 z-50 flex h-screen w-72 flex-col border-l border-slate-200 bg-white shadow-xl transition-transform duration-300",
-          mobileMenuOpen ? "translate-x-0" : "translate-x-full",
-          "lg:translate-x-0",
-        ].join(" ")}
-      >
-        {/* Sidebar Header */}
-        <div className="flex h-20 items-center justify-between border-b border-slate-200 px-5">
-          <div>
-            <div className="text-base font-extrabold text-slate-900">
-              نظام إدارة المعاهد الأزهرية
+    <div
+      dir="rtl"
+      className="min-h-screen bg-slate-50 text-slate-900"
+    >
+      {/* =========================
+          Sidebar
+      ========================== */}
+      <aside className="fixed right-0 top-0 z-40 flex h-screen w-72 flex-col border-l border-slate-200 bg-white shadow-sm">
+        {/* Logo / Brand */}
+        <div className="flex h-20 shrink-0 items-center border-b border-slate-200 px-5">
+          <div className="flex w-full items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+              <ShieldCheck size={24} strokeWidth={2} />
             </div>
 
-            <div className="mt-1 text-xs text-slate-500">
-              منصة الإدارة والمتابعة المركزية
-            </div>
-          </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-slate-900">
+                نظام إدارة المعاهد الأزهرية
+              </div>
 
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(false)}
-            className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 lg:hidden"
-            aria-label="إغلاق القائمة"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* User */}
-        <div className="border-b border-slate-200 px-5 py-4">
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <div className="text-sm font-bold text-slate-900">
-              {loading ? "جاري التحميل..." : fullName}
-            </div>
-
-            <div className="mt-1 text-xs font-medium text-slate-500">
-              {role ? roleLabels[role] : "المستخدم"}
+              <div className="mt-1 truncate text-xs text-slate-500">
+                منصة الإدارة التعليمية الأزهرية
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Menu */}
+        {/* User Info */}
+        <div className="border-b border-slate-200 p-4">
+          <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <UserRound size={20} />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-slate-800">
+                {profile?.full_name || "المستخدم"}
+              </div>
+
+              <div className="mt-1 truncate text-xs text-slate-500">
+                {roleLabel}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <div className="space-y-1">
-            {visibleMenuItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.href);
 
@@ -319,30 +415,93 @@ export default function AppShell({
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
                   className={[
-                    "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition",
+                    "group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all",
                     active
-                      ? "bg-slate-900 text-white shadow-sm"
-                      : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
                   ].join(" ")}
                 >
-                  <Icon size={20} strokeWidth={2} />
+                  <Icon
+                    size={20}
+                    strokeWidth={active ? 2.2 : 1.9}
+                  />
+
                   <span>{item.label}</span>
+
+                  {item.href === "/users" &&
+                    role === "super_admin" && (
+                      <span
+                        className={[
+                          "mr-auto rounded-full px-2 py-0.5 text-[10px] font-bold",
+                          active
+                            ? "bg-white/20 text-white"
+                            : "bg-emerald-100 text-emerald-700",
+                        ].join(" ")}
+                      >
+                        إدارة
+                      </span>
+                    )}
                 </Link>
               );
             })}
           </div>
         </nav>
 
-        {/* Logout */}
-        <div className="border-t border-slate-200 p-3">
+        {/* Bottom Area */}
+        <div className="shrink-0 border-t border-slate-200 p-3">
           <LogoutButton />
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="min-h-screen lg:mr-72">{children}</main>
+      {/* =========================
+          Main Content
+      ========================== */}
+      <div className="min-h-screen pr-72">
+        {/* Header */}
+        <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200 bg-white/95 px-8 shadow-sm backdrop-blur">
+          <div>
+            <div className="text-lg font-bold text-slate-900">
+              {roleLabel}
+            </div>
+
+            <div className="mt-1 text-xs text-slate-500">
+              نظام إدارة المعاهد الأزهرية
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+              title="الإشعارات"
+            >
+              <Bell size={19} />
+
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
+            </button>
+
+            <div className="hidden text-right sm:block">
+              <div className="text-sm font-semibold text-slate-800">
+                {profile?.full_name || "المستخدم"}
+              </div>
+
+              <div className="text-xs text-slate-500">
+                {roleLabel}
+              </div>
+            </div>
+
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+              <UserRound size={20} />
+            </div>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="min-h-[calc(100vh-5rem)] p-6 lg:p-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
