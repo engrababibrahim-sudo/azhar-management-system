@@ -1,13 +1,6 @@
 "use client";
 
 import {
-  FormEvent,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-
-import {
   Activity,
   Building2,
   CheckCircle2,
@@ -18,9 +11,17 @@ import {
   Search,
   ShieldCheck,
   UserPlus,
+  UserRound,
   Users,
   X,
 } from "lucide-react";
+
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
@@ -88,7 +89,7 @@ type UserForm = {
 };
 
 /* =========================================================
-   Role labels
+   Role Labels
 ========================================================= */
 
 const roleLabels: Record<Role, string> = {
@@ -105,7 +106,7 @@ const roleLabels: Record<Role, string> = {
 };
 
 /* =========================================================
-   Role colors
+   Role Colors
 ========================================================= */
 
 const roleColors: Record<Role, string> = {
@@ -141,7 +142,7 @@ const roleColors: Record<Role, string> = {
 };
 
 /* =========================================================
-   Form default
+   Empty Form
 ========================================================= */
 
 const emptyForm: UserForm = {
@@ -182,43 +183,38 @@ function UsersManagement() {
   const [success, setSuccess] = useState("");
 
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState<"all" | Role>(
-    "all"
-  );
+
+  const [roleFilter, setRoleFilter] =
+    useState<"all" | Role>("all");
+
   const [instituteFilter, setInstituteFilter] =
     useState("all");
 
   const [showModal, setShowModal] = useState(false);
+
   const [editingUser, setEditingUser] =
     useState<UserRecord | null>(null);
 
-  const [form, setForm] = useState<UserForm>(emptyForm);
+  const [form, setForm] =
+    useState<UserForm>(emptyForm);
+
   const [saving, setSaving] = useState(false);
 
   /* =======================================================
-     Determine current role
+     Current Role
   ======================================================= */
 
   const isSuperAdmin =
     currentUser?.role === "super_admin" ||
     currentUser?.role === "director";
 
-  const isItAdmin = currentUser?.role === "it_admin";
+  const isItAdmin =
+    currentUser?.role === "it_admin";
 
   /* =======================================================
-     Allowed roles
+     Selectable Roles
   ======================================================= */
 
-  /*
-   * مدير الإدارة:
-   * يستطيع إنشاء الأدوار المطلوبة على مستوى الإدارة
-   * والمعاهد، ومن ضمنها IT Admin.
-   *
-   * مسؤول IT:
-   * يعمل داخل معهده فقط.
-   * لا يستطيع إنشاء IT Admin آخر.
-   * ولا يستطيع إنشاء الأدوار المركزية.
-   */
   const selectableRoles = useMemo<Role[]>(() => {
     if (isSuperAdmin) {
       return [
@@ -245,7 +241,7 @@ function UsersManagement() {
   }, [isSuperAdmin, isItAdmin]);
 
   /* =======================================================
-     Filter roles
+     Filter Roles
   ======================================================= */
 
   const filterRoles = useMemo<Role[]>(() => {
@@ -255,10 +251,6 @@ function UsersManagement() {
       found.add(user.role);
     });
 
-    /*
-     * نضيف الأدوار المتاحة للحساب الحالي حتى تظهر
-     * في الفلتر حتى لو لم يوجد مستخدم منها بعد.
-     */
     selectableRoles.forEach((role) => {
       found.add(role);
     });
@@ -267,7 +259,7 @@ function UsersManagement() {
   }, [users, selectableRoles]);
 
   /* =======================================================
-     Get session token
+     Get Access Token
   ======================================================= */
 
   const getAccessToken = async () => {
@@ -292,7 +284,7 @@ function UsersManagement() {
   };
 
   /* =======================================================
-     Load users
+     Load Data
   ======================================================= */
 
   const loadData = async (
@@ -339,7 +331,10 @@ function UsersManagement() {
         setCurrentUser(data.currentUser);
       }
     } catch (err) {
-      console.error("Users load error:", err);
+      console.error(
+        "Users load error:",
+        err
+      );
 
       setError(
         err instanceof Error
@@ -353,7 +348,7 @@ function UsersManagement() {
   };
 
   /* =======================================================
-     Initial load
+     Initial Load
   ======================================================= */
 
   useEffect(() => {
@@ -361,18 +356,22 @@ function UsersManagement() {
   }, []);
 
   /* =======================================================
-     Current institute for IT Admin
+     Current Institute
   ======================================================= */
 
   const currentInstitute = useMemo(() => {
-    if (!isItAdmin || !currentUser?.institute_id) {
+    if (
+      !isItAdmin ||
+      !currentUser?.institute_id
+    ) {
       return null;
     }
 
     return (
       institutes.find(
         (institute) =>
-          institute.id === currentUser.institute_id
+          institute.id ===
+          currentUser.institute_id
       ) || null
     );
   }, [
@@ -382,11 +381,12 @@ function UsersManagement() {
   ]);
 
   /* =======================================================
-     Filter users
+     Filter Users
   ======================================================= */
 
   const filteredUsers = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword =
+      search.trim().toLowerCase();
 
     return users.filter((user) => {
       const matchesSearch =
@@ -407,7 +407,8 @@ function UsersManagement() {
 
       const matchesInstitute =
         instituteFilter === "all" ||
-        user.institute_id === instituteFilter;
+        user.institute_id ===
+          instituteFilter;
 
       return (
         matchesSearch &&
@@ -465,7 +466,7 @@ function UsersManagement() {
   }, [users]);
 
   /* =======================================================
-     Open create modal
+     Open Create Modal
   ======================================================= */
 
   const openCreateModal = () => {
@@ -478,7 +479,8 @@ function UsersManagement() {
       ...emptyForm,
       role: defaultRole,
       institute_id:
-        isItAdmin && currentUser?.institute_id
+        isItAdmin &&
+        currentUser?.institute_id
           ? currentUser.institute_id
           : "",
     });
@@ -489,16 +491,12 @@ function UsersManagement() {
   };
 
   /* =======================================================
-     Open edit modal
+     Open Edit Modal
   ======================================================= */
 
-  const openEditModal = (user: UserRecord) => {
-    /*
-     * IT Admin لا يستطيع تعديل:
-     * - مستخدم خارج معهده
-     * - IT Admin آخر
-     * - الأدوار المركزية
-     */
+  const openEditModal = (
+    user: UserRecord
+  ) => {
     if (
       isItAdmin &&
       user.institute_id !==
@@ -528,7 +526,8 @@ function UsersManagement() {
       password: "",
       phone: user.phone || "",
       role: user.role,
-      institute_id: user.institute_id || "",
+      institute_id:
+        user.institute_id || "",
     });
 
     setError("");
@@ -537,7 +536,7 @@ function UsersManagement() {
   };
 
   /* =======================================================
-     Close modal
+     Close Modal
   ======================================================= */
 
   const closeModal = () => {
@@ -551,7 +550,7 @@ function UsersManagement() {
   };
 
   /* =======================================================
-     Form change
+     Update Form
   ======================================================= */
 
   const updateForm = (
@@ -565,13 +564,12 @@ function UsersManagement() {
   };
 
   /* =======================================================
-     Role change
+     Role Change
   ======================================================= */
 
-  const handleRoleChange = (role: Role) => {
-    /*
-     * الأدوار المركزية لا تحتاج institute_id
-     */
+  const handleRoleChange = (
+    role: Role
+  ) => {
     const centralRole =
       role === "super_admin" ||
       role === "director" ||
@@ -582,14 +580,15 @@ function UsersManagement() {
       role,
       institute_id: centralRole
         ? ""
-        : isItAdmin && currentUser?.institute_id
+        : isItAdmin &&
+          currentUser?.institute_id
         ? currentUser.institute_id
         : previous.institute_id,
     }));
   };
 
   /* =======================================================
-     Save user
+     Save User
   ======================================================= */
 
   const saveUser = async (
@@ -601,17 +600,26 @@ function UsersManagement() {
     setSuccess("");
 
     if (!form.full_name.trim()) {
-      setError("من فضلك أدخل اسم المستخدم");
+      setError(
+        "من فضلك أدخل اسم المستخدم"
+      );
       return;
     }
 
     if (!form.email.trim()) {
-      setError("من فضلك أدخل البريد الإلكتروني");
+      setError(
+        "من فضلك أدخل البريد الإلكتروني"
+      );
       return;
     }
 
-    if (!editingUser && !form.password) {
-      setError("من فضلك أدخل كلمة المرور");
+    if (
+      !editingUser &&
+      !form.password
+    ) {
+      setError(
+        "من فضلك أدخل كلمة المرور"
+      );
       return;
     }
 
@@ -626,7 +634,9 @@ function UsersManagement() {
     }
 
     if (
-      !selectableRoles.includes(form.role) &&
+      !selectableRoles.includes(
+        form.role
+      ) &&
       !(
         editingUser &&
         isSuperAdmin &&
@@ -642,7 +652,8 @@ function UsersManagement() {
     const instituteRequired =
       form.role === "it_admin" ||
       form.role === "sheikh" ||
-      form.role === "institute_deputy" ||
+      form.role ===
+        "institute_deputy" ||
       form.role === "teacher" ||
       form.role === "employee";
 
@@ -656,9 +667,6 @@ function UsersManagement() {
       return;
     }
 
-    /*
-     * IT Admin لا يستطيع تغيير المعهد.
-     */
     if (
       isItAdmin &&
       form.institute_id !==
@@ -673,36 +681,42 @@ function UsersManagement() {
     try {
       setSaving(true);
 
-      const token = await getAccessToken();
+      const token =
+        await getAccessToken();
 
       if (editingUser) {
-        /* ==========================
-           Update
-        ========================== */
+        const response =
+          await fetch(
+            "/api/users/create",
+            {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                id: editingUser.id,
+                full_name:
+                  form.full_name.trim(),
+                email:
+                  form.email.trim(),
+                phone:
+                  form.phone.trim() ||
+                  null,
+                role: form.role,
+                institute_id:
+                  form.institute_id ||
+                  null,
+                password:
+                  form.password.trim() ||
+                  undefined,
+              }),
+            }
+          );
 
-        const response = await fetch(
-          "/api/users/create",
-          {
-            method: "PATCH",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              id: editingUser.id,
-              full_name: form.full_name.trim(),
-              email: form.email.trim(),
-              phone: form.phone.trim() || null,
-              role: form.role,
-              institute_id:
-                form.institute_id || null,
-              password:
-                form.password.trim() || undefined,
-            }),
-          }
-        );
-
-        const data = await response.json();
+        const data =
+          await response.json();
 
         if (!response.ok) {
           throw new Error(
@@ -716,31 +730,36 @@ function UsersManagement() {
           "تم تعديل بيانات المستخدم بنجاح"
         );
       } else {
-        /* ==========================
-           Create
-        ========================== */
+        const response =
+          await fetch(
+            "/api/users/create",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                full_name:
+                  form.full_name.trim(),
+                email:
+                  form.email.trim(),
+                password:
+                  form.password,
+                phone:
+                  form.phone.trim() ||
+                  null,
+                role: form.role,
+                institute_id:
+                  form.institute_id ||
+                  null,
+              }),
+            }
+          );
 
-        const response = await fetch(
-          "/api/users/create",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              full_name: form.full_name.trim(),
-              email: form.email.trim(),
-              password: form.password,
-              phone: form.phone.trim() || null,
-              role: form.role,
-              institute_id:
-                form.institute_id || null,
-            }),
-          }
-        );
-
-        const data = await response.json();
+        const data =
+          await response.json();
 
         if (!response.ok) {
           throw new Error(
@@ -761,7 +780,10 @@ function UsersManagement() {
       setEditingUser(null);
       setForm(emptyForm);
     } catch (err) {
-      console.error("Save user error:", err);
+      console.error(
+        "Save user error:",
+        err
+      );
 
       setError(
         err instanceof Error
@@ -774,7 +796,7 @@ function UsersManagement() {
   };
 
   /* =======================================================
-     Toggle user status
+     Toggle User Status
   ======================================================= */
 
   const toggleUserStatus = async (
@@ -805,9 +827,13 @@ function UsersManagement() {
       ? "تعطيل"
       : "تفعيل";
 
-    const confirmed = window.confirm(
-      `هل أنت متأكد من ${action} المستخدم "${user.full_name || user.email}"؟`
-    );
+    const confirmed =
+      window.confirm(
+        `هل أنت متأكد من ${action} المستخدم "${
+          user.full_name ||
+          user.email
+        }"؟`
+      );
 
     if (!confirmed) {
       return;
@@ -817,24 +843,29 @@ function UsersManagement() {
       setError("");
       setSuccess("");
 
-      const token = await getAccessToken();
+      const token =
+        await getAccessToken();
 
-      const response = await fetch(
-        "/api/users/create",
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id: user.id,
-            is_active: !user.is_active,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/users/create",
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              id: user.id,
+              is_active:
+                !user.is_active,
+            }),
+          }
+        );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -866,7 +897,7 @@ function UsersManagement() {
   };
 
   /* =======================================================
-     Institute name
+     Get Institute Name
   ======================================================= */
 
   const getInstituteName = (
@@ -880,10 +911,12 @@ function UsersManagement() {
       return "الإدارة التعليمية";
     }
 
-    const institute = institutes.find(
-      (item) =>
-        item.id === user.institute_id
-    );
+    const institute =
+      institutes.find(
+        (item) =>
+          item.id ===
+          user.institute_id
+      );
 
     return (
       institute?.name ||
@@ -902,11 +935,13 @@ function UsersManagement() {
         className="flex min-h-[60vh] items-center justify-center"
       >
         <div className="flex flex-col items-center gap-4">
+
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" />
 
           <p className="text-sm text-slate-500">
             جاري تحميل المستخدمين...
           </p>
+
         </div>
       </div>
     );
@@ -921,29 +956,35 @@ function UsersManagement() {
       dir="rtl"
       className="space-y-6"
     >
-      {/* =========================================
-          Header
-      ========================================== */}
+
+      {/* Header */}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
         <div>
+
           <h1 className="text-3xl font-bold text-slate-900">
             إدارة المستخدمين
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">
             {isItAdmin
-              ? `إدارة مستخدمي ${currentInstitute?.name || "المعهد"}`
+              ? `إدارة مستخدمي ${
+                  currentInstitute?.name ||
+                  "المعهد"
+                }`
               : "إدارة مستخدمي الإدارة التعليمية والمعاهد التابعة لها"}
           </p>
+
         </div>
 
         <div className="flex items-center gap-3">
 
           <button
             type="button"
-            onClick={() => loadData(true)}
+            onClick={() =>
+              loadData(true)
+            }
             disabled={refreshing}
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -959,13 +1000,18 @@ function UsersManagement() {
             تحديث
           </button>
 
-          {(isSuperAdmin || isItAdmin) && (
+          {(isSuperAdmin ||
+            isItAdmin) && (
             <button
               type="button"
-              onClick={openCreateModal}
+              onClick={
+                openCreateModal
+              }
               className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700"
             >
-              <UserPlus size={19} />
+              <UserPlus
+                size={19}
+              />
 
               إضافة مستخدم
             </button>
@@ -974,9 +1020,7 @@ function UsersManagement() {
         </div>
       </div>
 
-      {/* =========================================
-          Scope Notice
-      ========================================== */}
+      {/* IT Admin Notice */}
 
       {isItAdmin && (
         <div className="flex items-center gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-5 py-4 text-sm text-cyan-800">
@@ -987,31 +1031,36 @@ function UsersManagement() {
           />
 
           <div>
+
             <div className="font-bold">
               صلاحيات مسؤول تكنولوجيا المعلومات
             </div>
 
             <div className="mt-1">
-              يمكنك إدارة مستخدمي معهدك فقط، ولا يمكنك
-              إدارة المستخدمين المركزيين أو مسؤول IT آخر.
+              يمكنك إدارة مستخدمي معهدك فقط،
+              ولا يمكنك إدارة المستخدمين
+              المركزيين أو مسؤول IT آخر.
             </div>
+
           </div>
 
         </div>
       )}
 
-      {/* =========================================
-          Error
-      ========================================== */}
+      {/* Error */}
 
       {error && (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
 
-          <span>{error}</span>
+          <span>
+            {error}
+          </span>
 
           <button
             type="button"
-            onClick={() => setError("")}
+            onClick={() =>
+              setError("")
+            }
             className="rounded-lg p-1 hover:bg-red-100"
           >
             <X size={18} />
@@ -1020,21 +1069,28 @@ function UsersManagement() {
         </div>
       )}
 
-      {/* =========================================
-          Success
-      ========================================== */}
+      {/* Success */}
 
       {success && (
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
 
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={19} />
-            <span>{success}</span>
+
+            <CheckCircle2
+              size={19}
+            />
+
+            <span>
+              {success}
+            </span>
+
           </div>
 
           <button
             type="button"
-            onClick={() => setSuccess("")}
+            onClick={() =>
+              setSuccess("")
+            }
             className="rounded-lg p-1 hover:bg-emerald-100"
           >
             <X size={18} />
@@ -1043,60 +1099,76 @@ function UsersManagement() {
         </div>
       )}
 
-      {/* =========================================
-          Statistics
-      ========================================== */}
+      {/* Statistics */}
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
 
         <StatCard
           title="إجمالي المستخدمين"
           value={statistics.total}
-          icon={<Users size={22} />}
+          icon={
+            <Users size={22} />
+          }
         />
 
         <StatCard
           title="نشط"
           value={statistics.active}
-          icon={<CheckCircle2 size={22} />}
+          icon={
+            <CheckCircle2
+              size={22}
+            />
+          }
         />
 
         <StatCard
           title="غير نشط"
           value={statistics.inactive}
-          icon={<Power size={22} />}
+          icon={
+            <Power size={22} />
+          }
         />
 
         <StatCard
           title="مسؤولو IT"
           value={statistics.itAdmins}
-          icon={<MonitorCog size={22} />}
+          icon={
+            <MonitorCog
+              size={22}
+            />
+          }
         />
 
         <StatCard
           title="شيوخ المعاهد"
           value={statistics.sheikhs}
-          icon={<ShieldCheck size={22} />}
+          icon={
+            <ShieldCheck
+              size={22}
+            />
+          }
         />
 
         <StatCard
           title="المدرسون"
           value={statistics.teachers}
-          icon={<Users size={22} />}
+          icon={
+            <Users size={22} />
+          }
         />
 
       </div>
 
-      {/* =========================================
-          Filters
-      ========================================== */}
+      {/* Filters */}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
 
           {/* Search */}
+
           <div>
+
             <label className="mb-2 block text-sm font-semibold text-slate-700">
               بحث
             </label>
@@ -1112,17 +1184,22 @@ function UsersManagement() {
                 type="text"
                 value={search}
                 onChange={(event) =>
-                  setSearch(event.target.value)
+                  setSearch(
+                    event.target.value
+                  )
                 }
                 placeholder="الاسم أو البريد أو الهاتف..."
                 className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-11 pl-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
 
             </div>
+
           </div>
 
-          {/* Role Filter */}
+          {/* Role */}
+
           <div>
+
             <label className="mb-2 block text-sm font-semibold text-slate-700">
               الدور
             </label>
@@ -1131,30 +1208,42 @@ function UsersManagement() {
               value={roleFilter}
               onChange={(event) =>
                 setRoleFilter(
-                  event.target.value as
+                  event.target
+                    .value as
                     | "all"
                     | Role
                 )
               }
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             >
+
               <option value="all">
                 جميع الأدوار
               </option>
 
-              {filterRoles.map((role) => (
-                <option
-                  key={role}
-                  value={role}
-                >
-                  {roleLabels[role]}
-                </option>
-              ))}
+              {filterRoles.map(
+                (role) => (
+                  <option
+                    key={role}
+                    value={role}
+                  >
+                    {
+                      roleLabels[
+                        role
+                      ]
+                    }
+                  </option>
+                )
+              )}
+
             </select>
+
           </div>
 
-          {/* Institute Filter */}
+          {/* Institute */}
+
           <div>
+
             <label className="mb-2 block text-sm font-semibold text-slate-700">
               المعهد
             </label>
@@ -1166,7 +1255,9 @@ function UsersManagement() {
                     "all"
                   : instituteFilter
               }
-              disabled={isItAdmin}
+              disabled={
+                isItAdmin
+              }
               onChange={(event) =>
                 setInstituteFilter(
                   event.target.value
@@ -1174,6 +1265,7 @@ function UsersManagement() {
               }
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-600"
             >
+
               {isItAdmin ? (
                 <option
                   value={
@@ -1181,8 +1273,10 @@ function UsersManagement() {
                     "all"
                   }
                 >
-                  {currentInstitute?.name ||
-                    "معهدي"}
+                  {
+                    currentInstitute?.name ||
+                    "معهدي"
+                  }
                 </option>
               ) : (
                 <>
@@ -1193,38 +1287,49 @@ function UsersManagement() {
                   {institutes.map(
                     (institute) => (
                       <option
-                        key={institute.id}
-                        value={institute.id}
+                        key={
+                          institute.id
+                        }
+                        value={
+                          institute.id
+                        }
                       >
-                        {institute.name}
+                        {
+                          institute.name
+                        }
                       </option>
                     )
                   )}
                 </>
               )}
+
             </select>
+
           </div>
 
         </div>
+
       </div>
 
-      {/* =========================================
-          Users Table
-      ========================================== */}
+      {/* Users Table */}
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
 
           <div>
+
             <h2 className="text-lg font-bold text-slate-900">
               المستخدمون
             </h2>
 
             <p className="mt-1 text-xs text-slate-500">
               عدد النتائج:{" "}
-              {filteredUsers.length}
+              {
+                filteredUsers.length
+              }
             </p>
+
           </div>
 
           <Activity
@@ -1234,11 +1339,14 @@ function UsersManagement() {
 
         </div>
 
-        {filteredUsers.length === 0 ? (
+        {filteredUsers.length ===
+        0 ? (
           <div className="flex min-h-[250px] flex-col items-center justify-center px-6 text-center">
 
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-              <Users size={27} />
+              <Users
+                size={27}
+              />
             </div>
 
             <h3 className="text-base font-bold text-slate-700">
@@ -1251,13 +1359,19 @@ function UsersManagement() {
                 : "لا توجد نتائج مطابقة للفلاتر الحالية."}
             </p>
 
-            {(isSuperAdmin || isItAdmin) && (
+            {(isSuperAdmin ||
+              isItAdmin) && (
               <button
                 type="button"
-                onClick={openCreateModal}
+                onClick={
+                  openCreateModal
+                }
                 className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700"
               >
-                <UserPlus size={18} />
+                <UserPlus
+                  size={18}
+                />
+
                 إضافة مستخدم
               </button>
             )}
@@ -1269,6 +1383,7 @@ function UsersManagement() {
             <table className="w-full min-w-[950px] text-right">
 
               <thead className="bg-slate-50">
+
                 <tr className="border-b border-slate-200">
 
                   <th className="px-5 py-4 text-xs font-bold text-slate-500">
@@ -1296,167 +1411,207 @@ function UsersManagement() {
                   </th>
 
                 </tr>
+
               </thead>
 
               <tbody>
 
-                {filteredUsers.map((user) => {
+                {filteredUsers.map(
+                  (user) => {
 
-                  const canEdit =
-                    isSuperAdmin ||
-                    (
-                      isItAdmin &&
-                      user.institute_id ===
-                        currentUser?.institute_id &&
-                      user.role !== "it_admin"
-                    );
+                    const canEdit =
+                      isSuperAdmin ||
+                      (
+                        isItAdmin &&
+                        user.institute_id ===
+                          currentUser?.institute_id &&
+                        user.role !==
+                          "it_admin"
+                      );
 
-                  return (
-                    <tr
-                      key={user.id}
-                      className="border-b border-slate-100 transition hover:bg-slate-50"
-                    >
+                    return (
+                      <tr
+                        key={user.id}
+                        className="border-b border-slate-100 transition hover:bg-slate-50"
+                      >
 
-                      {/* User */}
-                      <td className="px-5 py-4">
+                        {/* User */}
 
-                        <div className="flex items-center gap-3">
+                        <td className="px-5 py-4">
 
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                            <UserRound size={19} />
-                          </div>
+                          <div className="flex items-center gap-3">
 
-                          <div className="min-w-0">
-
-                            <div className="truncate font-semibold text-slate-800">
-                              {user.full_name ||
-                                "بدون اسم"}
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                              <UserRound
+                                size={19}
+                              />
                             </div>
 
-                            {user.phone && (
-                              <div className="mt-1 text-xs text-slate-500">
-                                {user.phone}
+                            <div className="min-w-0">
+
+                              <div className="truncate font-semibold text-slate-800">
+                                {
+                                  user.full_name ||
+                                  "بدون اسم"
+                                }
                               </div>
-                            )}
+
+                              {user.phone && (
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {
+                                    user.phone
+                                  }
+                                </div>
+                              )}
+
+                            </div>
 
                           </div>
 
-                        </div>
+                        </td>
 
-                      </td>
+                        {/* Email */}
 
-                      {/* Email */}
-                      <td className="px-5 py-4 text-sm text-slate-600">
-                        {user.email || "—"}
-                      </td>
+                        <td className="px-5 py-4 text-sm text-slate-600">
+                          {
+                            user.email ||
+                            "—"
+                          }
+                        </td>
 
-                      {/* Role */}
-                      <td className="px-5 py-4">
+                        {/* Role */}
 
-                        <span
-                          className={[
-                            "inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold",
-                            roleColors[user.role],
-                          ].join(" ")}
-                        >
-                          {roleLabels[user.role]}
-                        </span>
+                        <td className="px-5 py-4">
 
-                      </td>
-
-                      {/* Institute */}
-                      <td className="px-5 py-4">
-
-                        <div className="flex items-center gap-2 text-sm text-slate-600">
-
-                          <Building2
-                            size={17}
-                            className="text-slate-400"
-                          />
-
-                          <span>
-                            {getInstituteName(
-                              user
+                          <span
+                            className={[
+                              "inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold",
+                              roleColors[
+                                user.role
+                              ],
+                            ].join(
+                              " "
                             )}
+                          >
+                            {
+                              roleLabels[
+                                user.role
+                              ]
+                            }
                           </span>
 
-                        </div>
+                        </td>
 
-                      </td>
+                        {/* Institute */}
 
-                      {/* Status */}
-                      <td className="px-5 py-4">
+                        <td className="px-5 py-4">
 
-                        {user.is_active ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                            نشط
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
-                            <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
-                            غير نشط
-                          </span>
-                        )}
+                          <div className="flex items-center gap-2 text-sm text-slate-600">
 
-                      </td>
+                            <Building2
+                              size={17}
+                              className="text-slate-400"
+                            />
 
-                      {/* Actions */}
-                      <td className="px-5 py-4">
-
-                        {canEdit ? (
-                          <div className="flex items-center gap-2">
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openEditModal(
+                            <span>
+                              {
+                                getInstituteName(
                                   user
                                 )
                               }
-                              className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-                            >
-                              <Edit3
-                                size={15}
-                              />
-                              تعديل
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleUserStatus(
-                                  user
-                                )
-                              }
-                              className={[
-                                "flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition",
-                                user.is_active
-                                  ? "bg-red-50 text-red-600 hover:bg-red-100"
-                                  : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100",
-                              ].join(" ")}
-                            >
-                              <Power
-                                size={15}
-                              />
-
-                              {user.is_active
-                                ? "تعطيل"
-                                : "تفعيل"}
-                            </button>
+                            </span>
 
                           </div>
-                        ) : (
-                          <span className="text-xs text-slate-400">
-                            غير متاح
-                          </span>
-                        )}
 
-                      </td>
+                        </td>
 
-                    </tr>
-                  );
-                })}
+                        {/* Status */}
+
+                        <td className="px-5 py-4">
+
+                          {user.is_active ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+
+                              نشط
+
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
+
+                              <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
+
+                              غير نشط
+
+                            </span>
+                          )}
+
+                        </td>
+
+                        {/* Actions */}
+
+                        <td className="px-5 py-4">
+
+                          {canEdit ? (
+                            <div className="flex items-center gap-2">
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditModal(
+                                    user
+                                  )
+                                }
+                                className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                              >
+                                <Edit3
+                                  size={15}
+                                />
+
+                                تعديل
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleUserStatus(
+                                    user
+                                  )
+                                }
+                                className={[
+                                  "flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition",
+                                  user.is_active
+                                    ? "bg-red-50 text-red-600 hover:bg-red-100"
+                                    : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100",
+                                ].join(
+                                  " "
+                                )}
+                              >
+
+                                <Power
+                                  size={15}
+                                />
+
+                                {user.is_active
+                                  ? "تعطيل"
+                                  : "تفعيل"}
+
+                              </button>
+
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400">
+                              غير متاح
+                            </span>
+                          )}
+
+                        </td>
+
+                      </tr>
+                    );
+                  }
+                )}
 
               </tbody>
 
@@ -1467,9 +1622,7 @@ function UsersManagement() {
 
       </div>
 
-      {/* =========================================
-          Add / Edit Modal
-      ========================================== */}
+      {/* Add / Edit Modal */}
 
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
@@ -1477,9 +1630,11 @@ function UsersManagement() {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
 
             {/* Modal Header */}
+
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-5">
 
               <div>
+
                 <h2 className="text-xl font-bold text-slate-900">
                   {editingUser
                     ? "تعديل المستخدم"
@@ -1491,11 +1646,14 @@ function UsersManagement() {
                     ? "إضافة أو تعديل مستخدم داخل المعهد فقط"
                     : "إدارة حسابات مستخدمي الإدارة والمعاهد"}
                 </p>
+
               </div>
 
               <button
                 type="button"
-                onClick={closeModal}
+                onClick={
+                  closeModal
+                }
                 disabled={saving}
                 className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100"
               >
@@ -1505,20 +1663,25 @@ function UsersManagement() {
             </div>
 
             {/* Form */}
+
             <form
               onSubmit={saveUser}
               className="space-y-5 p-6"
             >
 
               {/* Name */}
+
               <div>
+
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   اسم المستخدم
                 </label>
 
                 <input
                   type="text"
-                  value={form.full_name}
+                  value={
+                    form.full_name
+                  }
                   onChange={(event) =>
                     updateForm(
                       "full_name",
@@ -1529,19 +1692,24 @@ function UsersManagement() {
                   disabled={saving}
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                 />
+
               </div>
 
               {/* Email + Phone */}
+
               <div className="grid gap-5 md:grid-cols-2">
 
                 <div>
+
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     البريد الإلكتروني
                   </label>
 
                   <input
                     type="email"
-                    value={form.email}
+                    value={
+                      form.email
+                    }
                     onChange={(event) =>
                       updateForm(
                         "email",
@@ -1550,20 +1718,25 @@ function UsersManagement() {
                     }
                     placeholder="example@email.com"
                     disabled={
-                      saving || !!editingUser
+                      saving ||
+                      !!editingUser
                     }
                     className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500"
                   />
+
                 </div>
 
                 <div>
+
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
                     رقم الهاتف
                   </label>
 
                   <input
                     type="tel"
-                    value={form.phone}
+                    value={
+                      form.phone
+                    }
                     onChange={(event) =>
                       updateForm(
                         "phone",
@@ -1574,12 +1747,15 @@ function UsersManagement() {
                     disabled={saving}
                     className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
+
                 </div>
 
               </div>
 
               {/* Password */}
+
               <div>
+
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   {editingUser
                     ? "كلمة مرور جديدة - اختياري"
@@ -1588,7 +1764,9 @@ function UsersManagement() {
 
                 <input
                   type="password"
-                  value={form.password}
+                  value={
+                    form.password
+                  }
                   onChange={(event) =>
                     updateForm(
                       "password",
@@ -1603,19 +1781,25 @@ function UsersManagement() {
                   disabled={saving}
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                 />
+
               </div>
 
               {/* Role */}
+
               <div>
+
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   الدور
                 </label>
 
                 <select
-                  value={form.role}
+                  value={
+                    form.role
+                  }
                   onChange={(event) =>
                     handleRoleChange(
-                      event.target.value as Role
+                      event.target
+                        .value as Role
                     )
                   }
                   disabled={
@@ -1627,27 +1811,38 @@ function UsersManagement() {
                   }
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50"
                 >
+
                   {selectableRoles.map(
                     (role) => (
                       <option
                         key={role}
                         value={role}
                       >
-                        {roleLabels[role]}
+                        {
+                          roleLabels[
+                            role
+                          ]
+                        }
                       </option>
                     )
                   )}
+
                 </select>
+
               </div>
 
               {/* Institute */}
+
               <div>
+
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   المعهد
                 </label>
 
                 <select
-                  value={form.institute_id}
+                  value={
+                    form.institute_id
+                  }
                   onChange={(event) =>
                     updateForm(
                       "institute_id",
@@ -1661,14 +1856,18 @@ function UsersManagement() {
                       "super_admin" ||
                     form.role ===
                       "director" ||
-                    form.role === "deputy"
+                    form.role ===
+                      "deputy"
                   }
                   className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50"
                 >
+
                   {form.role ===
                     "super_admin" ||
-                  form.role === "director" ||
-                  form.role === "deputy" ? (
+                  form.role ===
+                    "director" ||
+                  form.role ===
+                    "deputy" ? (
                     <option value="">
                       الإدارة التعليمية
                     </option>
@@ -1681,26 +1880,36 @@ function UsersManagement() {
                       {institutes.map(
                         (institute) => (
                           <option
-                            key={institute.id}
-                            value={institute.id}
+                            key={
+                              institute.id
+                            }
+                            value={
+                              institute.id
+                            }
                           >
-                            {institute.name}
+                            {
+                              institute.name
+                            }
                           </option>
                         )
                       )}
                     </>
                   )}
+
                 </select>
 
                 {isItAdmin && (
                   <p className="mt-2 text-xs text-cyan-700">
-                    تم تثبيت المعهد على معهد مسؤول
-                    تكنولوجيا المعلومات.
+                    تم تثبيت المعهد على
+                    معهد مسؤول تكنولوجيا
+                    المعلومات.
                   </p>
                 )}
+
               </div>
 
               {/* Form Error */}
+
               {error && (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium leading-6 text-red-700">
                   {error}
@@ -1708,11 +1917,14 @@ function UsersManagement() {
               )}
 
               {/* Buttons */}
+
               <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
 
                 <button
                   type="button"
-                  onClick={closeModal}
+                  onClick={
+                    closeModal
+                  }
                   disabled={saving}
                   className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                 >
@@ -1724,17 +1936,23 @@ function UsersManagement() {
                   disabled={saving}
                   className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-7 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
+
                   {saving ? (
                     <>
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+
                       جاري الحفظ...
                     </>
                   ) : (
                     <>
                       {editingUser ? (
-                        <Edit3 size={18} />
+                        <Edit3
+                          size={18}
+                        />
                       ) : (
-                        <UserPlus size={18} />
+                        <UserPlus
+                          size={18}
+                        />
                       )}
 
                       {editingUser
@@ -1742,6 +1960,7 @@ function UsersManagement() {
                         : "إضافة المستخدم"}
                     </>
                   )}
+
                 </button>
 
               </div>
@@ -1751,6 +1970,7 @@ function UsersManagement() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
@@ -1774,6 +1994,7 @@ function StatCard({
       <div className="flex items-center justify-between gap-3">
 
         <div>
+
           <div className="text-xs font-medium text-slate-500">
             {title}
           </div>
@@ -1781,6 +2002,7 @@ function StatCard({
           <div className="mt-2 text-2xl font-bold text-slate-900">
             {value}
           </div>
+
         </div>
 
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
