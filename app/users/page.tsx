@@ -13,6 +13,7 @@ import {
   Building2,
   Mail,
   Phone,
+  KeyRound,
 } from "lucide-react";
 
 import AppShell from "../components/AppShell";
@@ -49,12 +50,6 @@ type Institute = {
   directorate_id: string | null;
 };
 
-/*
-|--------------------------------------------------------------------------
-| أسماء الأدوار
-|--------------------------------------------------------------------------
-*/
-
 const roleLabels: Record<Role, string> = {
   super_admin: "مدير الإدارة التعليمية",
   director: "مدير الإدارة التعليمية (قديم)",
@@ -81,7 +76,7 @@ const roleColors: Record<Role, string> = {
 
 /*
 |--------------------------------------------------------------------------
-| الأدوار المسموح بإضافتها
+| الأدوار التي يمكن إنشاء حساب دخول لها
 |--------------------------------------------------------------------------
 */
 
@@ -112,14 +107,6 @@ const selectableRoles: {
   {
     value: "teacher",
     label: "مدرس",
-  },
-  {
-    value: "parent",
-    label: "ولي أمر",
-  },
-  {
-    value: "student",
-    label: "طالب",
   },
 ];
 
@@ -167,12 +154,6 @@ const filterRoles: {
   },
 ];
 
-/*
-|--------------------------------------------------------------------------
-| الصفحة
-|--------------------------------------------------------------------------
-*/
-
 export default function UsersPage() {
   return (
     <AppShell>
@@ -180,12 +161,6 @@ export default function UsersPage() {
     </AppShell>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| إدارة المستخدمين
-|--------------------------------------------------------------------------
-*/
 
 function UsersManagement() {
   const [users, setUsers] = useState<Profile[]>([]);
@@ -202,7 +177,8 @@ function UsersManagement() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
-  const [instituteFilter, setInstituteFilter] = useState("all");
+  const [instituteFilter, setInstituteFilter] =
+    useState("all");
 
   const [showModal, setShowModal] = useState(false);
 
@@ -213,6 +189,7 @@ function UsersManagement() {
     full_name: "",
     phone: "",
     email: "",
+    password: "",
     role: "employee" as Role,
     institute_id: "",
     is_active: true,
@@ -265,7 +242,9 @@ function UsersManagement() {
         error: profileError,
       } = await supabase
         .from("profiles")
-        .select("role, directorate_id")
+        .select(
+          "role, directorate_id"
+        )
         .eq("id", user.id)
         .maybeSingle();
 
@@ -280,7 +259,8 @@ function UsersManagement() {
         return;
       }
 
-      const role = currentProfile.role as Role;
+      const role =
+        currentProfile.role as Role;
 
       /*
       |--------------------------------------------------------------------------
@@ -305,6 +285,15 @@ function UsersManagement() {
       const directorateId =
         currentProfile.directorate_id;
 
+      if (!directorateId) {
+        setMessage(
+          "الحساب الحالي غير مرتبط بإدارة تعليمية"
+        );
+
+        setLoading(false);
+        return;
+      }
+
       /*
       |--------------------------------------------------------------------------
       | تحميل المعاهد التابعة للإدارة
@@ -318,13 +307,11 @@ function UsersManagement() {
         )
         .order("name");
 
-      if (directorateId) {
-        institutesQuery =
-          institutesQuery.eq(
-            "directorate_id",
-            directorateId
-          );
-      }
+      institutesQuery =
+        institutesQuery.eq(
+          "directorate_id",
+          directorateId
+        );
 
       const {
         data: institutesData,
@@ -343,7 +330,8 @@ function UsersManagement() {
       }
 
       const loadedInstitutes =
-        (institutesData || []) as Institute[];
+        (institutesData ||
+          []) as Institute[];
 
       setInstitutes(loadedInstitutes);
 
@@ -354,18 +342,8 @@ function UsersManagement() {
 
       /*
       |--------------------------------------------------------------------------
-      | تحميل المستخدمين الأساسيين للإدارة
+      | تحميل المستخدمين الأساسيين
       |--------------------------------------------------------------------------
-      |
-      | يشمل:
-      | super_admin
-      | director القديم
-      | deputy
-      | sheikh
-      | institute_deputy
-      | employee
-      | teacher
-      |
       */
 
       const {
@@ -394,7 +372,9 @@ function UsersManagement() {
         .order("full_name");
 
       if (directUsersError) {
-        console.error(directUsersError);
+        console.error(
+          directUsersError
+        );
 
         setMessage(
           "حدث خطأ أثناء تحميل مستخدمي الإدارة"
@@ -406,13 +386,8 @@ function UsersManagement() {
 
       /*
       |--------------------------------------------------------------------------
-      | تحميل الطلاب التابعين لمعاهد الإدارة
+      | المستخدمون المرتبطون بالطلاب
       |--------------------------------------------------------------------------
-      |
-      | نحتاج هذه البيانات حتى نعرف:
-      | - أولياء الأمور المرتبطين بهذه المعاهد
-      | - الطلاب التابعين لهذه الإدارة
-      |
       */
 
       let relatedUsers: Profile[] = [];
@@ -444,49 +419,39 @@ function UsersManagement() {
           const students =
             studentsData || [];
 
-          /*
-          |--------------------------------------------------------------------------
-          | الطلاب
-          |--------------------------------------------------------------------------
-          */
-
           const studentIds =
             students.map(
               (student) => student.id
             );
 
-          /*
-          |--------------------------------------------------------------------------
-          | أولياء الأمور
-          |--------------------------------------------------------------------------
-          */
-
-          const parentIds = Array.from(
-            new Set(
-              students
-                .map(
-                  (student) =>
-                    student.parent_id
-                )
-                .filter(
-                  (
-                    id
-                  ): id is string =>
-                    Boolean(id)
-                )
-            )
-          );
+          const parentIds =
+            Array.from(
+              new Set(
+                students
+                  .map(
+                    (student) =>
+                      student.parent_id
+                  )
+                  .filter(
+                    (
+                      id
+                    ): id is string =>
+                      Boolean(id)
+                  )
+              )
+            );
 
           /*
           |--------------------------------------------------------------------------
-          | جلب الطلاب من profiles
+          | الطلاب من profiles
           |--------------------------------------------------------------------------
           */
 
           if (studentIds.length > 0) {
             const {
               data: studentProfiles,
-              error: studentProfilesError,
+              error:
+                studentProfilesError,
             } = await supabase
               .from("profiles")
               .select(
@@ -508,7 +473,9 @@ function UsersManagement() {
                 studentIds
               );
 
-            if (!studentProfilesError) {
+            if (
+              !studentProfilesError
+            ) {
               relatedUsers.push(
                 ...((studentProfiles ||
                   []) as Profile[])
@@ -522,14 +489,15 @@ function UsersManagement() {
 
           /*
           |--------------------------------------------------------------------------
-          | جلب أولياء الأمور
+          | أولياء الأمور
           |--------------------------------------------------------------------------
           */
 
           if (parentIds.length > 0) {
             const {
               data: parentProfiles,
-              error: parentProfilesError,
+              error:
+                parentProfilesError,
             } = await supabase
               .from("profiles")
               .select(
@@ -551,7 +519,9 @@ function UsersManagement() {
                 parentIds
               );
 
-            if (!parentProfilesError) {
+            if (
+              !parentProfilesError
+            ) {
               relatedUsers.push(
                 ...((parentProfiles ||
                   []) as Profile[])
@@ -613,46 +583,50 @@ function UsersManagement() {
   |--------------------------------------------------------------------------
   */
 
-  const filteredUsers = useMemo(() => {
-    const search =
-      searchTerm
-        .trim()
-        .toLowerCase();
+  const filteredUsers =
+    useMemo(() => {
+      const search =
+        searchTerm
+          .trim()
+          .toLowerCase();
 
-    return users.filter((user) => {
-      const matchesSearch =
-        !search ||
-        user.full_name
-          .toLowerCase()
-          .includes(search) ||
-        (user.email || "")
-          .toLowerCase()
-          .includes(search) ||
-        (user.phone || "")
-          .toLowerCase()
-          .includes(search);
+      return users.filter(
+        (user) => {
+          const matchesSearch =
+            !search ||
+            user.full_name
+              .toLowerCase()
+              .includes(search) ||
+            (user.email || "")
+              .toLowerCase()
+              .includes(search) ||
+            (user.phone || "")
+              .toLowerCase()
+              .includes(search);
 
-      const matchesRole =
-        roleFilter === "all" ||
-        user.role === roleFilter;
+          const matchesRole =
+            roleFilter === "all" ||
+            user.role === roleFilter;
 
-      const matchesInstitute =
-        instituteFilter === "all" ||
-        user.institute_id ===
-          instituteFilter;
+          const matchesInstitute =
+            instituteFilter ===
+              "all" ||
+            user.institute_id ===
+              instituteFilter;
 
-      return (
-        matchesSearch &&
-        matchesRole &&
-        matchesInstitute
+          return (
+            matchesSearch &&
+            matchesRole &&
+            matchesInstitute
+          );
+        }
       );
-    });
-  }, [
-    users,
-    searchTerm,
-    roleFilter,
-    instituteFilter,
-  ]);
+    }, [
+      users,
+      searchTerm,
+      roleFilter,
+      instituteFilter,
+    ]);
 
   /*
   |--------------------------------------------------------------------------
@@ -660,31 +634,37 @@ function UsersManagement() {
   |--------------------------------------------------------------------------
   */
 
-  const statistics = useMemo(() => {
-    return {
-      total: users.length,
+  const statistics =
+    useMemo(() => {
+      return {
+        total: users.length,
 
-      active: users.filter(
-        (u) => u.is_active !== false
-      ).length,
+        active: users.filter(
+          (u) =>
+            u.is_active !== false
+        ).length,
 
-      inactive: users.filter(
-        (u) => u.is_active === false
-      ).length,
+        inactive: users.filter(
+          (u) =>
+            u.is_active === false
+        ).length,
 
-      sheikhs: users.filter(
-        (u) => u.role === "sheikh"
-      ).length,
+        sheikhs: users.filter(
+          (u) =>
+            u.role === "sheikh"
+        ).length,
 
-      teachers: users.filter(
-        (u) => u.role === "teacher"
-      ).length,
+        teachers: users.filter(
+          (u) =>
+            u.role === "teacher"
+        ).length,
 
-      parents: users.filter(
-        (u) => u.role === "parent"
-      ).length,
-    };
-  }, [users]);
+        parents: users.filter(
+          (u) =>
+            u.role === "parent"
+        ).length,
+      };
+    }, [users]);
 
   /*
   |--------------------------------------------------------------------------
@@ -702,7 +682,8 @@ function UsersManagement() {
     const institute =
       institutes.find(
         (item) =>
-          item.id === instituteId
+          item.id ===
+          instituteId
       );
 
     return institute
@@ -723,6 +704,7 @@ function UsersManagement() {
       full_name: "",
       phone: "",
       email: "",
+      password: "",
       role: "employee",
       institute_id: "",
       is_active: true,
@@ -752,6 +734,8 @@ function UsersManagement() {
 
       email:
         user.email || "",
+
+      password: "",
 
       role: user.role,
 
@@ -792,7 +776,32 @@ function UsersManagement() {
       setMessage(
         "يرجى إدخال اسم المستخدم"
       );
+      return;
+    }
 
+    /*
+    |--------------------------------------------------------------------------
+    | التحقق من الدور
+    |--------------------------------------------------------------------------
+    */
+
+    const instituteRoles = [
+      "sheikh",
+      "institute_deputy",
+      "teacher",
+      "employee",
+    ];
+
+    if (
+      !editingUser &&
+      instituteRoles.includes(
+        form.role
+      ) &&
+      !form.institute_id
+    ) {
+      setMessage(
+        "يجب اختيار المعهد لهذا الدور"
+      );
       return;
     }
 
@@ -800,35 +809,22 @@ function UsersManagement() {
     setMessage("");
 
     try {
+      /*
+      |--------------------------------------------------------------------------
+      | المستخدم الحالي
+      |--------------------------------------------------------------------------
+      */
+
       const {
-        data: { user: currentAuthUser },
-      } = await supabase.auth.getUser();
+        data: {
+          user: currentAuthUser,
+        },
+      } =
+        await supabase.auth.getUser();
 
       if (!currentAuthUser) {
         setMessage(
           "انتهت جلسة تسجيل الدخول"
-        );
-
-        setSaving(false);
-        return;
-      }
-
-      const {
-        data: currentProfile,
-      } = await supabase
-        .from("profiles")
-        .select(
-          "role, directorate_id"
-        )
-        .eq(
-          "id",
-          currentAuthUser.id
-        )
-        .maybeSingle();
-
-      if (!currentProfile) {
-        setMessage(
-          "تعذر التحقق من صلاحيات المستخدم"
         );
 
         setSaving(false);
@@ -847,15 +843,18 @@ function UsersManagement() {
             form.full_name.trim(),
 
           phone:
-            form.phone.trim() || null,
+            form.phone.trim() ||
+            null,
 
           email:
-            form.email.trim() || null,
+            form.email.trim() ||
+            null,
 
           role: form.role,
 
           institute_id:
-            form.institute_id || null,
+            form.institute_id ||
+            null,
 
           is_active:
             form.is_active,
@@ -868,7 +867,9 @@ function UsersManagement() {
           error,
         } = await supabase
           .from("profiles")
-          .update(updateData)
+          .update(
+            updateData
+          )
           .eq(
             "id",
             editingUser.id
@@ -893,20 +894,113 @@ function UsersManagement() {
         setEditingUser(null);
 
         await loadData();
-      } else {
-        /*
-        |--------------------------------------------------------------------------
-        | إضافة مستخدم جديد
-        |--------------------------------------------------------------------------
-        */
 
+        setSaving(false);
+        return;
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | إنشاء مستخدم جديد
+      |--------------------------------------------------------------------------
+      */
+
+      if (!form.email.trim()) {
         setMessage(
-          "إضافة حساب دخول جديد تحتاج إلى إنشاء مستخدم في Supabase Auth. سننفذها في خطوة إنشاء المستخدمين."
+          "يرجى إدخال البريد الإلكتروني"
         );
 
         setSaving(false);
         return;
       }
+
+      if (!form.password.trim()) {
+        setMessage(
+          "يرجى إدخال كلمة المرور"
+        );
+
+        setSaving(false);
+        return;
+      }
+
+      if (form.password.length < 6) {
+        setMessage(
+          "كلمة المرور يجب ألا تقل عن 6 أحرف"
+        );
+
+        setSaving(false);
+        return;
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | الاتصال بالـ API الآمن
+      |--------------------------------------------------------------------------
+      */
+
+      const response =
+        await fetch(
+          "/api/users/create",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              full_name:
+                form.full_name.trim(),
+
+              phone:
+                form.phone.trim(),
+
+              email:
+                form.email.trim(),
+
+              password:
+                form.password,
+
+              role:
+                form.role,
+
+              institute_id:
+                form.institute_id ||
+                null,
+
+              is_active:
+                form.is_active,
+            }),
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        console.error(
+          "Create user error:",
+          result
+        );
+
+        setMessage(
+          result.error ||
+            "تعذر إنشاء المستخدم"
+        );
+
+        setSaving(false);
+        return;
+      }
+
+      setMessage(
+        "تم إنشاء حساب المستخدم بنجاح ✅"
+      );
+
+      setShowModal(false);
+      setEditingUser(null);
+
+      await loadData();
     } catch (error) {
       console.error(error);
 
@@ -929,7 +1023,8 @@ function UsersManagement() {
   ) {
     if (
       currentAuthUserId &&
-      user.id === currentAuthUserId
+      user.id ===
+        currentAuthUserId
     ) {
       setMessage(
         "لا يمكن تعطيل حساب المستخدم الحالي"
@@ -1028,7 +1123,10 @@ function UsersManagement() {
 
   return (
     <AppShell>
-      <main className="min-h-screen bg-gray-50 p-6 md:p-8">
+      <main
+        dir="rtl"
+        className="min-h-screen bg-gray-50 p-6 md:p-8"
+      >
         <div className="max-w-7xl mx-auto">
 
           {/* Header */}
@@ -1058,7 +1156,9 @@ function UsersManagement() {
 
               <button
                 type="button"
-                onClick={openAddModal}
+                onClick={
+                  openAddModal
+                }
                 className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold"
               >
                 <UserPlus size={19} />
@@ -1082,38 +1182,66 @@ function UsersManagement() {
 
             <StatCard
               title="إجمالي المستخدمين"
-              value={statistics.total}
-              icon={<Users size={21} />}
+              value={
+                statistics.total
+              }
+              icon={
+                <Users size={21} />
+              }
             />
 
             <StatCard
               title="نشط"
-              value={statistics.active}
-              icon={<ShieldCheck size={21} />}
+              value={
+                statistics.active
+              }
+              icon={
+                <ShieldCheck
+                  size={21}
+                />
+              }
             />
 
             <StatCard
               title="غير نشط"
-              value={statistics.inactive}
-              icon={<Power size={21} />}
+              value={
+                statistics.inactive
+              }
+              icon={
+                <Power size={21} />
+              }
             />
 
             <StatCard
               title="الشيوخ"
-              value={statistics.sheikhs}
-              icon={<Building2 size={21} />}
+              value={
+                statistics.sheikhs
+              }
+              icon={
+                <Building2
+                  size={21}
+                />
+              }
             />
 
             <StatCard
               title="المدرسون"
-              value={statistics.teachers}
-              icon={<Users size={21} />}
+              value={
+                statistics.teachers
+              }
+              icon={
+                <Users size={21} />
+              }
             />
 
             <StatCard
               title="أولياء الأمور"
-              value={statistics.parents}
-              icon={<Users size={21} />}
+              value={
+                statistics.parents
+              }
+              icon={
+                <Users size={21} />
+              }
             />
 
           </div>
@@ -1140,7 +1268,9 @@ function UsersManagement() {
 
                   <input
                     type="text"
-                    value={searchTerm}
+                    value={
+                      searchTerm
+                    }
                     onChange={(e) =>
                       setSearchTerm(
                         e.target.value
@@ -1161,7 +1291,9 @@ function UsersManagement() {
                 </label>
 
                 <select
-                  value={roleFilter}
+                  value={
+                    roleFilter
+                  }
                   onChange={(e) =>
                     setRoleFilter(
                       e.target.value
@@ -1184,7 +1316,9 @@ function UsersManagement() {
                           role.value
                         }
                       >
-                        {role.label}
+                        {
+                          role.label
+                        }
                       </option>
                     )
                   )}
@@ -1200,7 +1334,9 @@ function UsersManagement() {
                 </label>
 
                 <select
-                  value={instituteFilter}
+                  value={
+                    instituteFilter
+                  }
                   onChange={(e) =>
                     setInstituteFilter(
                       e.target.value
@@ -1248,7 +1384,9 @@ function UsersManagement() {
 
               <p className="text-gray-500 text-sm mt-1">
                 عدد النتائج:{" "}
-                {filteredUsers.length}
+                {
+                  filteredUsers.length
+                }
               </p>
 
             </div>
@@ -1312,7 +1450,9 @@ function UsersManagement() {
 
                               {user.email && (
                                 <span className="flex items-center gap-1">
-                                  <Mail size={14} />
+                                  <Mail
+                                    size={14}
+                                  />
                                   {
                                     user.email
                                   }
@@ -1321,7 +1461,9 @@ function UsersManagement() {
 
                               {user.phone && (
                                 <span className="flex items-center gap-1">
-                                  <Phone size={14} />
+                                  <Phone
+                                    size={14}
+                                  />
                                   {
                                     user.phone
                                   }
@@ -1353,9 +1495,11 @@ function UsersManagement() {
                           </td>
 
                           <td className="px-6 py-5 text-gray-600">
-                            {getInstituteName(
-                              user.institute_id
-                            )}
+                            {
+                              getInstituteName(
+                                user.institute_id
+                              )
+                            }
                           </td>
 
                           <td className="px-6 py-5 text-center">
@@ -1461,14 +1605,16 @@ function UsersManagement() {
                 <p className="text-sm text-gray-500 mt-1">
                   {editingUser
                     ? "تعديل بيانات المستخدم وصلاحياته"
-                    : "إضافة مستخدم جديد للنظام"}
+                    : "إنشاء حساب دخول جديد للنظام"}
                 </p>
 
               </div>
 
               <button
                 type="button"
-                onClick={closeModal}
+                onClick={
+                  closeModal
+                }
                 className="p-2 rounded-lg hover:bg-gray-100"
               >
                 <X size={21} />
@@ -1500,7 +1646,8 @@ function UsersManagement() {
                         (current) => ({
                           ...current,
                           full_name:
-                            e.target.value,
+                            e.target
+                              .value,
                         })
                       )
                     }
@@ -1514,7 +1661,7 @@ function UsersManagement() {
                 <div>
 
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    البريد الإلكتروني
+                    البريد الإلكتروني *
                   </label>
 
                   <input
@@ -1527,14 +1674,59 @@ function UsersManagement() {
                         (current) => ({
                           ...current,
                           email:
-                            e.target.value,
+                            e.target
+                              .value,
                         })
                       )
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={
+                      Boolean(
+                        editingUser
+                      )
+                    }
                   />
 
                 </div>
+
+                {/* Password */}
+
+                {!editingUser && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      كلمة المرور *
+                    </label>
+
+                    <div className="relative">
+                      <KeyRound
+                        size={18}
+                        className="absolute right-3 top-3.5 text-gray-400"
+                      />
+
+                      <input
+                        type="password"
+                        value={
+                          form.password
+                        }
+                        onChange={(e) =>
+                          setForm(
+                            (
+                              current
+                            ) => ({
+                              ...current,
+                              password:
+                                e.target
+                                  .value,
+                            })
+                          )
+                        }
+                        placeholder="6 أحرف على الأقل"
+                        autoComplete="new-password"
+                        className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Phone */}
 
@@ -1554,7 +1746,8 @@ function UsersManagement() {
                         (current) => ({
                           ...current,
                           phone:
-                            e.target.value,
+                            e.target
+                              .value,
                         })
                       )
                     }
@@ -1699,6 +1892,16 @@ function UsersManagement() {
 
               </div>
 
+              {/* Notice */}
+
+              {!editingUser && (
+                <div className="mt-5 rounded-xl bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800">
+                  سيتم إنشاء حساب الدخول في
+                  Supabase Auth وربطه تلقائيًا
+                  بملف المستخدم والصلاحية المحددة.
+                </div>
+              )}
+
               {/* Actions */}
 
               <div className="flex justify-end gap-3 mt-8 pt-5 border-t">
@@ -1708,7 +1911,9 @@ function UsersManagement() {
                   onClick={
                     closeModal
                   }
-                  disabled={saving}
+                  disabled={
+                    saving
+                  }
                   className="px-5 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
                   إلغاء
@@ -1719,22 +1924,22 @@ function UsersManagement() {
                   onClick={
                     saveUser
                   }
-                  disabled={saving}
+                  disabled={
+                    saving
+                  }
                   className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold"
                 >
                   {saving
                     ? "جاري الحفظ..."
                     : editingUser
                     ? "حفظ التعديلات"
-                    : "إضافة المستخدم"}
+                    : "إنشاء حساب المستخدم"}
                 </button>
 
               </div>
 
             </div>
-
           </div>
-
         </div>
       )}
     </AppShell>
