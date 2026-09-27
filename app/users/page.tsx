@@ -1098,7 +1098,6 @@ function UsersManagement() {
 
   if (loading) {
     return (
-      <AppShell>
         <div className="min-h-[70vh] flex items-center justify-center">
           <div className="text-center">
             <RefreshCw
@@ -1111,7 +1110,6 @@ function UsersManagement() {
             </p>
           </div>
         </div>
-      </AppShell>
     );
   }
 
@@ -1122,7 +1120,6 @@ function UsersManagement() {
   */
 
   return (
-    <AppShell>
       <main
         dir="rtl"
         className="min-h-screen bg-gray-50 p-6 md:p-8"
@@ -1942,7 +1939,6 @@ function UsersManagement() {
           </div>
         </div>
       )}
-    </AppShell>
   );
 }
 
