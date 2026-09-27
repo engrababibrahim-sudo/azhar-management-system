@@ -158,7 +158,7 @@ export default function UsersPage() {
   return (
     <AppShell>
       <UsersManagement />
-    </AppShell>
+    </>
   );
 }
 
