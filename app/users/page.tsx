@@ -1,166 +1,161 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import {
-  Search,
-  Users,
-  UserPlus,
-  Pencil,
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  Activity,
+  Building2,
+  CheckCircle2,
+  Edit3,
+  MonitorCog,
   Power,
   RefreshCw,
-  X,
+  Search,
   ShieldCheck,
-  Building2,
-  Mail,
-  Phone,
-  KeyRound,
-  MonitorCog,
+  UserPlus,
+  Users,
+  X,
 } from "lucide-react";
 
 import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
 
+/* =========================================================
+   Types
+========================================================= */
+
 type Role =
   | "super_admin"
   | "director"
   | "deputy"
+  | "it_admin"
   | "sheikh"
   | "institute_deputy"
-  | "it_admin"
-  | "employee"
   | "teacher"
+  | "employee"
   | "parent"
   | "student";
 
-type Profile = {
+type UserRecord = {
   id: string;
-  full_name: string;
-  phone: string | null;
+  full_name: string | null;
   email: string | null;
+  phone: string | null;
   role: Role;
-  directorate_id: string | null;
   institute_id: string | null;
-  is_active: boolean | null;
-  created_at: string | null;
-  updated_at: string | null;
+  directorate_id: string | null;
+  institute_name?: string | null;
+  is_active: boolean;
+  created_at?: string | null;
 };
 
 type Institute = {
   id: string;
   name: string;
-  code: string | null;
-  directorate_id: string | null;
+  code?: string | null;
+  directorate_id?: string | null;
+  is_active?: boolean | null;
 };
+
+type CurrentUser = {
+  id: string;
+  role: Role;
+  institute_id: string | null;
+  directorate_id: string | null;
+  full_name?: string | null;
+};
+
+type UsersApiResponse = {
+  users?: UserRecord[];
+  institutes?: Institute[];
+  currentUser?: CurrentUser;
+  error?: string;
+  message?: string;
+};
+
+type UserForm = {
+  full_name: string;
+  email: string;
+  password: string;
+  phone: string;
+  role: Role;
+  institute_id: string;
+};
+
+/* =========================================================
+   Role labels
+========================================================= */
 
 const roleLabels: Record<Role, string> = {
   super_admin: "مدير الإدارة التعليمية",
-  director: "مدير الإدارة التعليمية (قديم)",
+  director: "مدير الإدارة التعليمية",
   deputy: "وكيل الإدارة التعليمية",
+  it_admin: "مسؤول IT للمعهد",
   sheikh: "شيخ المعهد",
   institute_deputy: "وكيل شيخ المعهد",
-  it_admin: "مسؤول IT للمعهد",
-  employee: "موظف",
   teacher: "مدرس",
+  employee: "موظف",
   parent: "ولي أمر",
   student: "طالب",
 };
 
+/* =========================================================
+   Role colors
+========================================================= */
+
 const roleColors: Record<Role, string> = {
-  super_admin: "bg-purple-100 text-purple-800",
-  director: "bg-gray-100 text-gray-700",
-  deputy: "bg-indigo-100 text-indigo-800",
-  sheikh: "bg-blue-100 text-blue-800",
-  institute_deputy: "bg-cyan-100 text-cyan-800",
-  it_admin: "bg-amber-100 text-amber-800",
-  employee: "bg-gray-100 text-gray-800",
-  teacher: "bg-green-100 text-green-800",
-  parent: "bg-emerald-100 text-emerald-800",
-  student: "bg-orange-100 text-orange-800",
+  super_admin:
+    "bg-purple-100 text-purple-700 border-purple-200",
+
+  director:
+    "bg-purple-100 text-purple-700 border-purple-200",
+
+  deputy:
+    "bg-indigo-100 text-indigo-700 border-indigo-200",
+
+  it_admin:
+    "bg-cyan-100 text-cyan-700 border-cyan-200",
+
+  sheikh:
+    "bg-emerald-100 text-emerald-700 border-emerald-200",
+
+  institute_deputy:
+    "bg-teal-100 text-teal-700 border-teal-200",
+
+  teacher:
+    "bg-blue-100 text-blue-700 border-blue-200",
+
+  employee:
+    "bg-slate-100 text-slate-700 border-slate-200",
+
+  parent:
+    "bg-orange-100 text-orange-700 border-orange-200",
+
+  student:
+    "bg-amber-100 text-amber-700 border-amber-200",
 };
 
-const selectableRoles: {
-  value: Role;
-  label: string;
-}[] = [
-  {
-    value: "super_admin",
-    label: "مدير الإدارة التعليمية",
-  },
-  {
-    value: "deputy",
-    label: "وكيل الإدارة التعليمية",
-  },
-  {
-    value: "sheikh",
-    label: "شيخ المعهد",
-  },
-  {
-    value: "institute_deputy",
-    label: "وكيل شيخ المعهد",
-  },
-  {
-    value: "it_admin",
-    label: "مسؤول IT للمعهد",
-  },
-  {
-    value: "employee",
-    label: "موظف",
-  },
-  {
-    value: "teacher",
-    label: "مدرس",
-  },
-];
+/* =========================================================
+   Form default
+========================================================= */
 
-const filterRoles: {
-  value: string;
-  label: string;
-}[] = [
-  {
-    value: "super_admin",
-    label: "مدير الإدارة التعليمية",
-  },
-  {
-    value: "deputy",
-    label: "وكيل الإدارة التعليمية",
-  },
-  {
-    value: "sheikh",
-    label: "شيخ المعهد",
-  },
-  {
-    value: "institute_deputy",
-    label: "وكيل شيخ المعهد",
-  },
-  {
-    value: "it_admin",
-    label: "مسؤول IT للمعهد",
-  },
-  {
-    value: "employee",
-    label: "موظف",
-  },
-  {
-    value: "teacher",
-    label: "مدرس",
-  },
-  {
-    value: "parent",
-    label: "ولي أمر",
-  },
-  {
-    value: "student",
-    label: "طالب",
-  },
-];
+const emptyForm: UserForm = {
+  full_name: "",
+  email: "",
+  password: "",
+  phone: "",
+  role: "sheikh",
+  institute_id: "",
+};
 
-const INSTITUTE_ROLES: Role[] = [
-  "sheikh",
-  "institute_deputy",
-  "it_admin",
-  "teacher",
-  "employee",
-];
+/* =========================================================
+   Main Page
+========================================================= */
 
 export default function UsersPage() {
   return (
@@ -170,131 +165,149 @@ export default function UsersPage() {
   );
 }
 
+/* =========================================================
+   Users Management
+========================================================= */
+
 function UsersManagement() {
-  const [users, setUsers] = useState<Profile[]>([]);
+  const [users, setUsers] = useState<UserRecord[]>([]);
   const [institutes, setInstitutes] = useState<Institute[]>([]);
-
-  const [currentUserRole, setCurrentUserRole] =
-    useState<Role | null>(null);
-
-  const [currentAuthUserId, setCurrentAuthUserId] =
-    useState<string | null>(null);
+  const [currentUser, setCurrentUser] =
+    useState<CurrentUser | null>(null);
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | Role>(
+    "all"
+  );
   const [instituteFilter, setInstituteFilter] =
     useState("all");
 
   const [showModal, setShowModal] = useState(false);
-
   const [editingUser, setEditingUser] =
-    useState<Profile | null>(null);
+    useState<UserRecord | null>(null);
 
-  const [form, setForm] = useState({
-    full_name: "",
-    phone: "",
-    email: "",
-    password: "",
-    role: "employee" as Role,
-    institute_id: "",
-    is_active: true,
-  });
+  const [form, setForm] = useState<UserForm>(emptyForm);
+  const [saving, setSaving] = useState(false);
 
-  const [message, setMessage] = useState("");
+  /* =======================================================
+     Determine current role
+  ======================================================= */
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const isSuperAdmin =
+    currentUser?.role === "super_admin" ||
+    currentUser?.role === "director";
 
-  async function getAccessToken() {
+  const isItAdmin = currentUser?.role === "it_admin";
+
+  /* =======================================================
+     Allowed roles
+  ======================================================= */
+
+  /*
+   * مدير الإدارة:
+   * يستطيع إنشاء الأدوار المطلوبة على مستوى الإدارة
+   * والمعاهد، ومن ضمنها IT Admin.
+   *
+   * مسؤول IT:
+   * يعمل داخل معهده فقط.
+   * لا يستطيع إنشاء IT Admin آخر.
+   * ولا يستطيع إنشاء الأدوار المركزية.
+   */
+  const selectableRoles = useMemo<Role[]>(() => {
+    if (isSuperAdmin) {
+      return [
+        "super_admin",
+        "deputy",
+        "it_admin",
+        "sheikh",
+        "institute_deputy",
+        "teacher",
+        "employee",
+      ];
+    }
+
+    if (isItAdmin) {
+      return [
+        "sheikh",
+        "institute_deputy",
+        "teacher",
+        "employee",
+      ];
+    }
+
+    return [];
+  }, [isSuperAdmin, isItAdmin]);
+
+  /* =======================================================
+     Filter roles
+  ======================================================= */
+
+  const filterRoles = useMemo<Role[]>(() => {
+    const found = new Set<Role>();
+
+    users.forEach((user) => {
+      found.add(user.role);
+    });
+
+    /*
+     * نضيف الأدوار المتاحة للحساب الحالي حتى تظهر
+     * في الفلتر حتى لو لم يوجد مستخدم منها بعد.
+     */
+    selectableRoles.forEach((role) => {
+      found.add(role);
+    });
+
+    return Array.from(found);
+  }, [users, selectableRoles]);
+
+  /* =======================================================
+     Get session token
+  ======================================================= */
+
+  const getAccessToken = async () => {
     const {
       data: { session },
-      error,
+      error: sessionError,
     } = await supabase.auth.getSession();
 
-    if (error || !session?.access_token) {
-      return null;
+    if (sessionError) {
+      throw new Error(
+        "تعذر الحصول على جلسة تسجيل الدخول"
+      );
+    }
+
+    if (!session?.access_token) {
+      throw new Error(
+        "انتهت جلسة تسجيل الدخول. يرجى تسجيل الدخول مرة أخرى"
+      );
     }
 
     return session.access_token;
-  }
+  };
 
-  async function loadData() {
-    setLoading(true);
-    setMessage("");
+  /* =======================================================
+     Load users
+  ======================================================= */
 
+  const loadData = async (
+    showRefreshLoading = false
+  ) => {
     try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        setMessage("يجب تسجيل الدخول أولًا");
-        setLoading(false);
-        return;
+      if (showRefreshLoading) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
 
-      setCurrentAuthUserId(user.id);
-
-      const {
-        data: currentProfile,
-        error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select("role, directorate_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError || !currentProfile) {
-        console.error(profileError);
-
-        setMessage(
-          "لم يتم العثور على بيانات المستخدم الحالي"
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      const role = currentProfile.role as Role;
-
-      if (
-        role !== "super_admin" &&
-        role !== "director"
-      ) {
-        setMessage(
-          "ليس لديك صلاحية الوصول إلى إدارة المستخدمين"
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      setCurrentUserRole(role);
-
-      if (!currentProfile.directorate_id) {
-        setMessage(
-          "الحساب الحالي غير مرتبط بإدارة تعليمية"
-        );
-
-        setLoading(false);
-        return;
-      }
+      setError("");
 
       const token = await getAccessToken();
-
-      if (!token) {
-        setMessage(
-          "انتهت جلسة الدخول، يرجى تسجيل الدخول مرة أخرى"
-        );
-
-        setLoading(false);
-        return;
-      }
 
       const response = await fetch(
         "/api/users/create",
@@ -302,66 +315,91 @@ function UsersManagement() {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
           cache: "no-store",
         }
       );
 
-      const result = await response.json();
+      const data: UsersApiResponse =
+        await response.json();
 
       if (!response.ok) {
-        console.error(
-          "Load users error:",
-          result
-        );
-
-        setMessage(
-          result.error ||
+        throw new Error(
+          data.error ||
+            data.message ||
             "تعذر تحميل المستخدمين"
         );
-
-        setLoading(false);
-        return;
       }
 
-      setUsers(
-        Array.isArray(result.users)
-          ? result.users
-          : []
-      );
+      setUsers(data.users || []);
+      setInstitutes(data.institutes || []);
 
-      setInstitutes(
-        Array.isArray(result.institutes)
-          ? result.institutes
-          : []
-      );
-    } catch (error) {
-      console.error(error);
+      if (data.currentUser) {
+        setCurrentUser(data.currentUser);
+      }
+    } catch (err) {
+      console.error("Users load error:", err);
 
-      setMessage(
-        "حدث خطأ غير متوقع أثناء تحميل المستخدمين"
+      setError(
+        err instanceof Error
+          ? err.message
+          : "حدث خطأ أثناء تحميل المستخدمين"
       );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  /* =======================================================
+     Initial load
+  ======================================================= */
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  /* =======================================================
+     Current institute for IT Admin
+  ======================================================= */
+
+  const currentInstitute = useMemo(() => {
+    if (!isItAdmin || !currentUser?.institute_id) {
+      return null;
     }
 
-    setLoading(false);
-  }
+    return (
+      institutes.find(
+        (institute) =>
+          institute.id === currentUser.institute_id
+      ) || null
+    );
+  }, [
+    isItAdmin,
+    currentUser?.institute_id,
+    institutes,
+  ]);
+
+  /* =======================================================
+     Filter users
+  ======================================================= */
 
   const filteredUsers = useMemo(() => {
-    const search =
-      searchTerm.trim().toLowerCase();
+    const keyword = search.trim().toLowerCase();
 
     return users.filter((user) => {
       const matchesSearch =
-        !search ||
-        user.full_name
+        !keyword ||
+        (user.full_name || "")
           .toLowerCase()
-          .includes(search) ||
+          .includes(keyword) ||
         (user.email || "")
           .toLowerCase()
-          .includes(search) ||
+          .includes(keyword) ||
         (user.phone || "")
           .toLowerCase()
-          .includes(search);
+          .includes(keyword);
 
       const matchesRole =
         roleFilter === "all" ||
@@ -369,8 +407,7 @@ function UsersManagement() {
 
       const matchesInstitute =
         instituteFilter === "all" ||
-        user.institute_id ===
-          instituteFilter;
+        user.institute_id === instituteFilter;
 
       return (
         matchesSearch &&
@@ -380,492 +417,494 @@ function UsersManagement() {
     });
   }, [
     users,
-    searchTerm,
+    search,
     roleFilter,
     instituteFilter,
   ]);
 
+  /* =======================================================
+     Statistics
+  ======================================================= */
+
   const statistics = useMemo(() => {
+    const total = users.length;
+
+    const active = users.filter(
+      (user) => user.is_active
+    ).length;
+
+    const inactive = users.filter(
+      (user) => !user.is_active
+    ).length;
+
+    const itAdmins = users.filter(
+      (user) => user.role === "it_admin"
+    ).length;
+
+    const sheikhs = users.filter(
+      (user) => user.role === "sheikh"
+    ).length;
+
+    const teachers = users.filter(
+      (user) => user.role === "teacher"
+    ).length;
+
+    const parents = users.filter(
+      (user) => user.role === "parent"
+    ).length;
+
     return {
-      total: users.length,
-
-      active: users.filter(
-        (u) => u.is_active !== false
-      ).length,
-
-      inactive: users.filter(
-        (u) => u.is_active === false
-      ).length,
-
-      sheikhs: users.filter(
-        (u) => u.role === "sheikh"
-      ).length,
-
-      teachers: users.filter(
-        (u) => u.role === "teacher"
-      ).length,
-
-      itAdmins: users.filter(
-        (u) => u.role === "it_admin"
-      ).length,
-
-      parents: users.filter(
-        (u) => u.role === "parent"
-      ).length,
+      total,
+      active,
+      inactive,
+      itAdmins,
+      sheikhs,
+      teachers,
+      parents,
     };
   }, [users]);
 
-  function getInstituteName(
-    instituteId: string | null
-  ) {
-    if (!instituteId) {
-      return "—";
-    }
+  /* =======================================================
+     Open create modal
+  ======================================================= */
 
-    const institute =
-      institutes.find(
-        (item) =>
-          item.id === instituteId
-      );
-
-    return institute
-      ? institute.name
-      : "غير محدد";
-  }
-
-  function openAddModal() {
+  const openCreateModal = () => {
     setEditingUser(null);
 
+    const defaultRole =
+      selectableRoles[0] || "sheikh";
+
     setForm({
-      full_name: "",
-      phone: "",
-      email: "",
-      password: "",
-      role: "employee",
-      institute_id: "",
-      is_active: true,
+      ...emptyForm,
+      role: defaultRole,
+      institute_id:
+        isItAdmin && currentUser?.institute_id
+          ? currentUser.institute_id
+          : "",
     });
 
-    setMessage("");
+    setError("");
+    setSuccess("");
     setShowModal(true);
-  }
+  };
 
-  function openEditModal(
-    user: Profile
-  ) {
+  /* =======================================================
+     Open edit modal
+  ======================================================= */
+
+  const openEditModal = (user: UserRecord) => {
+    /*
+     * IT Admin لا يستطيع تعديل:
+     * - مستخدم خارج معهده
+     * - IT Admin آخر
+     * - الأدوار المركزية
+     */
+    if (
+      isItAdmin &&
+      user.institute_id !==
+        currentUser?.institute_id
+    ) {
+      setError(
+        "لا يمكنك تعديل مستخدم من معهد آخر"
+      );
+      return;
+    }
+
+    if (
+      isItAdmin &&
+      user.role === "it_admin"
+    ) {
+      setError(
+        "لا يمكنك تعديل مسؤول IT آخر"
+      );
+      return;
+    }
+
     setEditingUser(user);
 
     setForm({
-      full_name:
-        user.full_name || "",
-
-      phone:
-        user.phone || "",
-
-      email:
-        user.email || "",
-
+      full_name: user.full_name || "",
+      email: user.email || "",
       password: "",
-
+      phone: user.phone || "",
       role: user.role,
-
-      institute_id:
-        user.institute_id || "",
-
-      is_active:
-        user.is_active !== false,
+      institute_id: user.institute_id || "",
     });
 
-    setMessage("");
+    setError("");
+    setSuccess("");
     setShowModal(true);
-  }
+  };
 
-  function closeModal() {
+  /* =======================================================
+     Close modal
+  ======================================================= */
+
+  const closeModal = () => {
     if (saving) {
       return;
     }
 
     setShowModal(false);
     setEditingUser(null);
-  }
+    setForm(emptyForm);
+  };
 
-  function handleRoleChange(
-    role: Role
-  ) {
-    setForm((current) => ({
-      ...current,
-      role,
+  /* =======================================================
+     Form change
+  ======================================================= */
 
-      /*
-       * الأدوار المركزية لا تحتاج معهدًا.
-       * عند تغيير الدور إلى دور مركزي نمسح المعهد.
-       */
-      institute_id:
-        INSTITUTE_ROLES.includes(role)
-          ? current.institute_id
-          : "",
+  const updateForm = (
+    field: keyof UserForm,
+    value: string
+  ) => {
+    setForm((previous) => ({
+      ...previous,
+      [field]: value,
     }));
-  }
+  };
 
-  async function saveUser() {
+  /* =======================================================
+     Role change
+  ======================================================= */
+
+  const handleRoleChange = (role: Role) => {
+    /*
+     * الأدوار المركزية لا تحتاج institute_id
+     */
+    const centralRole =
+      role === "super_admin" ||
+      role === "director" ||
+      role === "deputy";
+
+    setForm((previous) => ({
+      ...previous,
+      role,
+      institute_id: centralRole
+        ? ""
+        : isItAdmin && currentUser?.institute_id
+        ? currentUser.institute_id
+        : previous.institute_id,
+    }));
+  };
+
+  /* =======================================================
+     Save user
+  ======================================================= */
+
+  const saveUser = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    setError("");
+    setSuccess("");
+
     if (!form.full_name.trim()) {
-      setMessage(
-        "يرجى إدخال اسم المستخدم"
+      setError("من فضلك أدخل اسم المستخدم");
+      return;
+    }
+
+    if (!form.email.trim()) {
+      setError("من فضلك أدخل البريد الإلكتروني");
+      return;
+    }
+
+    if (!editingUser && !form.password) {
+      setError("من فضلك أدخل كلمة المرور");
+      return;
+    }
+
+    if (
+      !editingUser &&
+      form.password.length < 6
+    ) {
+      setError(
+        "كلمة المرور يجب أن تكون 6 أحرف على الأقل"
       );
       return;
     }
 
     if (
-      INSTITUTE_ROLES.includes(
-        form.role
-      ) &&
+      !selectableRoles.includes(form.role) &&
+      !(
+        editingUser &&
+        isSuperAdmin &&
+        form.role === "super_admin"
+      )
+    ) {
+      setError(
+        "ليس لديك صلاحية لاختيار هذا الدور"
+      );
+      return;
+    }
+
+    const instituteRequired =
+      form.role === "it_admin" ||
+      form.role === "sheikh" ||
+      form.role === "institute_deputy" ||
+      form.role === "teacher" ||
+      form.role === "employee";
+
+    if (
+      instituteRequired &&
       !form.institute_id
     ) {
-      setMessage(
+      setError(
         "يجب اختيار المعهد لهذا الدور"
       );
       return;
     }
 
+    /*
+     * IT Admin لا يستطيع تغيير المعهد.
+     */
     if (
-      !INSTITUTE_ROLES.includes(
-        form.role
-      )
+      isItAdmin &&
+      form.institute_id !==
+        currentUser?.institute_id
     ) {
-      /*
-       * لا نرسل معهدًا للأدوار المركزية.
-       */
-      setForm((current) => ({
-        ...current,
-        institute_id: "",
-      }));
+      setError(
+        "مسؤول IT يمكنه إدارة مستخدمي معهده فقط"
+      );
+      return;
     }
 
-    setSaving(true);
-    setMessage("");
-
     try {
-      const token =
-        await getAccessToken();
+      setSaving(true);
 
-      if (!token) {
-        setMessage(
-          "انتهت جلسة الدخول، يرجى تسجيل الدخول مرة أخرى"
-        );
-        setSaving(false);
-        return;
-      }
+      const token = await getAccessToken();
 
-      /*
-       * تعديل مستخدم موجود
-       */
       if (editingUser) {
-        const response =
-          await fetch(
-            "/api/users/create",
-            {
-              method: "PATCH",
+        /* ==========================
+           Update
+        ========================== */
 
-              headers: {
-                "Content-Type":
-                  "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-
-              body: JSON.stringify({
-                id: editingUser.id,
-
-                full_name:
-                  form.full_name.trim(),
-
-                phone:
-                  form.phone.trim(),
-
-                email:
-                  form.email.trim(),
-
-                role:
-                  form.role,
-
-                institute_id:
-                  INSTITUTE_ROLES.includes(
-                    form.role
-                  )
-                    ? form.institute_id ||
-                      null
-                    : null,
-
-                is_active:
-                  form.is_active,
-
-                password:
-                  form.password.trim() ||
-                  undefined,
-              }),
-            }
-          );
-
-        const result =
-          await response.json();
-
-        if (!response.ok) {
-          console.error(
-            "Update user error:",
-            result
-          );
-
-          setMessage(
-            result.error ||
-              "تعذر تحديث المستخدم"
-          );
-
-          setSaving(false);
-          return;
-        }
-
-        setMessage(
-          "تم تحديث بيانات المستخدم بنجاح ✅"
-        );
-
-        setShowModal(false);
-        setEditingUser(null);
-
-        await loadData();
-
-        setSaving(false);
-        return;
-      }
-
-      /*
-       * إنشاء مستخدم جديد
-       */
-
-      if (!form.email.trim()) {
-        setMessage(
-          "يرجى إدخال البريد الإلكتروني"
-        );
-
-        setSaving(false);
-        return;
-      }
-
-      if (!form.password.trim()) {
-        setMessage(
-          "يرجى إدخال كلمة المرور"
-        );
-
-        setSaving(false);
-        return;
-      }
-
-      if (form.password.length < 8) {
-        setMessage(
-          "كلمة المرور يجب ألا تقل عن 8 أحرف"
-        );
-
-        setSaving(false);
-        return;
-      }
-
-      const response =
-        await fetch(
+        const response = await fetch(
           "/api/users/create",
           {
-            method: "POST",
-
+            method: "PATCH",
             headers: {
-              "Content-Type":
-                "application/json",
-
               Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
             },
-
             body: JSON.stringify({
-              full_name:
-                form.full_name.trim(),
-
-              phone:
-                form.phone.trim(),
-
-              email:
-                form.email.trim(),
-
-              password:
-                form.password,
-
-              role:
-                form.role,
-
+              id: editingUser.id,
+              full_name: form.full_name.trim(),
+              email: form.email.trim(),
+              phone: form.phone.trim() || null,
+              role: form.role,
               institute_id:
-                INSTITUTE_ROLES.includes(
-                  form.role
-                )
-                  ? form.institute_id ||
-                    null
-                  : null,
-
-              is_active:
-                form.is_active,
+                form.institute_id || null,
+              password:
+                form.password.trim() || undefined,
             }),
           }
         );
 
-      const result =
-        await response.json();
+        const data = await response.json();
 
-      if (!response.ok) {
-        console.error(
-          "Create user error:",
-          result
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+              data.message ||
+              "تعذر تعديل المستخدم"
+          );
+        }
+
+        setSuccess(
+          "تم تعديل بيانات المستخدم بنجاح"
+        );
+      } else {
+        /* ==========================
+           Create
+        ========================== */
+
+        const response = await fetch(
+          "/api/users/create",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              full_name: form.full_name.trim(),
+              email: form.email.trim(),
+              password: form.password,
+              phone: form.phone.trim() || null,
+              role: form.role,
+              institute_id:
+                form.institute_id || null,
+            }),
+          }
         );
 
-        setMessage(
-          result.error ||
-            "تعذر إنشاء المستخدم"
-        );
+        const data = await response.json();
 
-        setSaving(false);
-        return;
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+              data.message ||
+              "تعذر إنشاء المستخدم"
+          );
+        }
+
+        setSuccess(
+          "تم إنشاء المستخدم بنجاح"
+        );
       }
 
-      setMessage(
-        "تم إنشاء حساب المستخدم بنجاح ✅"
-      );
+      await loadData(true);
 
       setShowModal(false);
       setEditingUser(null);
+      setForm(emptyForm);
+    } catch (err) {
+      console.error("Save user error:", err);
 
-      await loadData();
-    } catch (error) {
-      console.error(error);
-
-      setMessage(
-        "حدث خطأ غير متوقع"
+      setError(
+        err instanceof Error
+          ? err.message
+          : "حدث خطأ أثناء حفظ المستخدم"
       );
+    } finally {
+      setSaving(false);
     }
+  };
 
-    setSaving(false);
-  }
+  /* =======================================================
+     Toggle user status
+  ======================================================= */
 
-  async function toggleUserStatus(
-    user: Profile
-  ) {
+  const toggleUserStatus = async (
+    user: UserRecord
+  ) => {
     if (
-      currentAuthUserId &&
-      user.id === currentAuthUserId
+      isItAdmin &&
+      user.institute_id !==
+        currentUser?.institute_id
     ) {
-      setMessage(
-        "لا يمكن تعطيل حساب المستخدم الحالي"
+      setError(
+        "لا يمكنك تعديل مستخدم من معهد آخر"
       );
-
       return;
     }
 
-    const newStatus =
-      user.is_active === false;
-
-    const confirmed =
-      window.confirm(
-        newStatus
-          ? `هل تريد تفعيل المستخدم "${user.full_name}"؟`
-          : `هل تريد تعطيل المستخدم "${user.full_name}"؟`
+    if (
+      isItAdmin &&
+      user.role === "it_admin"
+    ) {
+      setError(
+        "لا يمكنك تعديل حالة مسؤول IT"
       );
+      return;
+    }
+
+    const action = user.is_active
+      ? "تعطيل"
+      : "تفعيل";
+
+    const confirmed = window.confirm(
+      `هل أنت متأكد من ${action} المستخدم "${user.full_name || user.email}"؟`
+    );
 
     if (!confirmed) {
       return;
     }
 
     try {
-      const token =
-        await getAccessToken();
+      setError("");
+      setSuccess("");
 
-      if (!token) {
-        setMessage(
-          "انتهت جلسة الدخول"
-        );
-        return;
-      }
+      const token = await getAccessToken();
 
-      const response =
-        await fetch(
-          "/api/users/create",
-          {
-            method: "PATCH",
+      const response = await fetch(
+        "/api/users/create",
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: user.id,
+            is_active: !user.is_active,
+          }),
+        }
+      );
 
-            headers: {
-              "Content-Type":
-                "application/json",
-
-              Authorization: `Bearer ${token}`,
-            },
-
-            body: JSON.stringify({
-              id: user.id,
-
-              full_name:
-                user.full_name,
-
-              phone:
-                user.phone || "",
-
-              email:
-                user.email || "",
-
-              role:
-                user.role,
-
-              institute_id:
-                user.institute_id,
-
-              is_active:
-                newStatus,
-            }),
-          }
-        );
-
-      const result =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
-        console.error(
-          "Toggle user error:",
-          result
+        throw new Error(
+          data.error ||
+            data.message ||
+            "تعذر تحديث حالة المستخدم"
         );
-
-        setMessage(
-          result.error ||
-            "تعذر تغيير حالة المستخدم"
-        );
-
-        return;
       }
 
-      setMessage(
-        newStatus
-          ? "تم تفعيل المستخدم بنجاح ✅"
-          : "تم تعطيل المستخدم بنجاح ✅"
+      setSuccess(
+        user.is_active
+          ? "تم تعطيل المستخدم بنجاح"
+          : "تم تفعيل المستخدم بنجاح"
       );
 
-      await loadData();
-    } catch (error) {
-      console.error(error);
+      await loadData(true);
+    } catch (err) {
+      console.error(
+        "Toggle user status error:",
+        err
+      );
 
-      setMessage(
-        "حدث خطأ غير متوقع"
+      setError(
+        err instanceof Error
+          ? err.message
+          : "حدث خطأ أثناء تحديث حالة المستخدم"
       );
     }
-  }
+  };
+
+  /* =======================================================
+     Institute name
+  ======================================================= */
+
+  const getInstituteName = (
+    user: UserRecord
+  ) => {
+    if (user.institute_name) {
+      return user.institute_name;
+    }
+
+    if (!user.institute_id) {
+      return "الإدارة التعليمية";
+    }
+
+    const institute = institutes.find(
+      (item) =>
+        item.id === user.institute_id
+    );
+
+    return (
+      institute?.name ||
+      "معهد غير معروف"
+    );
+  };
+
+  /* =======================================================
+     Loading
+  ======================================================= */
 
   if (loading) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw
-            className="mx-auto animate-spin mb-4 text-blue-600"
-            size={36}
-          />
+      <div
+        dir="rtl"
+        className="flex min-h-[60vh] items-center justify-center"
+      >
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" />
 
-          <p className="text-gray-600">
+          <p className="text-sm text-slate-500">
             جاري تحميل المستخدمين...
           </p>
         </div>
@@ -873,310 +912,500 @@ function UsersManagement() {
     );
   }
 
+  /* =======================================================
+     Render
+  ======================================================= */
+
   return (
-    <main
+    <div
       dir="rtl"
-      className="min-h-screen bg-gray-50 p-6 md:p-8"
+      className="space-y-6"
     >
-      <div className="max-w-7xl mx-auto">
+      {/* =========================================
+          Header
+      ========================================== */}
 
-        {/* Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800">
-              إدارة المستخدمين
-            </h1>
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">
+            إدارة المستخدمين
+          </h1>
 
-            <p className="text-gray-500 mt-2">
-              إدارة مستخدمي الإدارة التعليمية والمعاهد التابعة لها
-            </p>
-          </div>
+          <p className="mt-2 text-sm text-slate-500">
+            {isItAdmin
+              ? `إدارة مستخدمي ${currentInstitute?.name || "المعهد"}`
+              : "إدارة مستخدمي الإدارة التعليمية والمعاهد التابعة لها"}
+          </p>
+        </div>
 
-          <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw
+              size={18}
+              className={
+                refreshing
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+
+            تحديث
+          </button>
+
+          {(isSuperAdmin || isItAdmin) && (
             <button
               type="button"
-              onClick={loadData}
-              className="flex items-center justify-center gap-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-5 py-3 rounded-xl font-semibold"
-            >
-              <RefreshCw size={19} />
-              تحديث
-            </button>
-
-            <button
-              type="button"
-              onClick={openAddModal}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold"
+              onClick={openCreateModal}
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700"
             >
               <UserPlus size={19} />
+
               إضافة مستخدم
             </button>
-          </div>
+          )}
+
         </div>
+      </div>
 
-        {/* Message */}
+      {/* =========================================
+          Scope Notice
+      ========================================== */}
 
-        {message && (
-          <div className="mb-6 bg-white border border-blue-200 text-blue-700 rounded-xl p-4">
-            {message}
+      {isItAdmin && (
+        <div className="flex items-center gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-5 py-4 text-sm text-cyan-800">
+
+          <MonitorCog
+            size={22}
+            className="shrink-0"
+          />
+
+          <div>
+            <div className="font-bold">
+              صلاحيات مسؤول تكنولوجيا المعلومات
+            </div>
+
+            <div className="mt-1">
+              يمكنك إدارة مستخدمي معهدك فقط، ولا يمكنك
+              إدارة المستخدمين المركزيين أو مسؤول IT آخر.
+            </div>
           </div>
-        )}
 
-        {/* Statistics */}
-
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4 mb-6">
-
-          <StatCard
-            title="إجمالي المستخدمين"
-            value={statistics.total}
-            icon={<Users size={21} />}
-          />
-
-          <StatCard
-            title="نشط"
-            value={statistics.active}
-            icon={<ShieldCheck size={21} />}
-          />
-
-          <StatCard
-            title="غير نشط"
-            value={statistics.inactive}
-            icon={<Power size={21} />}
-          />
-
-          <StatCard
-            title="الشيوخ"
-            value={statistics.sheikhs}
-            icon={<Building2 size={21} />}
-          />
-
-          <StatCard
-            title="المدرسون"
-            value={statistics.teachers}
-            icon={<Users size={21} />}
-          />
-
-          <StatCard
-            title="مسؤولو IT"
-            value={statistics.itAdmins}
-            icon={<MonitorCog size={21} />}
-          />
-
-          <StatCard
-            title="أولياء الأمور"
-            value={statistics.parents}
-            icon={<Users size={21} />}
-          />
         </div>
+      )}
 
-        {/* Filters */}
+      {/* =========================================
+          Error
+      ========================================== */}
 
-        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {error && (
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                بحث
-              </label>
+          <span>{error}</span>
 
-              <div className="relative">
-                <Search
-                  size={19}
-                  className="absolute right-3 top-3 text-gray-400"
-                />
+          <button
+            type="button"
+            onClick={() => setError("")}
+            className="rounded-lg p-1 hover:bg-red-100"
+          >
+            <X size={18} />
+          </button>
 
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) =>
-                    setSearchTerm(
-                      e.target.value
-                    )
+        </div>
+      )}
+
+      {/* =========================================
+          Success
+      ========================================== */}
+
+      {success && (
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
+
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={19} />
+            <span>{success}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSuccess("")}
+            className="rounded-lg p-1 hover:bg-emerald-100"
+          >
+            <X size={18} />
+          </button>
+
+        </div>
+      )}
+
+      {/* =========================================
+          Statistics
+      ========================================== */}
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+
+        <StatCard
+          title="إجمالي المستخدمين"
+          value={statistics.total}
+          icon={<Users size={22} />}
+        />
+
+        <StatCard
+          title="نشط"
+          value={statistics.active}
+          icon={<CheckCircle2 size={22} />}
+        />
+
+        <StatCard
+          title="غير نشط"
+          value={statistics.inactive}
+          icon={<Power size={22} />}
+        />
+
+        <StatCard
+          title="مسؤولو IT"
+          value={statistics.itAdmins}
+          icon={<MonitorCog size={22} />}
+        />
+
+        <StatCard
+          title="شيوخ المعاهد"
+          value={statistics.sheikhs}
+          icon={<ShieldCheck size={22} />}
+        />
+
+        <StatCard
+          title="المدرسون"
+          value={statistics.teachers}
+          icon={<Users size={22} />}
+        />
+
+      </div>
+
+      {/* =========================================
+          Filters
+      ========================================== */}
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+
+          {/* Search */}
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              بحث
+            </label>
+
+            <div className="relative">
+
+              <Search
+                size={19}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <input
+                type="text"
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="الاسم أو البريد أو الهاتف..."
+                className="w-full rounded-xl border border-slate-200 bg-white py-3 pr-11 pl-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+
+            </div>
+          </div>
+
+          {/* Role Filter */}
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              الدور
+            </label>
+
+            <select
+              value={roleFilter}
+              onChange={(event) =>
+                setRoleFilter(
+                  event.target.value as
+                    | "all"
+                    | Role
+                )
+              }
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            >
+              <option value="all">
+                جميع الأدوار
+              </option>
+
+              {filterRoles.map((role) => (
+                <option
+                  key={role}
+                  value={role}
+                >
+                  {roleLabels[role]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Institute Filter */}
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              المعهد
+            </label>
+
+            <select
+              value={
+                isItAdmin
+                  ? currentUser?.institute_id ||
+                    "all"
+                  : instituteFilter
+              }
+              disabled={isItAdmin}
+              onChange={(event) =>
+                setInstituteFilter(
+                  event.target.value
+                )
+              }
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-600"
+            >
+              {isItAdmin ? (
+                <option
+                  value={
+                    currentUser?.institute_id ||
+                    "all"
                   }
-                  placeholder="الاسم أو البريد أو الهاتف..."
-                  className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                الدور
-              </label>
-
-              <select
-                value={roleFilter}
-                onChange={(e) =>
-                  setRoleFilter(
-                    e.target.value
-                  )
-                }
-                className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">
-                  جميع الأدوار
+                >
+                  {currentInstitute?.name ||
+                    "معهدي"}
                 </option>
+              ) : (
+                <>
+                  <option value="all">
+                    جميع المعاهد
+                  </option>
 
-                {filterRoles.map(
-                  (role) => (
-                    <option
-                      key={role.value}
-                      value={role.value}
-                    >
-                      {role.label}
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                المعهد
-              </label>
-
-              <select
-                value={instituteFilter}
-                onChange={(e) =>
-                  setInstituteFilter(
-                    e.target.value
-                  )
-                }
-                className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">
-                  جميع المعاهد
-                </option>
-
-                {institutes.map(
-                  (institute) => (
-                    <option
-                      key={institute.id}
-                      value={institute.id}
-                    >
-                      {institute.name}
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
+                  {institutes.map(
+                    (institute) => (
+                      <option
+                        key={institute.id}
+                        value={institute.id}
+                      >
+                        {institute.name}
+                      </option>
+                    )
+                  )}
+                </>
+              )}
+            </select>
           </div>
+
         </div>
+      </div>
 
-        {/* Users Table */}
+      {/* =========================================
+          Users Table
+      ========================================== */}
 
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
-          <div className="p-6 border-b">
-            <h2 className="text-xl font-bold text-gray-800">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
               المستخدمون
             </h2>
 
-            <p className="text-gray-500 text-sm mt-1">
+            <p className="mt-1 text-xs text-slate-500">
               عدد النتائج:{" "}
               {filteredUsers.length}
             </p>
           </div>
 
-          {filteredUsers.length === 0 ? (
-            <div className="text-center py-16 text-gray-500">
-              لا توجد بيانات مطابقة
+          <Activity
+            size={22}
+            className="text-slate-400"
+          />
+
+        </div>
+
+        {filteredUsers.length === 0 ? (
+          <div className="flex min-h-[250px] flex-col items-center justify-center px-6 text-center">
+
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+              <Users size={27} />
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
 
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-right px-6 py-4">
-                      المستخدم
-                    </th>
+            <h3 className="text-base font-bold text-slate-700">
+              لا يوجد مستخدمون
+            </h3>
 
-                    <th className="text-right px-6 py-4">
-                      الدور
-                    </th>
+            <p className="mt-2 max-w-md text-sm text-slate-500">
+              {isItAdmin
+                ? "لا يوجد مستخدمون مسجلون حاليًا في معهدك أو لا توجد نتائج مطابقة للبحث."
+                : "لا توجد نتائج مطابقة للفلاتر الحالية."}
+            </p>
 
-                    <th className="text-right px-6 py-4">
-                      المعهد
-                    </th>
+            {(isSuperAdmin || isItAdmin) && (
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700"
+              >
+                <UserPlus size={18} />
+                إضافة مستخدم
+              </button>
+            )}
 
-                    <th className="text-center px-6 py-4">
-                      الحالة
-                    </th>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
 
-                    <th className="text-center px-6 py-4">
-                      الإجراءات
-                    </th>
-                  </tr>
-                </thead>
+            <table className="w-full min-w-[950px] text-right">
 
-                <tbody className="divide-y">
-                  {filteredUsers.map(
-                    (user) => (
-                      <tr
-                        key={user.id}
-                        className="hover:bg-gray-50"
-                      >
-                        <td className="px-6 py-5">
-                          <div className="font-semibold text-gray-800">
-                            {user.full_name}
+              <thead className="bg-slate-50">
+                <tr className="border-b border-slate-200">
+
+                  <th className="px-5 py-4 text-xs font-bold text-slate-500">
+                    المستخدم
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold text-slate-500">
+                    البريد الإلكتروني
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold text-slate-500">
+                    الدور
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold text-slate-500">
+                    المعهد
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold text-slate-500">
+                    الحالة
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold text-slate-500">
+                    الإجراءات
+                  </th>
+
+                </tr>
+              </thead>
+
+              <tbody>
+
+                {filteredUsers.map((user) => {
+
+                  const canEdit =
+                    isSuperAdmin ||
+                    (
+                      isItAdmin &&
+                      user.institute_id ===
+                        currentUser?.institute_id &&
+                      user.role !== "it_admin"
+                    );
+
+                  return (
+                    <tr
+                      key={user.id}
+                      className="border-b border-slate-100 transition hover:bg-slate-50"
+                    >
+
+                      {/* User */}
+                      <td className="px-5 py-4">
+
+                        <div className="flex items-center gap-3">
+
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                            <UserRound size={19} />
                           </div>
 
-                          <div className="flex flex-col gap-1 mt-1 text-sm text-gray-500">
-                            {user.email && (
-                              <span className="flex items-center gap-1">
-                                <Mail size={14} />
-                                {user.email}
-                              </span>
-                            )}
+                          <div className="min-w-0">
+
+                            <div className="truncate font-semibold text-slate-800">
+                              {user.full_name ||
+                                "بدون اسم"}
+                            </div>
 
                             {user.phone && (
-                              <span className="flex items-center gap-1">
-                                <Phone size={14} />
+                              <div className="mt-1 text-xs text-slate-500">
                                 {user.phone}
-                              </span>
+                              </div>
                             )}
+
                           </div>
-                        </td>
 
-                        <td className="px-6 py-5">
-                          <span
-                            className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${
-                              roleColors[
-                                user.role
-                              ] ||
-                              "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            {roleLabels[
-                              user.role
-                            ] || user.role}
+                        </div>
+
+                      </td>
+
+                      {/* Email */}
+                      <td className="px-5 py-4 text-sm text-slate-600">
+                        {user.email || "—"}
+                      </td>
+
+                      {/* Role */}
+                      <td className="px-5 py-4">
+
+                        <span
+                          className={[
+                            "inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold",
+                            roleColors[user.role],
+                          ].join(" ")}
+                        >
+                          {roleLabels[user.role]}
+                        </span>
+
+                      </td>
+
+                      {/* Institute */}
+                      <td className="px-5 py-4">
+
+                        <div className="flex items-center gap-2 text-sm text-slate-600">
+
+                          <Building2
+                            size={17}
+                            className="text-slate-400"
+                          />
+
+                          <span>
+                            {getInstituteName(
+                              user
+                            )}
                           </span>
-                        </td>
 
-                        <td className="px-6 py-5 text-gray-600">
-                          {getInstituteName(
-                            user.institute_id
-                          )}
-                        </td>
+                        </div>
 
-                        <td className="px-6 py-5 text-center">
-                          {user.is_active !==
-                          false ? (
-                            <span className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
-                              <span className="w-2 h-2 bg-green-600 rounded-full" />
-                              نشط
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-2 bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-semibold">
-                              <span className="w-2 h-2 bg-red-600 rounded-full" />
-                              غير نشط
-                            </span>
-                          )}
-                        </td>
+                      </td>
 
-                        <td className="px-6 py-5">
-                          <div className="flex justify-center gap-2">
+                      {/* Status */}
+                      <td className="px-5 py-4">
+
+                        {user.is_active ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                            نشط
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
+                            غير نشط
+                          </span>
+                        )}
+
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-5 py-4">
+
+                        {canEdit ? (
+                          <div className="flex items-center gap-2">
 
                             <button
                               type="button"
@@ -1185,10 +1414,12 @@ function UsersManagement() {
                                   user
                                 )
                               }
-                              className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"
-                              title="تعديل"
+                              className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
                             >
-                              <Pencil size={18} />
+                              <Edit3
+                                size={15}
+                              />
+                              تعديل
                             </button>
 
                             <button
@@ -1198,348 +1429,335 @@ function UsersManagement() {
                                   user
                                 )
                               }
-                              className={`p-2 rounded-lg ${
-                                user.is_active !==
-                                false
-                                  ? "bg-red-50 text-red-700 hover:bg-red-100"
-                                  : "bg-green-50 text-green-700 hover:bg-green-100"
-                              }`}
-                              title={
-                                user.is_active !==
-                                false
-                                  ? "تعطيل"
-                                  : "تفعيل"
-                              }
+                              className={[
+                                "flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition",
+                                user.is_active
+                                  ? "bg-red-50 text-red-600 hover:bg-red-100"
+                                  : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100",
+                              ].join(" ")}
                             >
-                              <Power size={18} />
+                              <Power
+                                size={15}
+                              />
+
+                              {user.is_active
+                                ? "تعطيل"
+                                : "تفعيل"}
                             </button>
+
                           </div>
-                        </td>
-                      </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">
+                            غير متاح
+                          </span>
+                        )}
+
+                      </td>
+
+                    </tr>
+                  );
+                })}
+
+              </tbody>
+
+            </table>
+
+          </div>
+        )}
+
       </div>
 
-      {/* Modal */}
+      {/* =========================================
+          Add / Edit Modal
+      ========================================== */}
 
       {showModal && (
-        <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
 
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
 
-            <div className="flex items-center justify-between px-6 py-5 border-b">
+            {/* Modal Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-5">
+
               <div>
-                <h2 className="text-xl font-bold text-gray-800">
+                <h2 className="text-xl font-bold text-slate-900">
                   {editingUser
                     ? "تعديل المستخدم"
-                    : "إضافة مستخدم"}
+                    : "إضافة مستخدم جديد"}
                 </h2>
 
-                <p className="text-sm text-gray-500 mt-1">
-                  {editingUser
-                    ? "تعديل بيانات المستخدم وصلاحياته"
-                    : "إنشاء حساب دخول جديد للنظام"}
+                <p className="mt-1 text-xs text-slate-500">
+                  {isItAdmin
+                    ? "إضافة أو تعديل مستخدم داخل المعهد فقط"
+                    : "إدارة حسابات مستخدمي الإدارة والمعاهد"}
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={closeModal}
-                className="p-2 rounded-lg hover:bg-gray-100"
+                disabled={saving}
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100"
               >
-                <X size={21} />
+                <X size={20} />
               </button>
+
             </div>
 
-            <div className="p-6">
+            {/* Form */}
+            <form
+              onSubmit={saveUser}
+              className="space-y-5 p-6"
+            >
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Name */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  اسم المستخدم
+                </label>
 
-                {/* الاسم */}
+                <input
+                  type="text"
+                  value={form.full_name}
+                  onChange={(event) =>
+                    updateForm(
+                      "full_name",
+                      event.target.value
+                    )
+                  }
+                  placeholder="اكتب الاسم بالكامل"
+                  disabled={saving}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                />
+              </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    الاسم الكامل *
-                  </label>
-
-                  <input
-                    type="text"
-                    value={form.full_name}
-                    onChange={(e) =>
-                      setForm(
-                        (current) => ({
-                          ...current,
-                          full_name:
-                            e.target.value,
-                        })
-                      )
-                    }
-                    className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* البريد */}
+              {/* Email + Phone */}
+              <div className="grid gap-5 md:grid-cols-2">
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    البريد الإلكتروني *
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    البريد الإلكتروني
                   </label>
 
                   <input
                     type="email"
                     value={form.email}
-                    onChange={(e) =>
-                      setForm(
-                        (current) => ({
-                          ...current,
-                          email:
-                            e.target.value,
-                        })
+                    onChange={(event) =>
+                      updateForm(
+                        "email",
+                        event.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="example@email.com"
                     disabled={
-                      Boolean(
-                        editingUser
-                      )
+                      saving || !!editingUser
                     }
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500"
                   />
                 </div>
 
-                {/* كلمة المرور */}
-
-                {!editingUser && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      كلمة المرور *
-                    </label>
-
-                    <div className="relative">
-                      <KeyRound
-                        size={18}
-                        className="absolute right-3 top-3.5 text-gray-400"
-                      />
-
-                      <input
-                        type="password"
-                        value={form.password}
-                        onChange={(e) =>
-                          setForm(
-                            (current) => ({
-                              ...current,
-                              password:
-                                e.target.value,
-                            })
-                          )
-                        }
-                        placeholder="8 أحرف على الأقل"
-                        autoComplete="new-password"
-                        className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* الهاتف */}
-
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    الهاتف
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    رقم الهاتف
                   </label>
 
                   <input
-                    type="text"
+                    type="tel"
                     value={form.phone}
-                    onChange={(e) =>
-                      setForm(
-                        (current) => ({
-                          ...current,
-                          phone:
-                            e.target.value,
-                        })
+                    onChange={(event) =>
+                      updateForm(
+                        "phone",
+                        event.target.value
                       )
                     }
-                    className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="01xxxxxxxxx"
+                    disabled={saving}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
 
-                {/* الدور */}
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    الدور
-                  </label>
-
-                  <select
-                    value={form.role}
-                    onChange={(e) =>
-                      handleRoleChange(
-                        e.target.value as Role
-                      )
-                    }
-                    className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {editingUser?.role ===
-                      "director" && (
-                      <option value="director">
-                        مدير الإدارة التعليمية (قديم)
-                      </option>
-                    )}
-
-                    {selectableRoles.map(
-                      (role) => (
-                        <option
-                          key={role.value}
-                          value={role.value}
-                        >
-                          {role.label}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                {/* المعهد */}
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    المعهد
-                    {INSTITUTE_ROLES.includes(
-                      form.role
-                    ) && (
-                      <span className="text-red-500">
-                        {" "}
-                        *
-                      </span>
-                    )}
-                  </label>
-
-                  <select
-                    value={
-                      form.institute_id
-                    }
-                    onChange={(e) =>
-                      setForm(
-                        (current) => ({
-                          ...current,
-                          institute_id:
-                            e.target.value,
-                        })
-                      )
-                    }
-                    disabled={
-                      !INSTITUTE_ROLES.includes(
-                        form.role
-                      )
-                    }
-                    className={`w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500 ${
-                      !INSTITUTE_ROLES.includes(
-                        form.role
-                      )
-                        ? "bg-gray-100 cursor-not-allowed"
-                        : ""
-                    }`}
-                  >
-                    <option value="">
-                      {!INSTITUTE_ROLES.includes(
-                        form.role
-                      )
-                        ? "لا ينطبق على هذا الدور"
-                        : "اختر المعهد"}
-                    </option>
-
-                    {institutes.map(
-                      (institute) => (
-                        <option
-                          key={institute.id}
-                          value={institute.id}
-                        >
-                          {institute.name}
-                        </option>
-                      )
-                    )}
-                  </select>
-
-                  {form.role ===
-                    "it_admin" && (
-                    <p className="text-xs text-amber-700 mt-2">
-                      مسؤول IT مرتبط بهذا المعهد فقط.
-                    </p>
-                  )}
-                </div>
-
-                {/* الحالة */}
-
-                <div className="md:col-span-2">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={
-                        form.is_active
-                      }
-                      onChange={(e) =>
-                        setForm(
-                          (current) => ({
-                            ...current,
-                            is_active:
-                              e.target.checked,
-                          })
-                        )
-                      }
-                      className="w-5 h-5"
-                    />
-
-                    <span className="font-semibold text-gray-700">
-                      المستخدم نشط
-                    </span>
-                  </label>
-                </div>
               </div>
 
-              {!editingUser && (
-                <div className="mt-5 rounded-xl bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800">
-                  سيتم إنشاء حساب الدخول في
-                  Supabase Auth وربطه تلقائيًا
-                  بملف المستخدم والصلاحية المحددة.
+              {/* Password */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  {editingUser
+                    ? "كلمة مرور جديدة - اختياري"
+                    : "كلمة المرور"}
+                </label>
+
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(event) =>
+                    updateForm(
+                      "password",
+                      event.target.value
+                    )
+                  }
+                  placeholder={
+                    editingUser
+                      ? "اتركها فارغة إذا لم ترد تغييرها"
+                      : "6 أحرف على الأقل"
+                  }
+                  disabled={saving}
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                />
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  الدور
+                </label>
+
+                <select
+                  value={form.role}
+                  onChange={(event) =>
+                    handleRoleChange(
+                      event.target.value as Role
+                    )
+                  }
+                  disabled={
+                    saving ||
+                    (
+                      !!editingUser &&
+                      isItAdmin
+                    )
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50"
+                >
+                  {selectableRoles.map(
+                    (role) => (
+                      <option
+                        key={role}
+                        value={role}
+                      >
+                        {roleLabels[role]}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              {/* Institute */}
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  المعهد
+                </label>
+
+                <select
+                  value={form.institute_id}
+                  onChange={(event) =>
+                    updateForm(
+                      "institute_id",
+                      event.target.value
+                    )
+                  }
+                  disabled={
+                    saving ||
+                    isItAdmin ||
+                    form.role ===
+                      "super_admin" ||
+                    form.role ===
+                      "director" ||
+                    form.role === "deputy"
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-50"
+                >
+                  {form.role ===
+                    "super_admin" ||
+                  form.role === "director" ||
+                  form.role === "deputy" ? (
+                    <option value="">
+                      الإدارة التعليمية
+                    </option>
+                  ) : (
+                    <>
+                      <option value="">
+                        اختر المعهد
+                      </option>
+
+                      {institutes.map(
+                        (institute) => (
+                          <option
+                            key={institute.id}
+                            value={institute.id}
+                          >
+                            {institute.name}
+                          </option>
+                        )
+                      )}
+                    </>
+                  )}
+                </select>
+
+                {isItAdmin && (
+                  <p className="mt-2 text-xs text-cyan-700">
+                    تم تثبيت المعهد على معهد مسؤول
+                    تكنولوجيا المعلومات.
+                  </p>
+                )}
+              </div>
+
+              {/* Form Error */}
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium leading-6 text-red-700">
+                  {error}
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 mt-8 pt-5 border-t">
+              {/* Buttons */}
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
 
                 <button
                   type="button"
                   onClick={closeModal}
                   disabled={saving}
-                  className="px-5 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                 >
                   إلغاء
                 </button>
 
                 <button
-                  type="button"
-                  onClick={saveUser}
+                  type="submit"
                   disabled={saving}
-                  className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-7 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {saving
-                    ? "جاري الحفظ..."
-                    : editingUser
-                    ? "حفظ التعديلات"
-                    : "إنشاء حساب المستخدم"}
+                  {saving ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      جاري الحفظ...
+                    </>
+                  ) : (
+                    <>
+                      {editingUser ? (
+                        <Edit3 size={18} />
+                      ) : (
+                        <UserPlus size={18} />
+                      )}
+
+                      {editingUser
+                        ? "حفظ التعديلات"
+                        : "إضافة المستخدم"}
+                    </>
+                  )}
                 </button>
+
               </div>
-            </div>
+
+            </form>
+
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }
+
+/* =========================================================
+   Stat Card
+========================================================= */
 
 function StatCard({
   title,
@@ -1551,22 +1769,26 @@ function StatCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-5">
-      <div className="flex items-center gap-3">
-        <div className="text-blue-600">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+
+      <div className="flex items-center justify-between gap-3">
+
+        <div>
+          <div className="text-xs font-medium text-slate-500">
+            {title}
+          </div>
+
+          <div className="mt-2 text-2xl font-bold text-slate-900">
+            {value}
+          </div>
+        </div>
+
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
           {icon}
         </div>
 
-        <div>
-          <p className="text-gray-500 text-sm">
-            {title}
-          </p>
-
-          <p className="text-2xl font-bold text-gray-800">
-            {value}
-          </p>
-        </div>
       </div>
+
     </div>
   );
 }
