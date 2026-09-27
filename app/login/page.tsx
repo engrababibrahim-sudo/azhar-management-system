@@ -4,163 +4,358 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase/client";
 
+type UserRole =
+  | "super_admin"
+  | "director"
+  | "deputy"
+  | "sheikh"
+  | "institute_deputy"
+  | "teacher"
+  | "employee"
+  | "parent";
+
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
-  const [parentLoading, setParentLoading] = useState(false);
+  const [parentLoading, setParentLoading] =
+    useState(false);
+
   const [error, setError] = useState("");
 
-  async function handleLogin(e: FormEvent<HTMLFormElement>) {
+  async function handleLogin(
+    e: FormEvent<HTMLFormElement>
+  ) {
     e.preventDefault();
+
+    if (loading) return;
 
     setLoading(true);
     setError("");
 
-    const { data: authData, error: authError } =
-      await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+    try {
+      /*
+       * ============================================
+       * 1. تسجيل الدخول من Supabase Auth
+       * ============================================
+       */
 
-    if (authError) {
-      setError("البريد الإلكتروني أو كلمة المرور غير صحيحة");
-      setLoading(false);
-      return;
-    }
+      const {
+        data: authData,
+        error: authError,
+      } =
+        await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
 
-    if (!authData.user) {
-      setError("تعذر تسجيل الدخول");
-      setLoading(false);
-      return;
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select(
-        "role, institute_id, directorate_id, full_name, is_active"
-      )
-      .eq("id", authData.user.id)
-      .maybeSingle();
-
-    if (profileError || !profile) {
-      await supabase.auth.signOut();
-
-      setError(
-        "تم تسجيل الدخول ولكن لم يتم العثور على ملف المستخدم والصلاحيات"
-      );
-
-      setLoading(false);
-      return;
-    }
-
-    // الحساب غير مفعل
-    if (profile.is_active === false) {
-      await supabase.auth.signOut();
-
-      setError(
-        "هذا الحساب غير مفعل حاليًا. يرجى التواصل مع الإدارة."
-      );
-
-      setLoading(false);
-      return;
-    }
-
-    // =====================================================
-    // مدير الإدارة التعليمية الأزهرية
-    // الدور الرسمي: super_admin
-    // =====================================================
-    if (profile.role === "super_admin") {
-      if (!profile.directorate_id) {
-        await supabase.auth.signOut();
-
+      if (authError) {
         setError(
-          "حساب مدير الإدارة غير مرتبط بإدارة تعليمية"
+          "البريد الإلكتروني أو كلمة المرور غير صحيحة"
         );
 
         setLoading(false);
         return;
       }
 
-      router.push("/");
-      router.refresh();
-      return;
-    }
+      if (!authData.user) {
+        setError("تعذر تسجيل الدخول");
 
-    // =====================================================
-    // التوافق مع الحسابات القديمة
-    // =====================================================
-    if (profile.role === "director") {
-      if (!profile.directorate_id) {
+        setLoading(false);
+        return;
+      }
+
+      /*
+       * ============================================
+       * 2. جلب ملف المستخدم وصلاحياته
+       * ============================================
+       */
+
+      const {
+        data: profile,
+        error: profileError,
+      } =
+        await supabase
+          .from("profiles")
+          .select(
+            `
+              role,
+              institute_id,
+              directorate_id,
+              full_name,
+              is_active
+            `
+          )
+          .eq("id", authData.user.id)
+          .maybeSingle();
+
+      if (profileError || !profile) {
         await supabase.auth.signOut();
 
         setError(
-          "حساب مدير الإدارة غير مرتبط بإدارة تعليمية"
+          "تم تسجيل الدخول ولكن لم يتم العثور على ملف المستخدم والصلاحيات"
         );
 
         setLoading(false);
         return;
       }
 
-      router.push("/");
-      router.refresh();
-      return;
-    }
+      /*
+       * ============================================
+       * 3. التحقق من حالة الحساب
+       * ============================================
+       */
 
-    // =====================================================
-    // شيخ المعهد
-    // =====================================================
-    if (profile.role === "sheikh") {
-      if (!profile.institute_id) {
+      if (profile.is_active === false) {
         await supabase.auth.signOut();
 
-        setError("حساب شيخ المعهد غير مرتبط بمعهد");
+        setError(
+          "هذا الحساب غير مفعل حاليًا. يرجى التواصل مع الإدارة."
+        );
 
         setLoading(false);
         return;
       }
 
-      router.push(
-        `/institutes/${profile.institute_id}`
+      const role =
+        profile.role as UserRole;
+
+      /*
+       * ============================================
+       * 4. مدير الإدارة التعليمية
+       * ============================================
+       */
+
+      if (role === "super_admin") {
+        if (!profile.directorate_id) {
+          await supabase.auth.signOut();
+
+          setError(
+            "حساب مدير الإدارة غير مرتبط بإدارة تعليمية"
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        router.push("/");
+        router.refresh();
+
+        return;
+      }
+
+      /*
+       * ============================================
+       * 5. المدير القديم - للتوافق فقط
+       * ============================================
+       */
+
+      if (role === "director") {
+        if (!profile.directorate_id) {
+          await supabase.auth.signOut();
+
+          setError(
+            "حساب مدير الإدارة غير مرتبط بإدارة تعليمية"
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        router.push("/");
+        router.refresh();
+
+        return;
+      }
+
+      /*
+       * ============================================
+       * 6. وكيل الإدارة التعليمية
+       * ============================================
+       */
+
+      if (role === "deputy") {
+        if (!profile.directorate_id) {
+          await supabase.auth.signOut();
+
+          setError(
+            "حساب وكيل الإدارة غير مرتبط بإدارة تعليمية"
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        router.push("/");
+        router.refresh();
+
+        return;
+      }
+
+      /*
+       * ============================================
+       * 7. شيخ المعهد
+       * ============================================
+       */
+
+      if (role === "sheikh") {
+        if (!profile.institute_id) {
+          await supabase.auth.signOut();
+
+          setError(
+            "حساب شيخ المعهد غير مرتبط بمعهد"
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        router.push(
+          `/institutes/${profile.institute_id}`
+        );
+
+        router.refresh();
+
+        return;
+      }
+
+      /*
+       * ============================================
+       * 8. وكيل شيخ المعهد
+       * ============================================
+       */
+
+      if (role === "institute_deputy") {
+        if (!profile.institute_id) {
+          await supabase.auth.signOut();
+
+          setError(
+            "حساب وكيل شيخ المعهد غير مرتبط بمعهد"
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        router.push(
+          `/institutes/${profile.institute_id}`
+        );
+
+        router.refresh();
+
+        return;
+      }
+
+      /*
+       * ============================================
+       * 9. الموظف
+       * ============================================
+       */
+
+      if (role === "employee") {
+        if (!profile.institute_id) {
+          await supabase.auth.signOut();
+
+          setError(
+            "حساب الموظف غير مرتبط بمعهد"
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        router.push(
+          `/institutes/${profile.institute_id}`
+        );
+
+        router.refresh();
+
+        return;
+      }
+
+      /*
+       * ============================================
+       * 10. المدرس
+       * ============================================
+       */
+
+      if (role === "teacher") {
+        if (!profile.institute_id) {
+          await supabase.auth.signOut();
+
+          setError(
+            "حساب المدرس غير مرتبط بمعهد"
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        router.push("/teachers");
+        router.refresh();
+
+        return;
+      }
+
+      /*
+       * ============================================
+       * 11. ولي الأمر
+       * ============================================
+       */
+
+      if (role === "parent") {
+        router.push("/parent");
+        router.refresh();
+
+        return;
+      }
+
+      /*
+       * ============================================
+       * 12. أي دور غير مفعل
+       * ============================================
+       */
+
+      await supabase.auth.signOut();
+
+      setError(
+        "هذا الدور لم يتم تفعيل واجهته بعد"
       );
 
-      router.refresh();
-      return;
+      setLoading(false);
+    } catch (error) {
+      console.error(
+        "LOGIN ERROR:",
+        error
+      );
+
+      await supabase.auth.signOut();
+
+      setError(
+        "حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى."
+      );
+
+      setLoading(false);
     }
-
-    // =====================================================
-    // ولي الأمر
-    // =====================================================
-    if (profile.role === "parent") {
-      router.push("/parent");
-      router.refresh();
-      return;
-    }
-
-    // =====================================================
-    // الأدوار الأخرى
-    // =====================================================
-    await supabase.auth.signOut();
-
-    setError("هذا الدور لم يتم تفعيل واجهته بعد");
-
-    setLoading(false);
   }
 
-  // =====================================================
-  // فتح صفحة دخول ولي الأمر
-  // =====================================================
+  /*
+   * ============================================
+   * دخول ولي الأمر
+   * ============================================
+   */
+
   function handleParentLogin() {
     if (parentLoading) return;
 
     setParentLoading(true);
     setError("");
 
-    // استخدام انتقال المتصفح المباشر
-    // حتى لا يتأثر الانتقال بمشكلة في Next Router
-    window.location.href = "/parent-login";
+    window.location.href =
+      "/parent-login";
   }
 
   return (
@@ -171,8 +366,10 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="bg-white rounded-3xl shadow-xl p-8">
 
-          {/* Logo */}
+          {/* الشعار والعنوان */}
+
           <div className="text-center mb-8">
+
             <div className="mx-auto mb-4 w-20 h-20 rounded-2xl bg-emerald-700 text-white flex items-center justify-center text-3xl font-bold">
               أز
             </div>
@@ -184,16 +381,20 @@ export default function LoginPage() {
             <p className="text-slate-500 mt-2">
               الإدارة التعليمية الأزهرية
             </p>
+
           </div>
 
-          {/* Login Form */}
+          {/* نموذج تسجيل الدخول */}
+
           <form
             onSubmit={handleLogin}
             className="space-y-5"
           >
 
-            {/* Email */}
+            {/* البريد الإلكتروني */}
+
             <div>
+
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 البريد الإلكتروني
               </label>
@@ -209,10 +410,13 @@ export default function LoginPage() {
                 autoComplete="email"
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
               />
+
             </div>
 
-            {/* Password */}
+            {/* كلمة المرور */}
+
             <div>
+
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 كلمة المرور
               </label>
@@ -228,16 +432,19 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
               />
+
             </div>
 
-            {/* Error */}
+            {/* رسالة الخطأ */}
+
             {error && (
               <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 p-3 text-sm text-center">
                 {error}
               </div>
             )}
 
-            {/* Main Login */}
+            {/* زر تسجيل الدخول */}
+
             <button
               type="submit"
               disabled={loading}
@@ -247,29 +454,38 @@ export default function LoginPage() {
                 ? "جاري تسجيل الدخول..."
                 : "تسجيل الدخول"}
             </button>
+
           </form>
 
-          {/* =================================================
-              Parent Login
-          ================================================= */}
+          {/* دخول ولي الأمر */}
+
           <div className="mt-4">
+
             <button
               type="button"
-              onClick={handleParentLogin}
-              disabled={parentLoading}
+              onClick={
+                handleParentLogin
+              }
+              disabled={
+                parentLoading
+              }
               className="w-full rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 font-bold py-3 text-center hover:bg-emerald-100 disabled:opacity-60 transition cursor-pointer"
             >
               {parentLoading
                 ? "جاري فتح صفحة ولي الأمر..."
                 : "دخول ولي الأمر"}
             </button>
+
           </div>
 
-          {/* Footer */}
+          {/* التذييل */}
+
           <div className="mt-8 pt-6 border-t border-slate-200 text-center">
+
             <p className="text-xs text-slate-400">
               نظام الإدارة والمتابعة المركزية للمعاهد الأزهرية
             </p>
+
           </div>
 
         </div>
