@@ -14,6 +14,7 @@ import {
   Mail,
   Phone,
   KeyRound,
+  MonitorCog,
 } from "lucide-react";
 
 import AppShell from "../components/AppShell";
@@ -25,6 +26,7 @@ type Role =
   | "deputy"
   | "sheikh"
   | "institute_deputy"
+  | "it_admin"
   | "employee"
   | "teacher"
   | "parent"
@@ -56,6 +58,7 @@ const roleLabels: Record<Role, string> = {
   deputy: "وكيل الإدارة التعليمية",
   sheikh: "شيخ المعهد",
   institute_deputy: "وكيل شيخ المعهد",
+  it_admin: "مسؤول IT للمعهد",
   employee: "موظف",
   teacher: "مدرس",
   parent: "ولي أمر",
@@ -68,17 +71,12 @@ const roleColors: Record<Role, string> = {
   deputy: "bg-indigo-100 text-indigo-800",
   sheikh: "bg-blue-100 text-blue-800",
   institute_deputy: "bg-cyan-100 text-cyan-800",
+  it_admin: "bg-amber-100 text-amber-800",
   employee: "bg-gray-100 text-gray-800",
   teacher: "bg-green-100 text-green-800",
   parent: "bg-emerald-100 text-emerald-800",
   student: "bg-orange-100 text-orange-800",
 };
-
-/*
-|--------------------------------------------------------------------------
-| الأدوار التي يمكن إنشاء حساب دخول لها
-|--------------------------------------------------------------------------
-*/
 
 const selectableRoles: {
   value: Role;
@@ -101,6 +99,10 @@ const selectableRoles: {
     label: "وكيل شيخ المعهد",
   },
   {
+    value: "it_admin",
+    label: "مسؤول IT للمعهد",
+  },
+  {
     value: "employee",
     label: "موظف",
   },
@@ -109,12 +111,6 @@ const selectableRoles: {
     label: "مدرس",
   },
 ];
-
-/*
-|--------------------------------------------------------------------------
-| أدوار الفلتر
-|--------------------------------------------------------------------------
-*/
 
 const filterRoles: {
   value: string;
@@ -137,6 +133,10 @@ const filterRoles: {
     label: "وكيل شيخ المعهد",
   },
   {
+    value: "it_admin",
+    label: "مسؤول IT للمعهد",
+  },
+  {
     value: "employee",
     label: "موظف",
   },
@@ -152,6 +152,14 @@ const filterRoles: {
     value: "student",
     label: "طالب",
   },
+];
+
+const INSTITUTE_ROLES: Role[] = [
+  "sheikh",
+  "institute_deputy",
+  "it_admin",
+  "teacher",
+  "employee",
 ];
 
 export default function UsersPage() {
@@ -197,27 +205,28 @@ function UsersManagement() {
 
   const [message, setMessage] = useState("");
 
-  /*
-  |--------------------------------------------------------------------------
-  | تحميل البيانات
-  |--------------------------------------------------------------------------
-  */
-
   useEffect(() => {
     loadData();
   }, []);
+
+  async function getAccessToken() {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
+    if (error || !session?.access_token) {
+      return null;
+    }
+
+    return session.access_token;
+  }
 
   async function loadData() {
     setLoading(true);
     setMessage("");
 
     try {
-      /*
-      |--------------------------------------------------------------------------
-      | المستخدم الحالي
-      |--------------------------------------------------------------------------
-      */
-
       const {
         data: { user },
         error: authError,
@@ -231,20 +240,12 @@ function UsersManagement() {
 
       setCurrentAuthUserId(user.id);
 
-      /*
-      |--------------------------------------------------------------------------
-      | بيانات المستخدم الحالي
-      |--------------------------------------------------------------------------
-      */
-
       const {
         data: currentProfile,
         error: profileError,
       } = await supabase
         .from("profiles")
-        .select(
-          "role, directorate_id"
-        )
+        .select("role, directorate_id")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -259,14 +260,7 @@ function UsersManagement() {
         return;
       }
 
-      const role =
-        currentProfile.role as Role;
-
-      /*
-      |--------------------------------------------------------------------------
-      | صلاحية الدخول
-      |--------------------------------------------------------------------------
-      */
+      const role = currentProfile.role as Role;
 
       if (
         role !== "super_admin" &&
@@ -282,10 +276,7 @@ function UsersManagement() {
 
       setCurrentUserRole(role);
 
-      const directorateId =
-        currentProfile.directorate_id;
-
-      if (!directorateId) {
+      if (!currentProfile.directorate_id) {
         setMessage(
           "الحساب الحالي غير مرتبط بإدارة تعليمية"
         );
@@ -294,383 +285,135 @@ function UsersManagement() {
         return;
       }
 
-      /*
-      |--------------------------------------------------------------------------
-      | تحميل المعاهد التابعة للإدارة
-      |--------------------------------------------------------------------------
-      */
+      const token = await getAccessToken();
 
-      let institutesQuery = supabase
-        .from("institutes")
-        .select(
-          "id, name, code, directorate_id"
-        )
-        .order("name");
-
-      institutesQuery =
-        institutesQuery.eq(
-          "directorate_id",
-          directorateId
-        );
-
-      const {
-        data: institutesData,
-        error: institutesError,
-      } = await institutesQuery;
-
-      if (institutesError) {
-        console.error(institutesError);
-
+      if (!token) {
         setMessage(
-          "حدث خطأ أثناء تحميل المعاهد"
+          "انتهت جلسة الدخول، يرجى تسجيل الدخول مرة أخرى"
         );
 
         setLoading(false);
         return;
       }
 
-      const loadedInstitutes =
-        (institutesData ||
-          []) as Institute[];
-
-      setInstitutes(loadedInstitutes);
-
-      const instituteIds =
-        loadedInstitutes.map(
-          (institute) => institute.id
-        );
-
-      /*
-      |--------------------------------------------------------------------------
-      | تحميل المستخدمين الأساسيين
-      |--------------------------------------------------------------------------
-      */
-
-      const {
-        data: directUsers,
-        error: directUsersError,
-      } = await supabase
-        .from("profiles")
-        .select(
-          `
-          id,
-          full_name,
-          phone,
-          email,
-          role,
-          directorate_id,
-          institute_id,
-          is_active,
-          created_at,
-          updated_at
-          `
-        )
-        .eq(
-          "directorate_id",
-          directorateId
-        )
-        .order("full_name");
-
-      if (directUsersError) {
-        console.error(
-          directUsersError
-        );
-
-        setMessage(
-          "حدث خطأ أثناء تحميل مستخدمي الإدارة"
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | المستخدمون المرتبطون بالطلاب
-      |--------------------------------------------------------------------------
-      */
-
-      let relatedUsers: Profile[] = [];
-
-      if (instituteIds.length > 0) {
-        const {
-          data: studentsData,
-          error: studentsError,
-        } = await supabase
-          .from("students")
-          .select(
-            `
-            id,
-            parent_id,
-            institute_id
-            `
-          )
-          .in(
-            "institute_id",
-            instituteIds
-          );
-
-        if (studentsError) {
-          console.error(
-            "students lookup error:",
-            studentsError
-          );
-        } else {
-          const students =
-            studentsData || [];
-
-          const studentIds =
-            students.map(
-              (student) => student.id
-            );
-
-          const parentIds =
-            Array.from(
-              new Set(
-                students
-                  .map(
-                    (student) =>
-                      student.parent_id
-                  )
-                  .filter(
-                    (
-                      id
-                    ): id is string =>
-                      Boolean(id)
-                  )
-              )
-            );
-
-          /*
-          |--------------------------------------------------------------------------
-          | الطلاب من profiles
-          |--------------------------------------------------------------------------
-          */
-
-          if (studentIds.length > 0) {
-            const {
-              data: studentProfiles,
-              error:
-                studentProfilesError,
-            } = await supabase
-              .from("profiles")
-              .select(
-                `
-                id,
-                full_name,
-                phone,
-                email,
-                role,
-                directorate_id,
-                institute_id,
-                is_active,
-                created_at,
-                updated_at
-                `
-              )
-              .in(
-                "id",
-                studentIds
-              );
-
-            if (
-              !studentProfilesError
-            ) {
-              relatedUsers.push(
-                ...((studentProfiles ||
-                  []) as Profile[])
-              );
-            } else {
-              console.error(
-                studentProfilesError
-              );
-            }
-          }
-
-          /*
-          |--------------------------------------------------------------------------
-          | أولياء الأمور
-          |--------------------------------------------------------------------------
-          */
-
-          if (parentIds.length > 0) {
-            const {
-              data: parentProfiles,
-              error:
-                parentProfilesError,
-            } = await supabase
-              .from("profiles")
-              .select(
-                `
-                id,
-                full_name,
-                phone,
-                email,
-                role,
-                directorate_id,
-                institute_id,
-                is_active,
-                created_at,
-                updated_at
-                `
-              )
-              .in(
-                "id",
-                parentIds
-              );
-
-            if (
-              !parentProfilesError
-            ) {
-              relatedUsers.push(
-                ...((parentProfiles ||
-                  []) as Profile[])
-              );
-            } else {
-              console.error(
-                parentProfilesError
-              );
-            }
-          }
+      const response = await fetch(
+        "/api/users/create",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
         }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error(
+          "Load users error:",
+          result
+        );
+
+        setMessage(
+          result.error ||
+            "تعذر تحميل المستخدمين"
+        );
+
+        setLoading(false);
+        return;
       }
 
-      /*
-      |--------------------------------------------------------------------------
-      | دمج المستخدمين بدون تكرار
-      |--------------------------------------------------------------------------
-      */
+      setUsers(
+        Array.isArray(result.users)
+          ? result.users
+          : []
+      );
 
-      const allUsersMap =
-        new Map<string, Profile>();
-
-      [
-        ...((directUsers ||
-          []) as Profile[]),
-        ...relatedUsers,
-      ].forEach((profile) => {
-        allUsersMap.set(
-          profile.id,
-          profile
-        );
-      });
-
-      const allUsers =
-        Array.from(
-          allUsersMap.values()
-        ).sort((a, b) =>
-          a.full_name.localeCompare(
-            b.full_name,
-            "ar"
-          )
-        );
-
-      setUsers(allUsers);
+      setInstitutes(
+        Array.isArray(result.institutes)
+          ? result.institutes
+          : []
+      );
     } catch (error) {
       console.error(error);
 
       setMessage(
-        "حدث خطأ غير متوقع"
+        "حدث خطأ غير متوقع أثناء تحميل المستخدمين"
       );
     }
 
     setLoading(false);
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | فلترة المستخدمين
-  |--------------------------------------------------------------------------
-  */
+  const filteredUsers = useMemo(() => {
+    const search =
+      searchTerm.trim().toLowerCase();
 
-  const filteredUsers =
-    useMemo(() => {
-      const search =
-        searchTerm
-          .trim()
-          .toLowerCase();
+    return users.filter((user) => {
+      const matchesSearch =
+        !search ||
+        user.full_name
+          .toLowerCase()
+          .includes(search) ||
+        (user.email || "")
+          .toLowerCase()
+          .includes(search) ||
+        (user.phone || "")
+          .toLowerCase()
+          .includes(search);
 
-      return users.filter(
-        (user) => {
-          const matchesSearch =
-            !search ||
-            user.full_name
-              .toLowerCase()
-              .includes(search) ||
-            (user.email || "")
-              .toLowerCase()
-              .includes(search) ||
-            (user.phone || "")
-              .toLowerCase()
-              .includes(search);
+      const matchesRole =
+        roleFilter === "all" ||
+        user.role === roleFilter;
 
-          const matchesRole =
-            roleFilter === "all" ||
-            user.role === roleFilter;
+      const matchesInstitute =
+        instituteFilter === "all" ||
+        user.institute_id ===
+          instituteFilter;
 
-          const matchesInstitute =
-            instituteFilter ===
-              "all" ||
-            user.institute_id ===
-              instituteFilter;
-
-          return (
-            matchesSearch &&
-            matchesRole &&
-            matchesInstitute
-          );
-        }
+      return (
+        matchesSearch &&
+        matchesRole &&
+        matchesInstitute
       );
-    }, [
-      users,
-      searchTerm,
-      roleFilter,
-      instituteFilter,
-    ]);
+    });
+  }, [
+    users,
+    searchTerm,
+    roleFilter,
+    instituteFilter,
+  ]);
 
-  /*
-  |--------------------------------------------------------------------------
-  | الإحصائيات
-  |--------------------------------------------------------------------------
-  */
+  const statistics = useMemo(() => {
+    return {
+      total: users.length,
 
-  const statistics =
-    useMemo(() => {
-      return {
-        total: users.length,
+      active: users.filter(
+        (u) => u.is_active !== false
+      ).length,
 
-        active: users.filter(
-          (u) =>
-            u.is_active !== false
-        ).length,
+      inactive: users.filter(
+        (u) => u.is_active === false
+      ).length,
 
-        inactive: users.filter(
-          (u) =>
-            u.is_active === false
-        ).length,
+      sheikhs: users.filter(
+        (u) => u.role === "sheikh"
+      ).length,
 
-        sheikhs: users.filter(
-          (u) =>
-            u.role === "sheikh"
-        ).length,
+      teachers: users.filter(
+        (u) => u.role === "teacher"
+      ).length,
 
-        teachers: users.filter(
-          (u) =>
-            u.role === "teacher"
-        ).length,
+      itAdmins: users.filter(
+        (u) => u.role === "it_admin"
+      ).length,
 
-        parents: users.filter(
-          (u) =>
-            u.role === "parent"
-        ).length,
-      };
-    }, [users]);
-
-  /*
-  |--------------------------------------------------------------------------
-  | اسم المعهد
-  |--------------------------------------------------------------------------
-  */
+      parents: users.filter(
+        (u) => u.role === "parent"
+      ).length,
+    };
+  }, [users]);
 
   function getInstituteName(
     instituteId: string | null
@@ -682,20 +425,13 @@ function UsersManagement() {
     const institute =
       institutes.find(
         (item) =>
-          item.id ===
-          instituteId
+          item.id === instituteId
       );
 
     return institute
       ? institute.name
       : "غير محدد";
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | فتح إضافة مستخدم
-  |--------------------------------------------------------------------------
-  */
 
   function openAddModal() {
     setEditingUser(null);
@@ -713,12 +449,6 @@ function UsersManagement() {
     setMessage("");
     setShowModal(true);
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | فتح تعديل مستخدم
-  |--------------------------------------------------------------------------
-  */
 
   function openEditModal(
     user: Profile
@@ -750,12 +480,6 @@ function UsersManagement() {
     setShowModal(true);
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | إغلاق النافذة
-  |--------------------------------------------------------------------------
-  */
-
   function closeModal() {
     if (saving) {
       return;
@@ -765,11 +489,23 @@ function UsersManagement() {
     setEditingUser(null);
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | حفظ المستخدم
-  |--------------------------------------------------------------------------
-  */
+  function handleRoleChange(
+    role: Role
+  ) {
+    setForm((current) => ({
+      ...current,
+      role,
+
+      /*
+       * الأدوار المركزية لا تحتاج معهدًا.
+       * عند تغيير الدور إلى دور مركزي نمسح المعهد.
+       */
+      institute_id:
+        INSTITUTE_ROLES.includes(role)
+          ? current.institute_id
+          : "",
+    }));
+  }
 
   async function saveUser() {
     if (!form.full_name.trim()) {
@@ -779,22 +515,8 @@ function UsersManagement() {
       return;
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | التحقق من الدور
-    |--------------------------------------------------------------------------
-    */
-
-    const instituteRoles = [
-      "sheikh",
-      "institute_deputy",
-      "teacher",
-      "employee",
-    ];
-
     if (
-      !editingUser &&
-      instituteRoles.includes(
+      INSTITUTE_ROLES.includes(
         form.role
       ) &&
       !form.institute_id
@@ -805,81 +527,96 @@ function UsersManagement() {
       return;
     }
 
+    if (
+      !INSTITUTE_ROLES.includes(
+        form.role
+      )
+    ) {
+      /*
+       * لا نرسل معهدًا للأدوار المركزية.
+       */
+      setForm((current) => ({
+        ...current,
+        institute_id: "",
+      }));
+    }
+
     setSaving(true);
     setMessage("");
 
     try {
-      /*
-      |--------------------------------------------------------------------------
-      | المستخدم الحالي
-      |--------------------------------------------------------------------------
-      */
+      const token =
+        await getAccessToken();
 
-      const {
-        data: {
-          user: currentAuthUser,
-        },
-      } =
-        await supabase.auth.getUser();
-
-      if (!currentAuthUser) {
+      if (!token) {
         setMessage(
-          "انتهت جلسة تسجيل الدخول"
+          "انتهت جلسة الدخول، يرجى تسجيل الدخول مرة أخرى"
         );
-
         setSaving(false);
         return;
       }
 
       /*
-      |--------------------------------------------------------------------------
-      | تعديل مستخدم
-      |--------------------------------------------------------------------------
-      */
-
+       * تعديل مستخدم موجود
+       */
       if (editingUser) {
-        const updateData = {
-          full_name:
-            form.full_name.trim(),
+        const response =
+          await fetch(
+            "/api/users/create",
+            {
+              method: "PATCH",
 
-          phone:
-            form.phone.trim() ||
-            null,
+              headers: {
+                "Content-Type":
+                  "application/json",
+                Authorization: `Bearer ${token}`,
+              },
 
-          email:
-            form.email.trim() ||
-            null,
+              body: JSON.stringify({
+                id: editingUser.id,
 
-          role: form.role,
+                full_name:
+                  form.full_name.trim(),
 
-          institute_id:
-            form.institute_id ||
-            null,
+                phone:
+                  form.phone.trim(),
 
-          is_active:
-            form.is_active,
+                email:
+                  form.email.trim(),
 
-          updated_at:
-            new Date().toISOString(),
-        };
+                role:
+                  form.role,
 
-        const {
-          error,
-        } = await supabase
-          .from("profiles")
-          .update(
-            updateData
-          )
-          .eq(
-            "id",
-            editingUser.id
+                institute_id:
+                  INSTITUTE_ROLES.includes(
+                    form.role
+                  )
+                    ? form.institute_id ||
+                      null
+                    : null,
+
+                is_active:
+                  form.is_active,
+
+                password:
+                  form.password.trim() ||
+                  undefined,
+              }),
+            }
           );
 
-        if (error) {
-          console.error(error);
+        const result =
+          await response.json();
+
+        if (!response.ok) {
+          console.error(
+            "Update user error:",
+            result
+          );
 
           setMessage(
-            "حدث خطأ أثناء تحديث بيانات المستخدم"
+            result.error ||
+              "تعذر تحديث المستخدم"
           );
 
           setSaving(false);
@@ -900,10 +637,8 @@ function UsersManagement() {
       }
 
       /*
-      |--------------------------------------------------------------------------
-      | إنشاء مستخدم جديد
-      |--------------------------------------------------------------------------
-      */
+       * إنشاء مستخدم جديد
+       */
 
       if (!form.email.trim()) {
         setMessage(
@@ -923,20 +658,14 @@ function UsersManagement() {
         return;
       }
 
-      if (form.password.length < 6) {
+      if (form.password.length < 8) {
         setMessage(
-          "كلمة المرور يجب ألا تقل عن 6 أحرف"
+          "كلمة المرور يجب ألا تقل عن 8 أحرف"
         );
 
         setSaving(false);
         return;
       }
-
-      /*
-      |--------------------------------------------------------------------------
-      | الاتصال بالـ API الآمن
-      |--------------------------------------------------------------------------
-      */
 
       const response =
         await fetch(
@@ -947,6 +676,8 @@ function UsersManagement() {
             headers: {
               "Content-Type":
                 "application/json",
+
+              Authorization: `Bearer ${token}`,
             },
 
             body: JSON.stringify({
@@ -966,8 +697,12 @@ function UsersManagement() {
                 form.role,
 
               institute_id:
-                form.institute_id ||
-                null,
+                INSTITUTE_ROLES.includes(
+                  form.role
+                )
+                  ? form.institute_id ||
+                    null
+                  : null,
 
               is_active:
                 form.is_active,
@@ -1012,19 +747,12 @@ function UsersManagement() {
     setSaving(false);
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | تفعيل / تعطيل المستخدم
-  |--------------------------------------------------------------------------
-  */
-
   async function toggleUserStatus(
     user: Profile
   ) {
     if (
       currentAuthUserId &&
-      user.id ===
-        currentAuthUserId
+      user.id === currentAuthUserId
     ) {
       setMessage(
         "لا يمكن تعطيل حساب المستخدم الحالي"
@@ -1048,27 +776,65 @@ function UsersManagement() {
     }
 
     try {
-      const {
-        error,
-      } = await supabase
-        .from("profiles")
-        .update({
-          is_active:
-            newStatus,
+      const token =
+        await getAccessToken();
 
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          "id",
-          user.id
+      if (!token) {
+        setMessage(
+          "انتهت جلسة الدخول"
+        );
+        return;
+      }
+
+      const response =
+        await fetch(
+          "/api/users/create",
+          {
+            method: "PATCH",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              Authorization: `Bearer ${token}`,
+            },
+
+            body: JSON.stringify({
+              id: user.id,
+
+              full_name:
+                user.full_name,
+
+              phone:
+                user.phone || "",
+
+              email:
+                user.email || "",
+
+              role:
+                user.role,
+
+              institute_id:
+                user.institute_id,
+
+              is_active:
+                newStatus,
+            }),
+          }
         );
 
-      if (error) {
-        console.error(error);
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        console.error(
+          "Toggle user error:",
+          result
+        );
 
         setMessage(
-          "تعذر تغيير حالة المستخدم"
+          result.error ||
+            "تعذر تغيير حالة المستخدم"
         );
 
         return;
@@ -1090,498 +856,374 @@ function UsersManagement() {
     }
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | شاشة التحميل
-  |--------------------------------------------------------------------------
-  */
-
   if (loading) {
     return (
-      <AppShell>
-        <div className="min-h-[70vh] flex items-center justify-center">
-          <div className="text-center">
-            <RefreshCw
-              className="mx-auto animate-spin mb-4 text-blue-600"
-              size={36}
-            />
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw
+            className="mx-auto animate-spin mb-4 text-blue-600"
+            size={36}
+          />
 
-            <p className="text-gray-600">
-              جاري تحميل المستخدمين...
-            </p>
-          </div>
+          <p className="text-gray-600">
+            جاري تحميل المستخدمين...
+          </p>
         </div>
-      </AppShell>
+      </div>
     );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | الواجهة
-  |--------------------------------------------------------------------------
-  */
-
   return (
-    <AppShell>
-      <main
-        dir="rtl"
-        className="min-h-screen bg-gray-50 p-6 md:p-8"
-      >
-        <div className="max-w-7xl mx-auto">
+    <main
+      dir="rtl"
+      className="min-h-screen bg-gray-50 p-6 md:p-8"
+    >
+      <div className="max-w-7xl mx-auto">
 
-          {/* Header */}
+        {/* Header */}
 
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800">
+              إدارة المستخدمين
+            </h1>
+
+            <p className="text-gray-500 mt-2">
+              إدارة مستخدمي الإدارة التعليمية والمعاهد التابعة لها
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={loadData}
+              className="flex items-center justify-center gap-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-5 py-3 rounded-xl font-semibold"
+            >
+              <RefreshCw size={19} />
+              تحديث
+            </button>
+
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold"
+            >
+              <UserPlus size={19} />
+              إضافة مستخدم
+            </button>
+          </div>
+        </div>
+
+        {/* Message */}
+
+        {message && (
+          <div className="mb-6 bg-white border border-blue-200 text-blue-700 rounded-xl p-4">
+            {message}
+          </div>
+        )}
+
+        {/* Statistics */}
+
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4 mb-6">
+
+          <StatCard
+            title="إجمالي المستخدمين"
+            value={statistics.total}
+            icon={<Users size={21} />}
+          />
+
+          <StatCard
+            title="نشط"
+            value={statistics.active}
+            icon={<ShieldCheck size={21} />}
+          />
+
+          <StatCard
+            title="غير نشط"
+            value={statistics.inactive}
+            icon={<Power size={21} />}
+          />
+
+          <StatCard
+            title="الشيوخ"
+            value={statistics.sheikhs}
+            icon={<Building2 size={21} />}
+          />
+
+          <StatCard
+            title="المدرسون"
+            value={statistics.teachers}
+            icon={<Users size={21} />}
+          />
+
+          <StatCard
+            title="مسؤولو IT"
+            value={statistics.itAdmins}
+            icon={<MonitorCog size={21} />}
+          />
+
+          <StatCard
+            title="أولياء الأمور"
+            value={statistics.parents}
+            icon={<Users size={21} />}
+          />
+        </div>
+
+        {/* Filters */}
+
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
             <div>
-              <h1 className="text-3xl font-bold text-gray-800">
-                إدارة المستخدمين
-              </h1>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                بحث
+              </label>
 
-              <p className="text-gray-500 mt-2">
-                إدارة مستخدمي الإدارة التعليمية والمعاهد التابعة لها
-              </p>
-            </div>
-
-            <div className="flex gap-3">
-
-              <button
-                type="button"
-                onClick={loadData}
-                className="flex items-center justify-center gap-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-5 py-3 rounded-xl font-semibold"
-              >
-                <RefreshCw size={19} />
-                تحديث
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  openAddModal
-                }
-                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold"
-              >
-                <UserPlus size={19} />
-                إضافة مستخدم
-              </button>
-
-            </div>
-          </div>
-
-          {/* Message */}
-
-          {message && (
-            <div className="mb-6 bg-white border border-blue-200 text-blue-700 rounded-xl p-4">
-              {message}
-            </div>
-          )}
-
-          {/* Statistics */}
-
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
-
-            <StatCard
-              title="إجمالي المستخدمين"
-              value={
-                statistics.total
-              }
-              icon={
-                <Users size={21} />
-              }
-            />
-
-            <StatCard
-              title="نشط"
-              value={
-                statistics.active
-              }
-              icon={
-                <ShieldCheck
-                  size={21}
+              <div className="relative">
+                <Search
+                  size={19}
+                  className="absolute right-3 top-3 text-gray-400"
                 />
-              }
-            />
 
-            <StatCard
-              title="غير نشط"
-              value={
-                statistics.inactive
-              }
-              icon={
-                <Power size={21} />
-              }
-            />
-
-            <StatCard
-              title="الشيوخ"
-              value={
-                statistics.sheikhs
-              }
-              icon={
-                <Building2
-                  size={21}
-                />
-              }
-            />
-
-            <StatCard
-              title="المدرسون"
-              value={
-                statistics.teachers
-              }
-              icon={
-                <Users size={21} />
-              }
-            />
-
-            <StatCard
-              title="أولياء الأمور"
-              value={
-                statistics.parents
-              }
-              icon={
-                <Users size={21} />
-              }
-            />
-
-          </div>
-
-          {/* Filters */}
-
-          <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-              {/* Search */}
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  بحث
-                </label>
-
-                <div className="relative">
-
-                  <Search
-                    size={19}
-                    className="absolute right-3 top-3 text-gray-400"
-                  />
-
-                  <input
-                    type="text"
-                    value={
-                      searchTerm
-                    }
-                    onChange={(e) =>
-                      setSearchTerm(
-                        e.target.value
-                      )
-                    }
-                    placeholder="الاسم أو البريد أو الهاتف..."
-                    className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-
-                </div>
-              </div>
-
-              {/* Role Filter */}
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  الدور
-                </label>
-
-                <select
-                  value={
-                    roleFilter
-                  }
+                <input
+                  type="text"
+                  value={searchTerm}
                   onChange={(e) =>
-                    setRoleFilter(
+                    setSearchTerm(
                       e.target.value
                     )
                   }
-                  className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
-                >
-
-                  <option value="all">
-                    جميع الأدوار
-                  </option>
-
-                  {filterRoles.map(
-                    (role) => (
-                      <option
-                        key={
-                          role.value
-                        }
-                        value={
-                          role.value
-                        }
-                      >
-                        {
-                          role.label
-                        }
-                      </option>
-                    )
-                  )}
-
-                </select>
+                  placeholder="الاسم أو البريد أو الهاتف..."
+                  className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
+            </div>
 
-              {/* Institute Filter */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                الدور
+              </label>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  المعهد
-                </label>
+              <select
+                value={roleFilter}
+                onChange={(e) =>
+                  setRoleFilter(
+                    e.target.value
+                  )
+                }
+                className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">
+                  جميع الأدوار
+                </option>
 
-                <select
-                  value={
-                    instituteFilter
-                  }
-                  onChange={(e) =>
-                    setInstituteFilter(
-                      e.target.value
-                    )
-                  }
-                  className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
-                >
+                {filterRoles.map(
+                  (role) => (
+                    <option
+                      key={role.value}
+                      value={role.value}
+                    >
+                      {role.label}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
 
-                  <option value="all">
-                    جميع المعاهد
-                  </option>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                المعهد
+              </label>
 
-                  {institutes.map(
-                    (institute) => (
-                      <option
-                        key={
-                          institute.id
-                        }
-                        value={
-                          institute.id
-                        }
-                      >
-                        {
-                          institute.name
-                        }
-                      </option>
-                    )
-                  )}
+              <select
+                value={instituteFilter}
+                onChange={(e) =>
+                  setInstituteFilter(
+                    e.target.value
+                  )
+                }
+                className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">
+                  جميع المعاهد
+                </option>
 
-                </select>
-              </div>
-
+                {institutes.map(
+                  (institute) => (
+                    <option
+                      key={institute.id}
+                      value={institute.id}
+                    >
+                      {institute.name}
+                    </option>
+                  )
+                )}
+              </select>
             </div>
           </div>
+        </div>
 
-          {/* Users Table */}
+        {/* Users Table */}
 
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
 
-            <div className="p-6 border-b">
+          <div className="p-6 border-b">
+            <h2 className="text-xl font-bold text-gray-800">
+              المستخدمون
+            </h2>
 
-              <h2 className="text-xl font-bold text-gray-800">
-                المستخدمون
-              </h2>
+            <p className="text-gray-500 text-sm mt-1">
+              عدد النتائج:{" "}
+              {filteredUsers.length}
+            </p>
+          </div>
 
-              <p className="text-gray-500 text-sm mt-1">
-                عدد النتائج:{" "}
-                {
-                  filteredUsers.length
-                }
-              </p>
-
+          {filteredUsers.length === 0 ? (
+            <div className="text-center py-16 text-gray-500">
+              لا توجد بيانات مطابقة
             </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
 
-            {filteredUsers.length ===
-            0 ? (
-              <div className="text-center py-16 text-gray-500">
-                لا توجد بيانات مطابقة
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-right px-6 py-4">
+                      المستخدم
+                    </th>
 
-                <table className="w-full">
+                    <th className="text-right px-6 py-4">
+                      الدور
+                    </th>
 
-                  <thead className="bg-gray-50">
+                    <th className="text-right px-6 py-4">
+                      المعهد
+                    </th>
 
-                    <tr>
+                    <th className="text-center px-6 py-4">
+                      الحالة
+                    </th>
 
-                      <th className="text-right px-6 py-4">
-                        المستخدم
-                      </th>
+                    <th className="text-center px-6 py-4">
+                      الإجراءات
+                    </th>
+                  </tr>
+                </thead>
 
-                      <th className="text-right px-6 py-4">
-                        الدور
-                      </th>
+                <tbody className="divide-y">
+                  {filteredUsers.map(
+                    (user) => (
+                      <tr
+                        key={user.id}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="px-6 py-5">
+                          <div className="font-semibold text-gray-800">
+                            {user.full_name}
+                          </div>
 
-                      <th className="text-right px-6 py-4">
-                        المعهد
-                      </th>
-
-                      <th className="text-center px-6 py-4">
-                        الحالة
-                      </th>
-
-                      <th className="text-center px-6 py-4">
-                        الإجراءات
-                      </th>
-
-                    </tr>
-
-                  </thead>
-
-                  <tbody className="divide-y">
-
-                    {filteredUsers.map(
-                      (user) => (
-                        <tr
-                          key={user.id}
-                          className="hover:bg-gray-50"
-                        >
-
-                          <td className="px-6 py-5">
-
-                            <div className="font-semibold text-gray-800">
-                              {
-                                user.full_name
-                              }
-                            </div>
-
-                            <div className="flex flex-col gap-1 mt-1 text-sm text-gray-500">
-
-                              {user.email && (
-                                <span className="flex items-center gap-1">
-                                  <Mail
-                                    size={14}
-                                  />
-                                  {
-                                    user.email
-                                  }
-                                </span>
-                              )}
-
-                              {user.phone && (
-                                <span className="flex items-center gap-1">
-                                  <Phone
-                                    size={14}
-                                  />
-                                  {
-                                    user.phone
-                                  }
-                                </span>
-                              )}
-
-                            </div>
-
-                          </td>
-
-                          <td className="px-6 py-5">
-
-                            <span
-                              className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${
-                                roleColors[
-                                  user.role
-                                ] ||
-                                "bg-gray-100 text-gray-800"
-                              }`}
-                            >
-                              {
-                                roleLabels[
-                                  user.role
-                                ] ||
-                                user.role
-                              }
-                            </span>
-
-                          </td>
-
-                          <td className="px-6 py-5 text-gray-600">
-                            {
-                              getInstituteName(
-                                user.institute_id
-                              )
-                            }
-                          </td>
-
-                          <td className="px-6 py-5 text-center">
-
-                            {user.is_active !==
-                            false ? (
-                              <span className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
-                                <span className="w-2 h-2 bg-green-600 rounded-full" />
-                                نشط
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-2 bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-semibold">
-                                <span className="w-2 h-2 bg-red-600 rounded-full" />
-                                غير نشط
+                          <div className="flex flex-col gap-1 mt-1 text-sm text-gray-500">
+                            {user.email && (
+                              <span className="flex items-center gap-1">
+                                <Mail size={14} />
+                                {user.email}
                               </span>
                             )}
 
-                          </td>
+                            {user.phone && (
+                              <span className="flex items-center gap-1">
+                                <Phone size={14} />
+                                {user.phone}
+                              </span>
+                            )}
+                          </div>
+                        </td>
 
-                          <td className="px-6 py-5">
+                        <td className="px-6 py-5">
+                          <span
+                            className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${
+                              roleColors[
+                                user.role
+                              ] ||
+                              "bg-gray-100 text-gray-800"
+                            }`}
+                          >
+                            {roleLabels[
+                              user.role
+                            ] || user.role}
+                          </span>
+                        </td>
 
-                            <div className="flex justify-center gap-2">
+                        <td className="px-6 py-5 text-gray-600">
+                          {getInstituteName(
+                            user.institute_id
+                          )}
+                        </td>
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openEditModal(
-                                    user
-                                  )
-                                }
-                                className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"
-                                title="تعديل"
-                              >
-                                <Pencil
-                                  size={18}
-                                />
-                              </button>
+                        <td className="px-6 py-5 text-center">
+                          {user.is_active !==
+                          false ? (
+                            <span className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
+                              <span className="w-2 h-2 bg-green-600 rounded-full" />
+                              نشط
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-2 bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-semibold">
+                              <span className="w-2 h-2 bg-red-600 rounded-full" />
+                              غير نشط
+                            </span>
+                          )}
+                        </td>
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  toggleUserStatus(
-                                    user
-                                  )
-                                }
-                                className={`p-2 rounded-lg ${
-                                  user.is_active !==
-                                  false
-                                    ? "bg-red-50 text-red-700 hover:bg-red-100"
-                                    : "bg-green-50 text-green-700 hover:bg-green-100"
-                                }`}
-                                title={
-                                  user.is_active !==
-                                  false
-                                    ? "تعطيل"
-                                    : "تفعيل"
-                                }
-                              >
-                                <Power
-                                  size={18}
-                                />
-                              </button>
+                        <td className="px-6 py-5">
+                          <div className="flex justify-center gap-2">
 
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openEditModal(
+                                  user
+                                )
+                              }
+                              className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"
+                              title="تعديل"
+                            >
+                              <Pencil size={18} />
+                            </button>
 
-                          </td>
-
-                        </tr>
-                      )
-                    )}
-
-                  </tbody>
-
-                </table>
-
-              </div>
-            )}
-
-          </div>
-
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggleUserStatus(
+                                  user
+                                )
+                              }
+                              className={`p-2 rounded-lg ${
+                                user.is_active !==
+                                false
+                                  ? "bg-red-50 text-red-700 hover:bg-red-100"
+                                  : "bg-green-50 text-green-700 hover:bg-green-100"
+                              }`}
+                              title={
+                                user.is_active !==
+                                false
+                                  ? "تعطيل"
+                                  : "تفعيل"
+                              }
+                            >
+                              <Power size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </main>
+      </div>
 
       {/* Modal */}
 
@@ -1590,12 +1232,8 @@ function UsersManagement() {
 
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden">
 
-            {/* Modal Header */}
-
             <div className="flex items-center justify-between px-6 py-5 border-b">
-
               <div>
-
                 <h2 className="text-xl font-bold text-gray-800">
                   {editingUser
                     ? "تعديل المستخدم"
@@ -1607,75 +1245,60 @@ function UsersManagement() {
                     ? "تعديل بيانات المستخدم وصلاحياته"
                     : "إنشاء حساب دخول جديد للنظام"}
                 </p>
-
               </div>
 
               <button
                 type="button"
-                onClick={
-                  closeModal
-                }
+                onClick={closeModal}
                 className="p-2 rounded-lg hover:bg-gray-100"
               >
                 <X size={21} />
               </button>
-
             </div>
-
-            {/* Modal Body */}
 
             <div className="p-6">
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                {/* Full Name */}
+                {/* الاسم */}
 
                 <div className="md:col-span-2">
-
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     الاسم الكامل *
                   </label>
 
                   <input
                     type="text"
-                    value={
-                      form.full_name
-                    }
+                    value={form.full_name}
                     onChange={(e) =>
                       setForm(
                         (current) => ({
                           ...current,
                           full_name:
-                            e.target
-                              .value,
+                            e.target.value,
                         })
                       )
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
-
                 </div>
 
-                {/* Email */}
+                {/* البريد */}
 
                 <div>
-
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     البريد الإلكتروني *
                   </label>
 
                   <input
                     type="email"
-                    value={
-                      form.email
-                    }
+                    value={form.email}
                     onChange={(e) =>
                       setForm(
                         (current) => ({
                           ...current,
                           email:
-                            e.target
-                              .value,
+                            e.target.value,
                         })
                       )
                     }
@@ -1686,10 +1309,9 @@ function UsersManagement() {
                       )
                     }
                   />
-
                 </div>
 
-                {/* Password */}
+                {/* كلمة المرور */}
 
                 {!editingUser && (
                   <div>
@@ -1705,22 +1327,17 @@ function UsersManagement() {
 
                       <input
                         type="password"
-                        value={
-                          form.password
-                        }
+                        value={form.password}
                         onChange={(e) =>
                           setForm(
-                            (
-                              current
-                            ) => ({
+                            (current) => ({
                               ...current,
                               password:
-                                e.target
-                                  .value,
+                                e.target.value,
                             })
                           )
                         }
-                        placeholder="6 أحرف على الأقل"
+                        placeholder="8 أحرف على الأقل"
                         autoComplete="new-password"
                         className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                       />
@@ -1728,58 +1345,45 @@ function UsersManagement() {
                   </div>
                 )}
 
-                {/* Phone */}
+                {/* الهاتف */}
 
                 <div>
-
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     الهاتف
                   </label>
 
                   <input
                     type="text"
-                    value={
-                      form.phone
-                    }
+                    value={form.phone}
                     onChange={(e) =>
                       setForm(
                         (current) => ({
                           ...current,
                           phone:
-                            e.target
-                              .value,
+                            e.target.value,
                         })
                       )
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
-
                 </div>
 
-                {/* Role */}
+                {/* الدور */}
 
                 <div>
-
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     الدور
                   </label>
 
                   <select
-                    value={
-                      form.role
-                    }
+                    value={form.role}
                     onChange={(e) =>
-                      setForm(
-                        (current) => ({
-                          ...current,
-                          role: e.target
-                            .value as Role,
-                        })
+                      handleRoleChange(
+                        e.target.value as Role
                       )
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                   >
-
                     {editingUser?.role ===
                       "director" && (
                       <option value="director">
@@ -1790,30 +1394,29 @@ function UsersManagement() {
                     {selectableRoles.map(
                       (role) => (
                         <option
-                          key={
-                            role.value
-                          }
-                          value={
-                            role.value
-                          }
+                          key={role.value}
+                          value={role.value}
                         >
-                          {
-                            role.label
-                          }
+                          {role.label}
                         </option>
                       )
                     )}
-
                   </select>
-
                 </div>
 
-                {/* Institute */}
+                {/* المعهد */}
 
                 <div>
-
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     المعهد
+                    {INSTITUTE_ROLES.includes(
+                      form.role
+                    ) && (
+                      <span className="text-red-500">
+                        {" "}
+                        *
+                      </span>
+                    )}
                   </label>
 
                   <select
@@ -1825,45 +1428,55 @@ function UsersManagement() {
                         (current) => ({
                           ...current,
                           institute_id:
-                            e.target
-                              .value,
+                            e.target.value,
                         })
                       )
                     }
-                    className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={
+                      !INSTITUTE_ROLES.includes(
+                        form.role
+                      )
+                    }
+                    className={`w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500 ${
+                      !INSTITUTE_ROLES.includes(
+                        form.role
+                      )
+                        ? "bg-gray-100 cursor-not-allowed"
+                        : ""
+                    }`}
                   >
-
                     <option value="">
-                      بدون معهد
+                      {!INSTITUTE_ROLES.includes(
+                        form.role
+                      )
+                        ? "لا ينطبق على هذا الدور"
+                        : "اختر المعهد"}
                     </option>
 
                     {institutes.map(
                       (institute) => (
                         <option
-                          key={
-                            institute.id
-                          }
-                          value={
-                            institute.id
-                          }
+                          key={institute.id}
+                          value={institute.id}
                         >
-                          {
-                            institute.name
-                          }
+                          {institute.name}
                         </option>
                       )
                     )}
-
                   </select>
 
+                  {form.role ===
+                    "it_admin" && (
+                    <p className="text-xs text-amber-700 mt-2">
+                      مسؤول IT مرتبط بهذا المعهد فقط.
+                    </p>
+                  )}
                 </div>
 
-                {/* Active */}
+                {/* الحالة */}
 
                 <div className="md:col-span-2">
-
                   <label className="flex items-center gap-3 cursor-pointer">
-
                     <input
                       type="checkbox"
                       checked={
@@ -1874,8 +1487,7 @@ function UsersManagement() {
                           (current) => ({
                             ...current,
                             is_active:
-                              e.target
-                                .checked,
+                              e.target.checked,
                           })
                         )
                       }
@@ -1885,14 +1497,9 @@ function UsersManagement() {
                     <span className="font-semibold text-gray-700">
                       المستخدم نشط
                     </span>
-
                   </label>
-
                 </div>
-
               </div>
-
-              {/* Notice */}
 
               {!editingUser && (
                 <div className="mt-5 rounded-xl bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800">
@@ -1902,18 +1509,12 @@ function UsersManagement() {
                 </div>
               )}
 
-              {/* Actions */}
-
               <div className="flex justify-end gap-3 mt-8 pt-5 border-t">
 
                 <button
                   type="button"
-                  onClick={
-                    closeModal
-                  }
-                  disabled={
-                    saving
-                  }
+                  onClick={closeModal}
+                  disabled={saving}
                   className="px-5 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
                   إلغاء
@@ -1921,12 +1522,8 @@ function UsersManagement() {
 
                 <button
                   type="button"
-                  onClick={
-                    saveUser
-                  }
-                  disabled={
-                    saving
-                  }
+                  onClick={saveUser}
+                  disabled={saving}
                   className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold"
                 >
                   {saving
@@ -1935,22 +1532,14 @@ function UsersManagement() {
                     ? "حفظ التعديلات"
                     : "إنشاء حساب المستخدم"}
                 </button>
-
               </div>
-
             </div>
           </div>
         </div>
       )}
-    </AppShell>
+    </main>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| بطاقة الإحصائيات
-|--------------------------------------------------------------------------
-*/
 
 function StatCard({
   title,
@@ -1963,15 +1552,12 @@ function StatCard({
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm p-5">
-
       <div className="flex items-center gap-3">
-
         <div className="text-blue-600">
           {icon}
         </div>
 
         <div>
-
           <p className="text-gray-500 text-sm">
             {title}
           </p>
@@ -1979,11 +1565,8 @@ function StatCard({
           <p className="text-2xl font-bold text-gray-800">
             {value}
           </p>
-
         </div>
-
       </div>
-
     </div>
   );
 }
