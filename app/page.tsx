@@ -165,14 +165,28 @@ export default function HomePage() {
         .order("name", { ascending: true });
 
       /*
-       * مدير الإدارة التعليمية الأزهرية:
-       * super_admin هو الدور الأساسي الحالي.
+       * =========================================================
+       * صلاحيات عرض المعاهد في لوحة التحكم
+       * =========================================================
        *
-       * director موجود فقط للتوافق مع البيانات القديمة.
+       * super_admin:
+       * يرى جميع معاهد الإدارة التعليمية التابعة له.
        *
-       * لذلك جميع هذه الأدوار على مستوى الإدارة
-       * يجب أن ترى المعاهد التابعة لـ directorate_id.
+       * director:
+       * للتوافق مع البيانات القديمة.
+       *
+       * deputy:
+       * يرى معاهد الإدارة التابعة له.
+       *
+       * sheikh / institute_deputy / teacher / employee:
+       * يرى المعهد المرتبط بحسابه.
+       *
+       * it_admin:
+       * يرى المعهد المرتبط بحسابه فقط.
+       *
+       * =========================================================
        */
+
       if (
         profileData.role === "super_admin" ||
         profileData.role === "director" ||
@@ -190,13 +204,19 @@ export default function HomePage() {
         profileData.role === "sheikh" ||
         profileData.role === "institute_deputy" ||
         profileData.role === "teacher" ||
-        profileData.role === "employee"
+        profileData.role === "employee" ||
+        profileData.role === "it_admin"
       ) {
         if (!profileData.institute_id) {
           throw new Error("الحساب غير مرتبط بمعهد");
         }
 
         query = query.eq("id", profileData.institute_id);
+      } else {
+        /*
+         * أي دور غير معروف لا يرى بيانات المعاهد.
+         */
+        query = query.eq("id", "__no_matching_institute__");
       }
 
       const {
@@ -251,20 +271,24 @@ export default function HomePage() {
   );
 
   const roleTitle =
-    profile?.role === "sheikh"
-      ? "شيخ المعهد"
-      : profile?.role === "institute_deputy"
-        ? "وكيل شيخ المعهد"
-        : profile?.role === "teacher"
-          ? "المدرس"
-          : profile?.role === "employee"
-            ? "الموظف"
-            : profile?.role === "deputy"
-              ? "وكيل الإدارة التعليمية الأزهرية"
-              : "مدير الإدارة التعليمية الأزهرية";
+    profile?.role === "it_admin"
+      ? "مسؤول تكنولوجيا المعلومات"
+      : profile?.role === "sheikh"
+        ? "شيخ المعهد"
+        : profile?.role === "institute_deputy"
+          ? "وكيل شيخ المعهد"
+          : profile?.role === "teacher"
+            ? "المدرس"
+            : profile?.role === "employee"
+              ? "الموظف"
+              : profile?.role === "deputy"
+                ? "وكيل الإدارة التعليمية الأزهرية"
+                : "مدير الإدارة التعليمية الأزهرية";
 
   const welcomeName =
     profile?.full_name || roleTitle;
+
+  const isItAdmin = profile?.role === "it_admin";
 
   return (
     <AppShell>
@@ -325,12 +349,15 @@ export default function HomePage() {
               </div>
 
               <h2 className="text-2xl font-black sm:text-3xl">
-                الإدارة والمتابعة المركزية للمعاهد الأزهرية
+                {isItAdmin
+                  ? "إدارة ومتابعة أنظمة المعهد"
+                  : "الإدارة والمتابعة المركزية للمعاهد الأزهرية"}
               </h2>
 
               <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                متابعة المعاهد والطلاب والمدرسين والحضور والتقارير
-                والمهام من خلال منصة موحدة.
+                {isItAdmin
+                  ? "متابعة بيانات المعهد والطلاب والمدرسين والحضور والتقارير والمهام من خلال منصة موحدة."
+                  : "متابعة المعاهد والطلاب والمدرسين والحضور والتقارير والمهام من خلال منصة موحدة."}
               </p>
             </div>
           </section>
@@ -379,10 +406,7 @@ export default function HomePage() {
               <StatCard
                 title="إجمالي المعاهد"
                 value={totalInstitutes}
-                subtitle={
-                  activeInstitutes +
-                  " معهد نشط"
-                }
+                subtitle={activeInstitutes + " معهد نشط"}
                 href="/institutes"
                 icon={<Building2 size={22} />}
               />
@@ -457,7 +481,11 @@ export default function HomePage() {
 
               <QuickAction
                 title="الحضور والغياب"
-                description="تسجيل ومتابعة حضور وغياب الطلاب."
+                description={
+                  isItAdmin
+                    ? "إدخال وتعديل حضور وغياب الطلاب."
+                    : "متابعة حضور وغياب الطلاب."
+                }
                 href="/attendance"
                 icon={<ClipboardList size={21} />}
               />
@@ -475,7 +503,9 @@ export default function HomePage() {
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
                 <h2 className="text-lg font-black text-slate-900">
-                  المعاهد التابعة للإدارة
+                  {isItAdmin
+                    ? "المعهد التابع للحساب"
+                    : "المعاهد التابعة للإدارة"}
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
