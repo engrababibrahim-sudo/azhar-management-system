@@ -40,6 +40,7 @@ type Student = {
   id: string;
   institute_id: string;
   student_code: string | null;
+  national_id: string | null;
   full_name: string;
   gender: string | null;
   phone: string | null;
@@ -51,7 +52,8 @@ type Student = {
 };
 
 export default function StudentsPage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
 
   const [institute, setInstitute] =
     useState<Institute | null>(null);
@@ -102,6 +104,9 @@ export default function StudentsPage() {
     useState<string | null>(null);
 
   const [studentCode, setStudentCode] =
+    useState("");
+
+  const [nationalId, setNationalId] =
     useState("");
 
   const [studentName, setStudentName] =
@@ -212,7 +217,6 @@ export default function StudentsPage() {
 
       // ==========================================
       // شيخ المعهد + مسؤول IT
-      // يعملان داخل معهد واحد فقط
       // ==========================================
 
       if (
@@ -254,7 +258,6 @@ export default function StudentsPage() {
 
         setInstitute(instituteData);
         setInstitutes([instituteData]);
-
         setFormInstituteId(
           instituteData.id
         );
@@ -408,6 +411,7 @@ export default function StudentsPage() {
         id,
         institute_id,
         student_code,
+        national_id,
         full_name,
         gender,
         phone,
@@ -468,6 +472,10 @@ export default function StudentsPage() {
             )
               .toLowerCase()
               .includes(search) ||
+            (
+              student.national_id ||
+              ""
+            ).includes(search) ||
             (
               student.phone ||
               ""
@@ -597,7 +605,7 @@ export default function StudentsPage() {
 
       if (!data) {
         setParentLookupMessage(
-          "لم يتم العثور على حساب ولي أمر بهذا الرقم. سيتم حفظ الطالب بدون ربط حاليًا."
+          "لم يتم العثور على حساب ولي أمر بهذا الرقم. يمكنك متابعة إضافة الطالب بدون ربط ولي أمر."
         );
 
         setParentLookupType(
@@ -661,6 +669,10 @@ export default function StudentsPage() {
       student.student_code || ""
     );
 
+    setNationalId(
+      student.national_id || ""
+    );
+
     setStudentName(
       student.full_name || ""
     );
@@ -718,6 +730,7 @@ export default function StudentsPage() {
 
   function resetForm() {
     setStudentCode("");
+    setNationalId("");
     setStudentName("");
     setGender("");
     setPhone("");
@@ -762,6 +775,54 @@ export default function StudentsPage() {
     setEditingStudentId(
       null
     );
+  }
+
+  // ==========================================
+  // التحقق من الرقم القومي
+  // ==========================================
+
+  async function validateNationalId(
+    value: string
+  ) {
+    const normalizedNationalId =
+      value.trim();
+
+    if (
+      !/^\d{14}$/.test(
+        normalizedNationalId
+      )
+    ) {
+      return "الرقم القومي للطالب يجب أن يتكون من 14 رقمًا بالضبط.";
+    }
+
+    const {
+      data,
+      error: nationalIdError,
+    } = await supabase
+      .from("students")
+      .select("id")
+      .eq(
+        "national_id",
+        normalizedNationalId
+      )
+      .neq(
+        "id",
+        editingStudentId || ""
+      )
+      .maybeSingle();
+
+    if (nationalIdError) {
+      return (
+        "تعذر التحقق من الرقم القومي: " +
+        nationalIdError.message
+      );
+    }
+
+    if (data) {
+      return "هذا الرقم القومي مسجل بالفعل لطالب آخر.";
+    }
+
+    return null;
   }
 
   // ==========================================
@@ -818,14 +879,49 @@ export default function StudentsPage() {
       return;
     }
 
+    const normalizedNationalId =
+      nationalId.trim();
+
+    // ==========================================
+    // الرقم القومي إجباري
+    // ==========================================
+
+    if (
+      !/^\d{14}$/.test(
+        normalizedNationalId
+      )
+    ) {
+      setError(
+        "الرقم القومي للطالب يجب أن يتكون من 14 رقمًا بالضبط."
+      );
+
+      return;
+    }
+
     setSaving(true);
 
     try {
+      // ==========================================
+      // التأكد من عدم تكرار الرقم القومي
+      // ==========================================
+
+      const nationalIdError =
+        await validateNationalId(
+          normalizedNationalId
+        );
+
+      if (nationalIdError) {
+        throw new Error(
+          nationalIdError
+        );
+      }
+
       let resolvedParentId =
         parentId;
 
       // ==========================================
       // البحث عن ولي الأمر
+      // ولي الأمر اختياري
       // ==========================================
 
       if (
@@ -873,6 +969,9 @@ export default function StudentsPage() {
               ""
           );
         }
+
+        // إذا لم يوجد ولي أمر:
+        // لا نوقف الحفظ
       }
 
       const studentPayload = {
@@ -885,6 +984,9 @@ export default function StudentsPage() {
         student_code:
           studentCode.trim() ||
           null,
+
+        national_id:
+          normalizedNationalId,
 
         full_name:
           studentName.trim(),
@@ -990,7 +1092,7 @@ export default function StudentsPage() {
         setSuccess(
           resolvedParentId
             ? "تم حفظ الطالب وربطه بحساب ولي الأمر تلقائيًا بنجاح."
-            : "تم حفظ الطالب بنجاح. لم يتم العثور على حساب ولي أمر بهذا الرقم."
+            : "تم حفظ الطالب بنجاح بدون ربط ولي أمر."
         );
       }
 
@@ -1352,7 +1454,7 @@ export default function StudentsPage() {
                     e.target.value
                   )
                 }
-                placeholder="ابحث باسم الطالب أو الكود أو ولي الأمر..."
+                placeholder="ابحث باسم الطالب أو الكود أو الرقم القومي أو ولي الأمر..."
                 className="w-full border border-slate-200 rounded-xl py-3 pr-10 pl-4 outline-none focus:ring-2 focus:ring-blue-500"
               />
 
@@ -1494,40 +1596,48 @@ export default function StudentsPage() {
                   <tr>
 
                     {isCentralManager && (
-                      <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                      <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
                         المعهد
                       </th>
                     )}
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
                       الكود
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                      الرقم القومي
+                    </th>
+
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
                       اسم الطالب
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                      الجنس
+                    </th>
+
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
                       الفصل
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
                       ولي الأمر
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
                       الحساب
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
                       الهاتف
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
                       الحالة
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
                       الإجراءات
                     </th>
 
@@ -1551,6 +1661,8 @@ export default function StudentsPage() {
                           className="border-t border-slate-100 hover:bg-slate-50"
                         >
 
+                          {/* المعهد */}
+
                           {isCentralManager && (
                             <td className="px-5 py-4 text-sm text-slate-600">
 
@@ -1573,43 +1685,61 @@ export default function StudentsPage() {
                             </td>
                           )}
 
-                          <td className="px-5 py-4 text-sm text-slate-600">
+                          {/* الكود */}
+
+                          <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
                             {student.student_code ||
                               "-"}
                           </td>
 
+                          {/* الرقم القومي */}
+
+                          <td className="px-5 py-4 text-sm text-slate-700 font-medium whitespace-nowrap">
+                            {student.national_id ||
+                              "غير مسجل"}
+                          </td>
+
+                          {/* اسم الطالب */}
+
                           <td className="px-5 py-4">
 
-                            <div className="font-semibold text-slate-800">
+                            <div className="font-semibold text-slate-800 whitespace-nowrap">
                               {
                                 student.full_name
                               }
                             </div>
 
-                            {student.gender && (
-                              <div className="text-xs text-slate-400 mt-1">
-                                {
-                                  student.gender
-                                }
-                              </div>
-                            )}
-
                           </td>
 
-                          <td className="px-5 py-4 text-sm text-slate-600">
+                          {/* الجنس */}
+
+                          <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
+                            {
+                              student.gender ||
+                              "-"
+                            }
+                          </td>
+
+                          {/* الفصل */}
+
+                          <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
                             {getClassName(
                               student.class_id
                             )}
                           </td>
 
-                          <td className="px-5 py-4 text-sm text-slate-600">
+                          {/* ولي الأمر */}
+
+                          <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
                             {
                               student.guardian_name ||
                               "-"
                             }
                           </td>
 
-                          <td className="px-5 py-4">
+                          {/* الحساب */}
+
+                          <td className="px-5 py-4 whitespace-nowrap">
 
                             {linkedParent ? (
 
@@ -1631,7 +1761,9 @@ export default function StudentsPage() {
 
                           </td>
 
-                          <td className="px-5 py-4 text-sm text-slate-600">
+                          {/* الهاتف */}
+
+                          <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
                             {
                               student.guardian_phone ||
                               student.phone ||
@@ -1639,7 +1771,9 @@ export default function StudentsPage() {
                             }
                           </td>
 
-                          <td className="px-5 py-4">
+                          {/* الحالة */}
+
+                          <td className="px-5 py-4 whitespace-nowrap">
 
                             {student.is_active ? (
 
@@ -1657,7 +1791,9 @@ export default function StudentsPage() {
 
                           </td>
 
-                          <td className="px-5 py-4">
+                          {/* الإجراءات */}
+
+                          <td className="px-5 py-4 whitespace-nowrap">
 
                             {canManageStudents && (
                               <button
@@ -1797,7 +1933,7 @@ export default function StudentsPage() {
                   </div>
                 )}
 
-                {/* الاسم */}
+                {/* اسم الطالب */}
 
                 <div className="md:col-span-2">
 
@@ -1818,6 +1954,45 @@ export default function StudentsPage() {
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />
+
+                </div>
+
+                {/* الرقم القومي */}
+
+                <div>
+
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    الرقم القومي للطالب *
+                  </label>
+
+                  <input
+                    value={
+                      nationalId
+                    }
+                    onChange={(e) => {
+                      const value =
+                        e.target.value.replace(
+                          /\D/g,
+                          ""
+                        );
+
+                      setNationalId(
+                        value.slice(
+                          0,
+                          14
+                        )
+                      );
+                    }}
+                    placeholder="14 رقمًا"
+                    maxLength={14}
+                    inputMode="numeric"
+                    required
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+
+                  <p className="text-xs text-slate-400 mt-1">
+                    يجب أن يتكون الرقم القومي من 14 رقمًا.
+                  </p>
 
                 </div>
 
@@ -1880,7 +2055,7 @@ export default function StudentsPage() {
 
                 {/* الفصل */}
 
-                <div className="md:col-span-2">
+                <div>
 
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     الفصل
@@ -1945,7 +2120,7 @@ export default function StudentsPage() {
                   <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
 
                     <p className="text-sm text-slate-600 leading-6">
-                      أدخل رقم هاتف ولي الأمر. سيبحث النظام تلقائيًا عن حساب ولي الأمر بهذا الرقم، وإذا وُجد سيتم ربط الطالب به مباشرة.
+                      أدخل رقم هاتف ولي الأمر. سيبحث النظام تلقائيًا عن حساب ولي الأمر بهذا الرقم، وإذا وُجد سيتم ربط الطالب به مباشرة. إذا لم يوجد، يمكنك حفظ الطالب بدون ربط ولي أمر.
                     </p>
 
                     <div className="mt-3 flex flex-col md:flex-row gap-3">
