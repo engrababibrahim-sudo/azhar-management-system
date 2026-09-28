@@ -178,6 +178,11 @@ export default function ComplaintsPage() {
   const [responseText, setResponseText] = useState("");
   const [newStatus, setNewStatus] = useState("new");
 
+  const isCentralManager =
+    profile?.role === "super_admin" ||
+    profile?.role === "director" ||
+    profile?.role === "deputy";
+
   const isDirector =
     profile?.role === "director" ||
     profile?.role === "super_admin" ||
@@ -195,7 +200,7 @@ export default function ComplaintsPage() {
 
   /*
    * ---------------------------------------------------------
-   * Read instituteId from URL
+   * قراءة instituteId من الرابط
    * ---------------------------------------------------------
    */
 
@@ -208,17 +213,27 @@ export default function ComplaintsPage() {
 
   /*
    * ---------------------------------------------------------
-   * Load data
+   * تحميل البيانات
    * ---------------------------------------------------------
    */
 
   async function loadData(
+    showSpinner = true,
     requestedInstituteIdOverride?: string | null
   ) {
-    setLoading(true);
+    if (showSpinner) {
+      setLoading(true);
+    }
+
     setError("");
 
     try {
+      /*
+       * -------------------------------------------------------
+       * المستخدم الحالي
+       * -------------------------------------------------------
+       */
+
       const {
         data: { user },
         error: authError,
@@ -230,13 +245,18 @@ export default function ComplaintsPage() {
 
       if (!user) {
         setError("يجب تسجيل الدخول أولًا.");
-        setLoading(false);
+        setComplaints([]);
+
+        if (showSpinner) {
+          setLoading(false);
+        }
+
         return;
       }
 
       /*
        * -------------------------------------------------------
-       * Current profile
+       * بيانات المستخدم
        * -------------------------------------------------------
        */
 
@@ -249,14 +269,20 @@ export default function ComplaintsPage() {
           "id, role, full_name, institute_id, directorate_id"
         )
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError || !profileData) {
-        setError(
-          profileError?.message ||
-            "تعذر العثور على بيانات المستخدم."
-        );
-        setLoading(false);
+      if (profileError) {
+        throw profileError;
+      }
+
+      if (!profileData) {
+        setError("تعذر العثور على بيانات المستخدم.");
+        setComplaints([]);
+
+        if (showSpinner) {
+          setLoading(false);
+        }
+
         return;
       }
 
@@ -266,16 +292,16 @@ export default function ComplaintsPage() {
 
       /*
        * -------------------------------------------------------
-       * Determine account scope
+       * نطاق الحساب
        * -------------------------------------------------------
        */
 
-      const isCentralManager =
+      const centralManager =
         currentProfile.role === "super_admin" ||
         currentProfile.role === "director" ||
         currentProfile.role === "deputy";
 
-      const isInstituteUser =
+      const instituteUser =
         currentProfile.role === "sheikh" ||
         currentProfile.role === "teacher" ||
         currentProfile.role === "employee" ||
@@ -283,20 +309,33 @@ export default function ComplaintsPage() {
 
       /*
        * -------------------------------------------------------
-       * Load institutes
+       * تحميل المعاهد
        * -------------------------------------------------------
        */
 
       let instituteQuery = supabase
         .from("institutes")
         .select("id, name, directorate_id")
-        .order("name");
+        .order("name", {
+          ascending: true,
+        });
 
-      if (isCentralManager) {
+      /*
+       * المدير يرى فقط معاهد إدارته التعليمية
+       */
+
+      if (centralManager) {
         if (!currentProfile.directorate_id) {
           setInstitutes([]);
           setComplaints([]);
-          setLoading(false);
+          setError(
+            "الحساب الإداري غير مرتبط بإدارة تعليمية."
+          );
+
+          if (showSpinner) {
+            setLoading(false);
+          }
+
           return;
         }
 
@@ -304,17 +343,38 @@ export default function ComplaintsPage() {
           "directorate_id",
           currentProfile.directorate_id
         );
-      } else if (
-        isInstituteUser &&
-        currentProfile.institute_id
-      ) {
+      }
+
+      /*
+       * مستخدم المعهد يرى معهده فقط
+       */
+
+      else if (instituteUser) {
+        if (!currentProfile.institute_id) {
+          setInstitutes([]);
+          setComplaints([]);
+          setError(
+            "الحساب غير مرتبط بمعهد."
+          );
+
+          if (showSpinner) {
+            setLoading(false);
+          }
+
+          return;
+        }
+
         instituteQuery = instituteQuery.eq(
           "id",
           currentProfile.institute_id
         );
-      } else if (
-        currentProfile.role !== "parent"
-      ) {
+      }
+
+      /*
+       * ولي الأمر لا يحتاج قائمة المعاهد
+       */
+
+      else if (currentProfile.role !== "parent") {
         instituteQuery = instituteQuery.eq(
           "id",
           "00000000-0000-0000-0000-000000000000"
@@ -327,10 +387,7 @@ export default function ComplaintsPage() {
       } = await instituteQuery;
 
       if (institutesError) {
-        console.error(
-          "INSTITUTES ERROR:",
-          institutesError
-        );
+        throw institutesError;
       }
 
       const currentInstitutes =
@@ -340,16 +397,19 @@ export default function ComplaintsPage() {
 
       /*
        * -------------------------------------------------------
-       * Determine effective institute
-       *
-       * Central manager:
-       *   بدون instituteId => كل المعاهد
-       *   مع instituteId    => المعهد المحدد فقط
-       *
-       * Institute user:
-       *   دائمًا معهد الحساب
-       *   ويتم تجاهل أي instituteId في الرابط
+       * تحديد المعهد الفعلي
        * -------------------------------------------------------
+       *
+       * مدير الإدارة:
+       *
+       * /complaints
+       * => كل المعاهد التابعة لإدارته
+       *
+       * /complaints?instituteId=XXX
+       * => المعهد XXX فقط
+       *
+       * مستخدم المعهد:
+       * => معهد حسابه فقط مهما كان instituteId في الرابط
        */
 
       let effectiveInstituteIds =
@@ -357,7 +417,21 @@ export default function ComplaintsPage() {
           (institute) => institute.id
         );
 
-      if (isCentralManager) {
+      if (centralManager) {
+        /*
+         * لا يوجد instituteId
+         * => كل معاهد الإدارة
+         */
+
+        if (!requestedInstituteIdOverride) {
+          setInstituteFilter("all");
+        }
+
+        /*
+         * يوجد instituteId
+         * => تحقق أولًا أنه تابع لإدارة المدير
+         */
+
         if (requestedInstituteIdOverride) {
           const requestedInstitute =
             currentInstitutes.find(
@@ -366,23 +440,24 @@ export default function ComplaintsPage() {
                 requestedInstituteIdOverride
             );
 
-          /*
-           * حماية مهمة:
-           * لو المعهد غير موجود داخل مديرية المدير
-           * لا نسمح بعرض أي بيانات.
-           */
-
           if (!requestedInstitute) {
             setComplaints([]);
             setInstituteFilter("all");
-            setLoading(false);
-
             setError(
               "المعهد المطلوب غير تابع للإدارة التعليمية الحالية."
             );
 
+            if (showSpinner) {
+              setLoading(false);
+            }
+
             return;
           }
+
+          /*
+           * هنا يتم حصر الاستعلام نفسه
+           * في المعهد المحدد
+           */
 
           effectiveInstituteIds = [
             requestedInstitute.id,
@@ -391,14 +466,12 @@ export default function ComplaintsPage() {
           setInstituteFilter(
             requestedInstitute.id
           );
-        } else {
-          setInstituteFilter("all");
         }
       }
 
       /*
        * -------------------------------------------------------
-       * Load complaints
+       * تحميل الشكاوى
        * -------------------------------------------------------
        */
 
@@ -436,14 +509,18 @@ export default function ComplaintsPage() {
 
       /*
        * -------------------------------------------------------
-       * Institute users
+       * مستخدمو المعهد
        * -------------------------------------------------------
        */
 
-      if (isInstituteUser) {
+      if (instituteUser) {
         if (!currentProfile.institute_id) {
           setComplaints([]);
-          setLoading(false);
+
+          if (showSpinner) {
+            setLoading(false);
+          }
+
           return;
         }
 
@@ -455,7 +532,7 @@ export default function ComplaintsPage() {
 
       /*
        * -------------------------------------------------------
-       * Parent
+       * ولي الأمر
        * -------------------------------------------------------
        */
 
@@ -468,30 +545,40 @@ export default function ComplaintsPage() {
 
       /*
        * -------------------------------------------------------
-       * Central manager
+       * المدير / الوكيل
        * -------------------------------------------------------
        */
 
-      if (isCentralManager) {
-        if (
-          !currentProfile.directorate_id
-        ) {
+      if (centralManager) {
+        if (!currentProfile.directorate_id) {
           setComplaints([]);
-          setLoading(false);
+
+          if (showSpinner) {
+            setLoading(false);
+          }
+
           return;
         }
 
         /*
-         * مهم جدًا:
-         * نستخدم effectiveInstituteIds
-         * وليس كل المعاهد.
+         * الحماية الأساسية:
+         *
+         * الاستعلام لا يجلب إلا المعاهد الموجودة
+         * داخل effectiveInstituteIds.
+         *
+         * عند فتح بطاقة معهد:
+         * effectiveInstituteIds = [instituteId]
+         *
+         * وبالتالي لا يمكن أن تظهر شكاوى المعاهد الأخرى.
          */
 
-        if (
-          effectiveInstituteIds.length === 0
-        ) {
+        if (effectiveInstituteIds.length === 0) {
           setComplaints([]);
-          setLoading(false);
+
+          if (showSpinner) {
+            setLoading(false);
+          }
+
           return;
         }
 
@@ -503,7 +590,7 @@ export default function ComplaintsPage() {
 
       /*
        * -------------------------------------------------------
-       * Execute complaint query
+       * تنفيذ الاستعلام
        * -------------------------------------------------------
        */
 
@@ -513,52 +600,70 @@ export default function ComplaintsPage() {
       } = await query;
 
       if (complaintsError) {
-        console.error(
-          "COMPLAINTS ERROR:",
-          complaintsError
-        );
-
-        setError(
-          complaintsError.message
-        );
-
-        setComplaints([]);
-      } else {
-        const normalizedComplaints: Complaint[] =
-          (data || []).map(
-            (complaint: any) => ({
-              ...complaint,
-              institute:
-                Array.isArray(
-                  complaint.institute
-                )
-                  ? complaint.institute[0] ??
-                    null
-                  : complaint.institute ??
-                    null,
-            })
-          );
-
-        /*
-         * حماية إضافية في الواجهة:
-         * لو المدير فتح بطاقة معهد محدد،
-         * نتأكد أن البيانات المعروضة تخص هذا المعهد فقط.
-         */
-
-        const finalComplaints =
-          isCentralManager &&
-          requestedInstituteIdOverride
-            ? normalizedComplaints.filter(
-                (complaint) =>
-                  complaint.institute_id ===
-                  requestedInstituteIdOverride
-              )
-            : normalizedComplaints;
-
-        setComplaints(
-          finalComplaints
-        );
+        throw complaintsError;
       }
+
+      const normalizedComplaints: Complaint[] =
+        (data || []).map(
+          (complaint: any) => ({
+            ...complaint,
+
+            institute:
+              Array.isArray(
+                complaint.institute
+              )
+                ? complaint.institute[0] ??
+                  null
+                : complaint.institute ??
+                  null,
+          })
+        );
+
+      /*
+       * -------------------------------------------------------
+       * حماية إضافية نهائية
+       * -------------------------------------------------------
+       *
+       * حتى لو حدث خطأ في أي جزء من الاستعلام،
+       * لا نسمح للواجهة بعرض شكوى من معهد آخر
+       * عند وجود instituteId.
+       */
+
+      let finalComplaints =
+        normalizedComplaints;
+
+      if (
+        centralManager &&
+        requestedInstituteIdOverride
+      ) {
+        finalComplaints =
+          normalizedComplaints.filter(
+            (complaint) =>
+              complaint.institute_id ===
+              requestedInstituteIdOverride
+          );
+      }
+
+      /*
+       * مستخدم المعهد:
+       * حماية إضافية في الواجهة أيضًا.
+       */
+
+      if (
+        instituteUser &&
+        currentProfile.institute_id
+      ) {
+        finalComplaints =
+          finalComplaints.filter(
+            (complaint) =>
+              complaint.institute_id ===
+              currentProfile.institute_id
+          );
+      }
+
+      setComplaints(
+        finalComplaints
+      );
     } catch (err) {
       console.error(
         "LOAD COMPLAINTS ERROR:",
@@ -570,23 +675,25 @@ export default function ComplaintsPage() {
           ? err.message
           : "حدث خطأ أثناء تحميل الشكاوى."
       );
-    }
 
-    setLoading(false);
+      setComplaints([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   /*
    * ---------------------------------------------------------
-   * Initial load
+   * التحميل الأول
    * ---------------------------------------------------------
    *
-   * لا نحمل البيانات إلا بعد معرفة instituteId
-   * من الرابط، حتى لا يظهر كل المعاهد لحظيًا.
+   * ننتظر قراءة instituteId من الرابط أولًا.
    */
 
   useEffect(() => {
     if (requestedInstituteId !== undefined) {
       loadData(
+        true,
         requestedInstituteId
       );
     }
@@ -594,7 +701,7 @@ export default function ComplaintsPage() {
 
   /*
    * ---------------------------------------------------------
-   * Filter complaints
+   * تصفية النتائج
    * ---------------------------------------------------------
    */
 
@@ -649,7 +756,7 @@ export default function ComplaintsPage() {
 
   /*
    * ---------------------------------------------------------
-   * Statistics
+   * الإحصائيات
    * ---------------------------------------------------------
    */
 
@@ -685,12 +792,14 @@ export default function ComplaintsPage() {
 
   /*
    * ---------------------------------------------------------
-   * Create complaint
+   * إنشاء شكوى
    * ---------------------------------------------------------
    */
 
   async function createComplaint() {
-    if (!profile) return;
+    if (!profile) {
+      return;
+    }
 
     if (!newTitle.trim()) {
       alert("اكتبي عنوان الشكوى.");
@@ -720,7 +829,6 @@ export default function ComplaintsPage() {
         alert(
           "يجب تسجيل الدخول أولًا."
         );
-        setSaving(false);
         return;
       }
 
@@ -731,20 +839,28 @@ export default function ComplaintsPage() {
         .insert({
           institute_id:
             profile.institute_id,
+
           parent_id:
             profile.role === "parent"
               ? user.id
               : null,
+
           created_by: user.id,
+
           source:
             profile.role === "parent"
               ? "parent"
               : "institute",
+
           complaint_type: newType,
+
           title: newTitle.trim(),
+
           description:
             newDescription.trim(),
+
           priority: newPriority,
+
           status: "new",
         });
 
@@ -759,7 +875,6 @@ export default function ComplaintsPage() {
             insertError.message
         );
 
-        setSaving(false);
         return;
       }
 
@@ -774,6 +889,7 @@ export default function ComplaintsPage() {
       );
 
       await loadData(
+        true,
         requestedInstituteId
       );
     } finally {
@@ -783,7 +899,7 @@ export default function ComplaintsPage() {
 
   /*
    * ---------------------------------------------------------
-   * Update complaint
+   * تحديث الشكوى
    * ---------------------------------------------------------
    */
 
@@ -839,25 +955,18 @@ export default function ComplaintsPage() {
           newStatus;
 
         if (
-          newStatus ===
-          "escalated"
+          newStatus === "escalated"
         ) {
           updateData.escalated_at =
             selectedComplaint.escalated_at ||
             new Date().toISOString();
-        }
-
-        if (
-          newStatus !==
-          "escalated"
-        ) {
+        } else {
           updateData.escalated_at =
             selectedComplaint.escalated_at;
         }
 
         if (
-          newStatus ===
-          "resolved"
+          newStatus === "resolved"
         ) {
           updateData.resolved_at =
             selectedComplaint.resolved_at ||
@@ -865,8 +974,7 @@ export default function ComplaintsPage() {
         }
 
         if (
-          newStatus ===
-          "closed"
+          newStatus === "closed"
         ) {
           updateData.closed_at =
             selectedComplaint.closed_at ||
@@ -874,8 +982,7 @@ export default function ComplaintsPage() {
         }
 
         if (
-          newStatus !==
-            "resolved" &&
+          newStatus !== "resolved" &&
           newStatus !== "closed"
         ) {
           updateData.resolved_at =
@@ -913,7 +1020,6 @@ export default function ComplaintsPage() {
             updateError.message
         );
 
-        setSaving(false);
         return;
       }
 
@@ -933,10 +1039,13 @@ export default function ComplaintsPage() {
           .insert({
             complaint_id:
               selectedComplaint.id,
+
             user_id: user.id,
+
             status:
               newStatus ||
               selectedComplaint.status,
+
             note: responseText.trim(),
           });
 
@@ -955,6 +1064,7 @@ export default function ComplaintsPage() {
       closeComplaint();
 
       await loadData(
+        true,
         requestedInstituteId
       );
     } finally {
@@ -964,7 +1074,7 @@ export default function ComplaintsPage() {
 
   /*
    * ---------------------------------------------------------
-   * Complaint modal
+   * فتح تفاصيل الشكوى
    * ---------------------------------------------------------
    */
 
@@ -975,7 +1085,10 @@ export default function ComplaintsPage() {
       complaint
     );
 
-    setResponseText("");
+    setResponseText(
+      complaint.director_response ||
+        ""
+    );
 
     setNewStatus(
       complaint.status
@@ -1054,12 +1167,22 @@ export default function ComplaintsPage() {
                   type="button"
                   onClick={() =>
                     loadData(
+                      true,
                       requestedInstituteId
                     )
                   }
-                  className="flex items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  disabled={loading}
+                  className="flex items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <RefreshCw size={18} />
+                  <RefreshCw
+                    size={18}
+                    className={
+                      loading
+                        ? "animate-spin"
+                        : ""
+                    }
+                  />
+
                   تحديث
                 </button>
 
@@ -1306,14 +1429,10 @@ export default function ComplaintsPage() {
               )}
             </div>
 
-            {/* Selected institute notice */}
-
-            {isDirector &&
+            {isCentralManager &&
               requestedInstituteId && (
                 <div className="mt-4 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
-                  <Building2
-                    size={18}
-                  />
+                  <Building2 size={18} />
 
                   <span>
                     يتم عرض شكاوى المعهد المحدد فقط
@@ -1359,6 +1478,19 @@ export default function ComplaintsPage() {
                   <p className="mt-1 text-sm">
                     {error}
                   </p>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      loadData(
+                        true,
+                        requestedInstituteId
+                      )
+                    }
+                    className="mt-4 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700"
+                  >
+                    إعادة المحاولة
+                  </button>
                 </div>
               </div>
             </div>
