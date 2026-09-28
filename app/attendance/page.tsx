@@ -56,40 +56,84 @@ type AttendanceRecord = {
 };
 
 export default function AttendancePage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
 
-  const [institutes, setInstitutes] = useState<Institute[]>([]);
-  const [selectedInstitute, setSelectedInstitute] = useState("");
+  const [institutes, setInstitutes] =
+    useState<Institute[]>([]);
 
-  const [students, setStudents] = useState<Student[]>([]);
-  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [selectedInstitute, setSelectedInstitute] =
+    useState("");
 
-  const [attendance, setAttendance] = useState<
-    Record<string, AttendanceRecord>
-  >({});
+  /*
+   * المعهد القادم من بطاقة المعهد في لوحة التحكم
+   */
+  const [requestedInstituteId, setRequestedInstituteId] =
+    useState<string | null | undefined>(undefined);
 
-  const [selectedClass, setSelectedClass] = useState("");
+  const [students, setStudents] =
+    useState<Student[]>([]);
 
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [classes, setClasses] =
+    useState<ClassItem[]>([]);
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [attendance, setAttendance] =
+    useState<Record<string, AttendanceRecord>>({});
 
-  const [loading, setLoading] = useState(true);
-  const [loadingStudents, setLoadingStudents] = useState(false);
-  const [loadingAttendance, setLoadingAttendance] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [selectedClass, setSelectedClass] =
+    useState("");
 
-  const [message, setMessage] = useState("");
+  const [selectedDate, setSelectedDate] =
+    useState(
+      new Date().toISOString().split("T")[0]
+    );
 
-  const canEdit = profile?.role === "it_admin";
+  const [searchTerm, setSearchTerm] =
+    useState("");
 
-  const isSuperAdmin = profile?.role === "super_admin";
+  const [loading, setLoading] =
+    useState(true);
+
+  const [loadingStudents, setLoadingStudents] =
+    useState(false);
+
+  const [loadingAttendance, setLoadingAttendance] =
+    useState(false);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
+
+  const canEdit =
+    profile?.role === "it_admin";
+
+  const isSuperAdmin =
+    profile?.role === "super_admin";
 
   const isReadOnly =
     profile?.role === "super_admin" ||
     profile?.role === "sheikh";
+
+  /*
+   * =========================================================
+   * قراءة instituteId من الرابط
+   * =========================================================
+   */
+
+  useEffect(() => {
+    const params = new URLSearchParams(
+      window.location.search
+    );
+
+    const instituteId =
+      params.get("instituteId");
+
+    setRequestedInstituteId(
+      instituteId
+    );
+  }, []);
 
   /*
    * =========================================================
@@ -103,8 +147,7 @@ export default function AttendancePage() {
 
   /*
    * =========================================================
-   * عند تغيير المعهد:
-   * تحميل الفصول والطلاب
+   * عند تغيير المعهد
    * =========================================================
    */
 
@@ -121,16 +164,21 @@ export default function AttendancePage() {
 
   /*
    * =========================================================
-   * عند تغيير المعهد أو التاريخ:
-   * تحميل الحضور
+   * عند تغيير المعهد أو التاريخ
    * =========================================================
    */
 
   useEffect(() => {
-    if (selectedInstitute && selectedDate) {
+    if (
+      selectedInstitute &&
+      selectedDate
+    ) {
       loadAttendance();
     }
-  }, [selectedInstitute, selectedDate]);
+  }, [
+    selectedInstitute,
+    selectedDate,
+  ]);
 
   /*
    * =========================================================
@@ -146,10 +194,13 @@ export default function AttendancePage() {
       const {
         data: { user },
         error: userError,
-      } = await supabase.auth.getUser();
+      } =
+        await supabase.auth.getUser();
 
       if (userError || !user) {
-        setMessage("يجب تسجيل الدخول أولًا");
+        setMessage(
+          "يجب تسجيل الدخول أولًا"
+        );
         setLoading(false);
         return;
       }
@@ -157,15 +208,25 @@ export default function AttendancePage() {
       const {
         data: profileData,
         error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select("role, institute_id, directorate_id")
-        .eq("id", user.id)
-        .single();
+      } =
+        await supabase
+          .from("profiles")
+          .select(
+            "role, institute_id, directorate_id"
+          )
+          .eq("id", user.id)
+          .single();
 
-      if (profileError || !profileData) {
+      if (
+        profileError ||
+        !profileData
+      ) {
         console.error(profileError);
-        setMessage("لم يتم العثور على بيانات المستخدم");
+
+        setMessage(
+          "لم يتم العثور على بيانات المستخدم"
+        );
+
         setLoading(false);
         return;
       }
@@ -176,33 +237,47 @@ export default function AttendancePage() {
         "it_admin",
       ];
 
-      if (!allowedRoles.includes(profileData.role as Role)) {
+      if (
+        !allowedRoles.includes(
+          profileData.role as Role
+        )
+      ) {
         setMessage(
           "ليس لديك صلاحية للوصول إلى صفحة الحضور والغياب"
         );
+
         setLoading(false);
         return;
       }
 
       const currentProfile: Profile = {
-        role: profileData.role as Role,
-        institute_id: profileData.institute_id,
-        directorate_id: profileData.directorate_id,
+        role:
+          profileData.role as Role,
+        institute_id:
+          profileData.institute_id,
+        directorate_id:
+          profileData.directorate_id,
       };
 
       setProfile(currentProfile);
 
       /*
-       * -------------------------------------------------------
+       * =====================================================
        * مدير الإدارة
-       * -------------------------------------------------------
+       * =====================================================
        */
 
-      if (currentProfile.role === "super_admin") {
-        if (!currentProfile.directorate_id) {
+      if (
+        currentProfile.role ===
+        "super_admin"
+      ) {
+        if (
+          !currentProfile.directorate_id
+        ) {
           setMessage(
             "لم يتم ربط مدير الإدارة بإدارة تعليمية"
           );
+
           setLoading(false);
           return;
         }
@@ -210,133 +285,229 @@ export default function AttendancePage() {
         const {
           data: institutesData,
           error: institutesError,
-        } = await supabase
-          .from("institutes")
-          .select("id, name, code")
-          .eq(
-            "directorate_id",
-            currentProfile.directorate_id
-          )
-          .order("name");
+        } =
+          await supabase
+            .from("institutes")
+            .select(
+              "id, name, code"
+            )
+            .eq(
+              "directorate_id",
+              currentProfile.directorate_id
+            )
+            .order("name");
 
         if (institutesError) {
-          console.error(institutesError);
-          setMessage("حدث خطأ أثناء تحميل المعاهد");
+          console.error(
+            institutesError
+          );
+
+          setMessage(
+            "حدث خطأ أثناء تحميل المعاهد"
+          );
+
           setLoading(false);
           return;
         }
 
-        const loadedInstitutes = institutesData || [];
+        const loadedInstitutes =
+          institutesData || [];
 
-        setInstitutes(loadedInstitutes);
+        setInstitutes(
+          loadedInstitutes
+        );
 
         /*
-         * لا نختار معهدًا تلقائيًا لمدير الإدارة.
-         * يجب عليه اختيار المعهد.
+         * إذا كان مدير الإدارة دخل من بطاقة
+         * معهد محدد:
+         *
+         * نتأكد أن المعهد تابع لنفس الإدارة
          */
+        if (
+          requestedInstituteId
+        ) {
+          const requestedInstitute =
+            loadedInstitutes.find(
+              (institute) =>
+                institute.id ===
+                requestedInstituteId
+            );
 
-        setSelectedInstitute("");
+          if (requestedInstitute) {
+            setSelectedInstitute(
+              requestedInstitute.id
+            );
+          } else {
+            /*
+             * رابط غير صالح أو معهد
+             * لا يتبع الإدارة
+             */
+            setSelectedInstitute("");
+            setMessage(
+              "المعهد المطلوب غير تابع للإدارة الحالية"
+            );
+          }
+        } else {
+          /*
+           * الدخول المباشر:
+           * لا يتم اختيار معهد تلقائيًا
+           */
+          setSelectedInstitute("");
+        }
 
         setLoading(false);
         return;
       }
 
       /*
-       * -------------------------------------------------------
+       * =====================================================
        * شيخ المعهد + مسؤول IT
-       * -------------------------------------------------------
+       * =====================================================
        */
 
-      if (!currentProfile.institute_id) {
-        setMessage("لم يتم ربط المستخدم بمعهد");
+      if (
+        !currentProfile.institute_id
+      ) {
+        setMessage(
+          "لم يتم ربط المستخدم بمعهد"
+        );
+
         setLoading(false);
         return;
       }
 
       /*
-       * المعهد محدد تلقائيًا
+       * حسابات المعهد لا يمكنها تغيير المعهد
+       * حتى لو تم تمرير instituteId مختلف في الرابط.
+       *
+       * دائمًا نستخدم institute_id الموجود في profile.
        */
 
-      setSelectedInstitute(currentProfile.institute_id);
+      setSelectedInstitute(
+        currentProfile.institute_id
+      );
 
       /*
-       * تحميل اسم المعهد لعرضه في الصفحة
+       * تحميل اسم المعهد
        */
 
       const {
         data: instituteData,
         error: instituteError,
-      } = await supabase
-        .from("institutes")
-        .select("id, name, code")
-        .eq("id", currentProfile.institute_id)
-        .maybeSingle();
+      } =
+        await supabase
+          .from("institutes")
+          .select(
+            "id, name, code"
+          )
+          .eq(
+            "id",
+            currentProfile.institute_id
+          )
+          .maybeSingle();
 
-      if (!instituteError && instituteData) {
-        setInstitutes([instituteData]);
+      if (
+        !instituteError &&
+        instituteData
+      ) {
+        setInstitutes([
+          instituteData,
+        ]);
       }
 
       setLoading(false);
     } catch (error) {
       console.error(error);
-      setMessage("حدث خطأ غير متوقع");
+
+      setMessage(
+        "حدث خطأ غير متوقع"
+      );
+
       setLoading(false);
     }
   }
 
   /*
    * =========================================================
-   * تحميل طلاب وفصول المعهد
+   * تحميل الفصول والطلاب
    * =========================================================
    */
 
   async function loadInstituteData() {
-    if (!selectedInstitute) return;
+    if (!selectedInstitute) {
+      return;
+    }
 
     setLoadingStudents(true);
     setMessage("");
 
     try {
       /*
-       * تحميل الفصول
+       * الفصول
        */
 
       const {
         data: classesData,
         error: classesError,
-      } = await supabase
-        .from("classes")
-        .select("id, name, institute_id")
-        .eq("institute_id", selectedInstitute)
-        .eq("is_active", true)
-        .order("name");
+      } =
+        await supabase
+          .from("classes")
+          .select(
+            "id, name, institute_id"
+          )
+          .eq(
+            "institute_id",
+            selectedInstitute
+          )
+          .eq(
+            "is_active",
+            true
+          )
+          .order("name");
 
       if (classesError) {
-        console.error(classesError);
-        setMessage("حدث خطأ أثناء تحميل الفصول");
+        console.error(
+          classesError
+        );
+
+        setMessage(
+          "حدث خطأ أثناء تحميل الفصول"
+        );
+
         setClasses([]);
       } else {
-        setClasses(classesData || []);
+        setClasses(
+          classesData || []
+        );
       }
 
       /*
-       * تحميل الطلاب
+       * الطلاب
        */
 
       const {
         data: studentsData,
         error: studentsError,
-      } = await supabase
-        .from("students")
-        .select(
-          "id, full_name, student_code, class_id, institute_id"
-        )
-        .eq("institute_id", selectedInstitute)
-        .eq("is_active", true)
-        .order("full_name");
+      } =
+        await supabase
+          .from("students")
+          .select(
+            "id, full_name, student_code, class_id, institute_id"
+          )
+          .eq(
+            "institute_id",
+            selectedInstitute
+          )
+          .eq(
+            "is_active",
+            true
+          )
+          .order("full_name");
 
       if (studentsError) {
-        console.error(studentsError);
+        console.error(
+          studentsError
+        );
 
         setStudents([]);
 
@@ -348,17 +519,21 @@ export default function AttendancePage() {
         return;
       }
 
-      setStudents(studentsData || []);
+      setStudents(
+        studentsData || []
+      );
 
       /*
-       * لو كان الفصل المحدد غير موجود في المعهد الجديد
+       * تصفير الفصل عند تغيير المعهد
        */
 
       setSelectedClass("");
-
     } catch (error) {
       console.error(error);
-      setMessage("حدث خطأ غير متوقع أثناء تحميل البيانات");
+
+      setMessage(
+        "حدث خطأ غير متوقع أثناء تحميل البيانات"
+      );
     }
 
     setLoadingStudents(false);
@@ -371,7 +546,12 @@ export default function AttendancePage() {
    */
 
   async function loadAttendance() {
-    if (!selectedInstitute || !selectedDate) return;
+    if (
+      !selectedInstitute ||
+      !selectedDate
+    ) {
+      return;
+    }
 
     setLoadingAttendance(true);
 
@@ -379,11 +559,20 @@ export default function AttendancePage() {
       const {
         data,
         error,
-      } = await supabase
-        .from("attendance")
-        .select("student_id, status, notes")
-        .eq("institute_id", selectedInstitute)
-        .eq("attendance_date", selectedDate);
+      } =
+        await supabase
+          .from("attendance")
+          .select(
+            "student_id, status, notes"
+          )
+          .eq(
+            "institute_id",
+            selectedInstitute
+          )
+          .eq(
+            "attendance_date",
+            selectedDate
+          );
 
       if (error) {
         console.error(error);
@@ -398,20 +587,33 @@ export default function AttendancePage() {
         return;
       }
 
-      const records: Record<string, AttendanceRecord> = {};
+      const records: Record<
+        string,
+        AttendanceRecord
+      > = {};
 
-      (data || []).forEach((item) => {
-        records[item.student_id] = {
-          student_id: item.student_id,
-          status: item.status as AttendanceStatus,
-          notes: item.notes || "",
-        };
-      });
+      (data || []).forEach(
+        (item) => {
+          records[
+            item.student_id
+          ] = {
+            student_id:
+              item.student_id,
+            status:
+              item.status as AttendanceStatus,
+            notes:
+              item.notes || "",
+          };
+        }
+      );
 
       setAttendance(records);
     } catch (error) {
       console.error(error);
-      setMessage("حدث خطأ أثناء تحميل الحضور");
+
+      setMessage(
+        "حدث خطأ أثناء تحميل الحضور"
+      );
     }
 
     setLoadingAttendance(false);
@@ -420,7 +622,7 @@ export default function AttendancePage() {
   /*
    * =========================================================
    * تغيير حالة الطالب
-   * متاح لمسؤول IT فقط
+   * مسؤول IT فقط
    * =========================================================
    */
 
@@ -428,20 +630,28 @@ export default function AttendancePage() {
     studentId: string,
     status: AttendanceStatus
   ) {
-    if (!canEdit) return;
+    if (!canEdit) {
+      return;
+    }
 
-    setAttendance((current) => {
-      const existing = current[studentId];
+    setAttendance(
+      (current) => {
+        const existing =
+          current[studentId];
 
-      return {
-        ...current,
-        [studentId]: {
-          student_id: studentId,
-          status,
-          notes: existing?.notes || "",
-        },
-      };
-    });
+        return {
+          ...current,
+          [studentId]: {
+            student_id:
+              studentId,
+            status,
+            notes:
+              existing?.notes ||
+              "",
+          },
+        };
+      }
+    );
 
     setMessage("");
   }
@@ -456,8 +666,8 @@ export default function AttendancePage() {
     studentId: string
   ): AttendanceStatus {
     return (
-      attendance[studentId]?.status ||
-      "present"
+      attendance[studentId]
+        ?.status || "present"
     );
   }
 
@@ -477,7 +687,9 @@ export default function AttendancePage() {
     }
 
     if (!selectedInstitute) {
-      setMessage("يرجى اختيار المعهد");
+      setMessage(
+        "يرجى اختيار المعهد"
+      );
       return;
     }
 
@@ -485,30 +697,46 @@ export default function AttendancePage() {
     setMessage("");
 
     try {
-      const rows = filteredStudents.map((student) => ({
-        institute_id: selectedInstitute,
-        student_id: student.id,
-        class_id: student.class_id,
-        attendance_date: selectedDate,
-        status: getStudentStatus(student.id),
-        notes:
-          attendance[student.id]?.notes || null,
-      }));
+      const rows =
+        filteredStudents.map(
+          (student) => ({
+            institute_id:
+              selectedInstitute,
+            student_id:
+              student.id,
+            class_id:
+              student.class_id,
+            attendance_date:
+              selectedDate,
+            status:
+              getStudentStatus(
+                student.id
+              ),
+            notes:
+              attendance[
+                student.id
+              ]?.notes || null,
+          })
+        );
 
       if (rows.length === 0) {
-        setMessage("لا يوجد طلاب للحفظ");
+        setMessage(
+          "لا يوجد طلاب للحفظ"
+        );
+
         setSaving(false);
         return;
       }
 
       const {
         error,
-      } = await supabase
-        .from("attendance")
-        .upsert(rows, {
-          onConflict:
-            "student_id,attendance_date",
-        });
+      } =
+        await supabase
+          .from("attendance")
+          .upsert(rows, {
+            onConflict:
+              "student_id,attendance_date",
+          });
 
       if (error) {
         console.error(error);
@@ -528,7 +756,10 @@ export default function AttendancePage() {
       await loadAttendance();
     } catch (error) {
       console.error(error);
-      setMessage("حدث خطأ غير متوقع");
+
+      setMessage(
+        "حدث خطأ غير متوقع"
+      );
     }
 
     setSaving(false);
@@ -540,31 +771,47 @@ export default function AttendancePage() {
    * =========================================================
    */
 
-  const filteredStudents = useMemo(() => {
-    const normalizedSearch =
-      searchTerm.trim().toLowerCase();
+  const filteredStudents =
+    useMemo(() => {
+      const normalizedSearch =
+        searchTerm
+          .trim()
+          .toLowerCase();
 
-    return students.filter((student) => {
-      const matchesClass =
-        !selectedClass ||
-        student.class_id === selectedClass;
+      return students.filter(
+        (student) => {
+          const matchesClass =
+            !selectedClass ||
+            student.class_id ===
+              selectedClass;
 
-      const matchesSearch =
-        !normalizedSearch ||
-        student.full_name
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        (student.student_code || "")
-          .toLowerCase()
-          .includes(normalizedSearch);
+          const matchesSearch =
+            !normalizedSearch ||
+            student.full_name
+              .toLowerCase()
+              .includes(
+                normalizedSearch
+              ) ||
+            (
+              student.student_code ||
+              ""
+            )
+              .toLowerCase()
+              .includes(
+                normalizedSearch
+              );
 
-      return matchesClass && matchesSearch;
-    });
-  }, [
-    students,
-    selectedClass,
-    searchTerm,
-  ]);
+          return (
+            matchesClass &&
+            matchesSearch
+          );
+        }
+      );
+    }, [
+      students,
+      selectedClass,
+      searchTerm,
+    ]);
 
   /*
    * =========================================================
@@ -575,29 +822,33 @@ export default function AttendancePage() {
   const presentCount =
     filteredStudents.filter(
       (student) =>
-        getStudentStatus(student.id) ===
-        "present"
+        getStudentStatus(
+          student.id
+        ) === "present"
     ).length;
 
   const absentCount =
     filteredStudents.filter(
       (student) =>
-        getStudentStatus(student.id) ===
-        "absent"
+        getStudentStatus(
+          student.id
+        ) === "absent"
     ).length;
 
   const lateCount =
     filteredStudents.filter(
       (student) =>
-        getStudentStatus(student.id) ===
-        "late"
+        getStudentStatus(
+          student.id
+        ) === "late"
     ).length;
 
   const excusedCount =
     filteredStudents.filter(
       (student) =>
-        getStudentStatus(student.id) ===
-        "excused"
+        getStudentStatus(
+          student.id
+        ) === "excused"
     ).length;
 
   /*
@@ -606,10 +857,12 @@ export default function AttendancePage() {
    * =========================================================
    */
 
-  const currentInstitute = institutes.find(
-    (institute) =>
-      institute.id === selectedInstitute
-  );
+  const currentInstitute =
+    institutes.find(
+      (institute) =>
+        institute.id ===
+        selectedInstitute
+    );
 
   /*
    * =========================================================
@@ -647,9 +900,7 @@ export default function AttendancePage() {
     >
       <div className="max-w-7xl mx-auto">
 
-        {/* ================================================= */}
         {/* Header */}
-        {/* ================================================= */}
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
 
@@ -690,12 +941,15 @@ export default function AttendancePage() {
 
                 {currentInstitute.code && (
                   <span className="text-gray-400">
-                    ({currentInstitute.code})
+                    (
+                    {
+                      currentInstitute.code
+                    }
+                    )
                   </span>
                 )}
               </div>
             )}
-
           </div>
 
           {/* زر الحفظ لمسؤول IT فقط */}
@@ -703,11 +957,14 @@ export default function AttendancePage() {
           {canEdit && (
             <button
               type="button"
-              onClick={saveAttendance}
+              onClick={
+                saveAttendance
+              }
               disabled={
                 saving ||
                 !selectedInstitute ||
-                filteredStudents.length === 0
+                filteredStudents.length ===
+                  0
               }
               className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl font-semibold"
             >
@@ -718,12 +975,9 @@ export default function AttendancePage() {
                 : "حفظ الحضور"}
             </button>
           )}
-
         </div>
 
-        {/* ================================================= */}
         {/* Message */}
-        {/* ================================================= */}
 
         {message && (
           <div className="mb-6 bg-white border border-blue-200 text-blue-700 rounded-xl p-4">
@@ -732,7 +986,7 @@ export default function AttendancePage() {
         )}
 
         {/* ================================================= */}
-        {/* Manager institute selector */}
+        {/* اختيار المعهد لمدير الإدارة */}
         {/* ================================================= */}
 
         {isSuperAdmin && (
@@ -750,45 +1004,58 @@ export default function AttendancePage() {
               />
 
               <select
-                value={selectedInstitute}
+                value={
+                  selectedInstitute
+                }
                 onChange={(e) =>
                   setSelectedInstitute(
                     e.target.value
                   )
                 }
-                className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={
+                  !!requestedInstituteId
+                }
+                className={`w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500 ${
+                  requestedInstituteId
+                    ? "bg-gray-100 cursor-not-allowed"
+                    : "bg-white"
+                }`}
               >
                 <option value="">
                   اختر المعهد
                 </option>
 
-                {institutes.map((institute) => (
-                  <option
-                    key={institute.id}
-                    value={institute.id}
-                  >
-                    {institute.name}
-                    {institute.code
-                      ? ` - ${institute.code}`
-                      : ""}
-                  </option>
-                ))}
+                {institutes.map(
+                  (institute) => (
+                    <option
+                      key={
+                        institute.id
+                      }
+                      value={
+                        institute.id
+                      }
+                    >
+                      {
+                        institute.name
+                      }
+                      {institute.code
+                        ? ` - ${institute.code}`
+                        : ""}
+                    </option>
+                  )
+                )}
               </select>
-
             </div>
 
             <p className="text-sm text-gray-500 mt-2">
-              مدير الإدارة لديه صلاحية الاطلاع فقط
-              على حضور طلاب جميع المعاهد التابعة
-              للإدارة.
+              {requestedInstituteId
+                ? "تم فتح الحضور من بطاقة المعهد المحدد، لذلك تم تثبيت هذا المعهد."
+                : "مدير الإدارة لديه صلاحية الاطلاع فقط على حضور طلاب جميع المعاهد التابعة للإدارة."}
             </p>
-
           </div>
         )}
 
-        {/* ================================================= */}
         {/* Filters */}
-        {/* ================================================= */}
 
         {selectedInstitute && (
           <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
@@ -811,7 +1078,9 @@ export default function AttendancePage() {
 
                   <input
                     type="date"
-                    value={selectedDate}
+                    value={
+                      selectedDate
+                    }
                     onChange={(e) =>
                       setSelectedDate(
                         e.target.value
@@ -819,7 +1088,6 @@ export default function AttendancePage() {
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
-
                 </div>
               </div>
 
@@ -831,7 +1099,9 @@ export default function AttendancePage() {
                 </label>
 
                 <select
-                  value={selectedClass}
+                  value={
+                    selectedClass
+                  }
                   onChange={(e) =>
                     setSelectedClass(
                       e.target.value
@@ -843,14 +1113,22 @@ export default function AttendancePage() {
                     كل الفصول
                   </option>
 
-                  {classes.map((classItem) => (
-                    <option
-                      key={classItem.id}
-                      value={classItem.id}
-                    >
-                      {classItem.name}
-                    </option>
-                  ))}
+                  {classes.map(
+                    (classItem) => (
+                      <option
+                        key={
+                          classItem.id
+                        }
+                        value={
+                          classItem.id
+                        }
+                      >
+                        {
+                          classItem.name
+                        }
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
 
@@ -871,7 +1149,9 @@ export default function AttendancePage() {
                   <input
                     type="text"
                     placeholder="اسم الطالب أو الكود..."
-                    value={searchTerm}
+                    value={
+                      searchTerm
+                    }
                     onChange={(e) =>
                       setSearchTerm(
                         e.target.value
@@ -879,18 +1159,13 @@ export default function AttendancePage() {
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
-
                 </div>
               </div>
-
             </div>
-
           </div>
         )}
 
-        {/* ================================================= */}
         {/* No institute selected */}
-        {/* ================================================= */}
 
         {isSuperAdmin &&
           !selectedInstitute && (
@@ -909,29 +1184,20 @@ export default function AttendancePage() {
                 اختر المعهد لعرض بيانات الحضور
                 والغياب الخاصة بطلابه.
               </p>
-
             </div>
           )}
 
-        {/* ================================================= */}
         {/* Institute data */}
-        {/* ================================================= */}
 
         {selectedInstitute && (
           <>
 
-            {/* ================================================= */}
             {/* Statistics */}
-            {/* ================================================= */}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
 
-              {/* Present */}
-
               <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-green-500">
-
                 <div className="flex items-center gap-3">
-
                   <Check className="text-green-600" />
 
                   <div>
@@ -940,20 +1206,16 @@ export default function AttendancePage() {
                     </p>
 
                     <p className="text-2xl font-bold">
-                      {presentCount}
+                      {
+                        presentCount
+                      }
                     </p>
                   </div>
-
                 </div>
-
               </div>
 
-              {/* Absent */}
-
               <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-red-500">
-
                 <div className="flex items-center gap-3">
-
                   <UserX className="text-red-600" />
 
                   <div>
@@ -962,20 +1224,16 @@ export default function AttendancePage() {
                     </p>
 
                     <p className="text-2xl font-bold">
-                      {absentCount}
+                      {
+                        absentCount
+                      }
                     </p>
                   </div>
-
                 </div>
-
               </div>
 
-              {/* Late */}
-
               <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-yellow-500">
-
                 <div className="flex items-center gap-3">
-
                   <Clock className="text-yellow-600" />
 
                   <div>
@@ -984,20 +1242,16 @@ export default function AttendancePage() {
                     </p>
 
                     <p className="text-2xl font-bold">
-                      {lateCount}
+                      {
+                        lateCount
+                      }
                     </p>
                   </div>
-
                 </div>
-
               </div>
 
-              {/* Excused */}
-
               <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-blue-500">
-
                 <div className="flex items-center gap-3">
-
                   <CalendarDays className="text-blue-600" />
 
                   <div>
@@ -1006,19 +1260,16 @@ export default function AttendancePage() {
                     </p>
 
                     <p className="text-2xl font-bold">
-                      {excusedCount}
+                      {
+                        excusedCount
+                      }
                     </p>
                   </div>
-
                 </div>
-
               </div>
-
             </div>
 
-            {/* ================================================= */}
             {/* Students */}
-            {/* ================================================= */}
 
             <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
 
@@ -1027,57 +1278,50 @@ export default function AttendancePage() {
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
 
                   <div>
-
                     <h2 className="text-xl font-bold text-gray-800">
                       قائمة الطلاب
                     </h2>
 
                     <p className="text-gray-500 text-sm mt-1">
                       عدد الطلاب:{" "}
-                      {filteredStudents.length}
+                      {
+                        filteredStudents.length
+                      }
                     </p>
-
                   </div>
 
                   {loadingStudents && (
                     <div className="flex items-center gap-2 text-gray-500">
-
                       <RefreshCw
                         size={18}
                         className="animate-spin"
                       />
-
                       جاري تحميل الطلاب...
-
                     </div>
                   )}
 
                   {loadingAttendance && (
                     <div className="flex items-center gap-2 text-gray-500">
-
                       <RefreshCw
                         size={18}
                         className="animate-spin"
                       />
-
                       جاري تحميل الحضور...
-
                     </div>
                   )}
-
                 </div>
-
               </div>
 
-              {filteredStudents.length === 0 ? (
-
+              {filteredStudents.length ===
+              0 ? (
                 <div className="text-center py-16 text-gray-500">
 
                   {loadingStudents ? (
                     <p>
                       جاري تحميل الطلاب...
                     </p>
-                  ) : students.length === 0 ? (
+                  ) : students.length ===
+                    0 ? (
                     <>
                       <p className="font-semibold">
                         لا يوجد طلاب مسجلون في هذا المعهد
@@ -1093,19 +1337,14 @@ export default function AttendancePage() {
                       لا يوجد طلاب مطابقون للبحث
                     </p>
                   )}
-
                 </div>
-
               ) : (
-
                 <div className="overflow-x-auto">
 
                   <table className="w-full">
 
                     <thead className="bg-gray-50">
-
                       <tr>
-
                         <th className="text-right px-6 py-4">
                           الطالب
                         </th>
@@ -1117,16 +1356,13 @@ export default function AttendancePage() {
                         <th className="text-center px-6 py-4">
                           الحالة
                         </th>
-
                       </tr>
-
                     </thead>
 
                     <tbody className="divide-y">
 
                       {filteredStudents.map(
                         (student) => {
-
                           const status =
                             getStudentStatus(
                               student.id
@@ -1134,32 +1370,34 @@ export default function AttendancePage() {
 
                           return (
                             <tr
-                              key={student.id}
+                              key={
+                                student.id
+                              }
                               className="hover:bg-gray-50"
                             >
-
                               <td className="px-6 py-5">
-
                                 <div className="font-semibold text-gray-800">
-                                  {student.full_name}
+                                  {
+                                    student.full_name
+                                  }
                                 </div>
-
                               </td>
 
                               <td className="px-6 py-5 text-gray-500">
-                                {student.student_code ||
-                                  "-"}
+                                {
+                                  student.student_code ||
+                                  "-"
+                                }
                               </td>
 
                               <td className="px-6 py-5">
-
                                 <div className="flex flex-wrap justify-center gap-2">
-
-                                  {/* حاضر */}
 
                                   <button
                                     type="button"
-                                    disabled={!canEdit}
+                                    disabled={
+                                      !canEdit
+                                    }
                                     onClick={() =>
                                       setStudentStatus(
                                         student.id,
@@ -1180,11 +1418,11 @@ export default function AttendancePage() {
                                     حاضر
                                   </button>
 
-                                  {/* غائب */}
-
                                   <button
                                     type="button"
-                                    disabled={!canEdit}
+                                    disabled={
+                                      !canEdit
+                                    }
                                     onClick={() =>
                                       setStudentStatus(
                                         student.id,
@@ -1205,11 +1443,11 @@ export default function AttendancePage() {
                                     غائب
                                   </button>
 
-                                  {/* متأخر */}
-
                                   <button
                                     type="button"
-                                    disabled={!canEdit}
+                                    disabled={
+                                      !canEdit
+                                    }
                                     onClick={() =>
                                       setStudentStatus(
                                         student.id,
@@ -1230,11 +1468,11 @@ export default function AttendancePage() {
                                     متأخر
                                   </button>
 
-                                  {/* معذور */}
-
                                   <button
                                     type="button"
-                                    disabled={!canEdit}
+                                    disabled={
+                                      !canEdit
+                                    }
                                     onClick={() =>
                                       setStudentStatus(
                                         student.id,
@@ -1254,29 +1492,19 @@ export default function AttendancePage() {
                                   >
                                     معذور
                                   </button>
-
                                 </div>
-
                               </td>
-
                             </tr>
                           );
                         }
                       )}
-
                     </tbody>
-
                   </table>
-
                 </div>
-
               )}
-
             </div>
-
           </>
         )}
-
       </div>
     </main>
   );
