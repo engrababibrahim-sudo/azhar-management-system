@@ -66,7 +66,7 @@ export default function AttendancePage() {
     useState("");
 
   /*
-   * المعهد القادم من بطاقة المعهد في لوحة التحكم
+   * المعهد القادم من بطاقة المعهد
    */
   const [requestedInstituteId, setRequestedInstituteId] =
     useState<string | null | undefined>(undefined);
@@ -118,8 +118,12 @@ export default function AttendancePage() {
 
   /*
    * =========================================================
-   * قراءة instituteId من الرابط
+   * قراءة instituteId من الرابط أولًا
    * =========================================================
+   *
+   * مهم:
+   * لا نستدعي loadInitialData قبل قراءة الرابط.
+   * هذا هو الإصلاح الأساسي للمشكلة.
    */
 
   useEffect(() => {
@@ -137,13 +141,19 @@ export default function AttendancePage() {
 
   /*
    * =========================================================
-   * تحميل بيانات المستخدم
+   * تحميل البيانات بعد معرفة المعهد القادم من الرابط
    * =========================================================
    */
 
   useEffect(() => {
-    loadInitialData();
-  }, []);
+    if (
+      requestedInstituteId !== undefined
+    ) {
+      loadInitialData(
+        requestedInstituteId
+      );
+    }
+  }, [requestedInstituteId]);
 
   /*
    * =========================================================
@@ -182,11 +192,14 @@ export default function AttendancePage() {
 
   /*
    * =========================================================
-   * تحميل بيانات الحساب
+   * تحميل بيانات المستخدم
    * =========================================================
    */
 
-  async function loadInitialData() {
+  async function loadInitialData(
+    instituteIdFromUrl:
+      string | null
+  ) {
     setLoading(true);
     setMessage("");
 
@@ -201,6 +214,7 @@ export default function AttendancePage() {
         setMessage(
           "يجب تسجيل الدخول أولًا"
         );
+
         setLoading(false);
         return;
       }
@@ -253,8 +267,10 @@ export default function AttendancePage() {
       const currentProfile: Profile = {
         role:
           profileData.role as Role,
+
         institute_id:
           profileData.institute_id,
+
         directorate_id:
           profileData.directorate_id,
       };
@@ -318,39 +334,45 @@ export default function AttendancePage() {
         );
 
         /*
-         * إذا كان مدير الإدارة دخل من بطاقة
-         * معهد محدد:
-         *
-         * نتأكد أن المعهد تابع لنفس الإدارة
+         * ===================================================
+         * إذا تم فتح الصفحة من بطاقة معهد
+         * ===================================================
          */
+
         if (
-          requestedInstituteId
+          instituteIdFromUrl
         ) {
           const requestedInstitute =
             loadedInstitutes.find(
               (institute) =>
                 institute.id ===
-                requestedInstituteId
+                instituteIdFromUrl
             );
 
           if (requestedInstitute) {
+            /*
+             * تثبيت المعهد القادم من البطاقة
+             */
             setSelectedInstitute(
               requestedInstitute.id
             );
+
+            setMessage(
+              "تم فتح الحضور والغياب للمعهد المحدد."
+            );
           } else {
             /*
-             * رابط غير صالح أو معهد
-             * لا يتبع الإدارة
+             * المعهد غير موجود ضمن إدارة المدير
              */
             setSelectedInstitute("");
+
             setMessage(
               "المعهد المطلوب غير تابع للإدارة الحالية"
             );
           }
         } else {
           /*
-           * الدخول المباشر:
-           * لا يتم اختيار معهد تلقائيًا
+           * الدخول المباشر لصفحة الحضور
            */
           setSelectedInstitute("");
         }
@@ -378,9 +400,9 @@ export default function AttendancePage() {
 
       /*
        * حسابات المعهد لا يمكنها تغيير المعهد
-       * حتى لو تم تمرير instituteId مختلف في الرابط.
+       * من خلال الرابط.
        *
-       * دائمًا نستخدم institute_id الموجود في profile.
+       * دائمًا نستخدم المعهد الموجود في profile.
        */
 
       setSelectedInstitute(
@@ -599,8 +621,10 @@ export default function AttendancePage() {
           ] = {
             student_id:
               item.student_id,
+
             status:
               item.status as AttendanceStatus,
+
             notes:
               item.notes || "",
           };
@@ -641,10 +665,13 @@ export default function AttendancePage() {
 
         return {
           ...current,
+
           [studentId]: {
             student_id:
               studentId,
+
             status,
+
             notes:
               existing?.notes ||
               "",
@@ -683,6 +710,7 @@ export default function AttendancePage() {
       setMessage(
         "ليس لديك صلاحية تعديل الحضور والغياب"
       );
+
       return;
     }
 
@@ -690,6 +718,7 @@ export default function AttendancePage() {
       setMessage(
         "يرجى اختيار المعهد"
       );
+
       return;
     }
 
@@ -702,16 +731,21 @@ export default function AttendancePage() {
           (student) => ({
             institute_id:
               selectedInstitute,
+
             student_id:
               student.id,
+
             class_id:
               student.class_id,
+
             attendance_date:
               selectedDate,
+
             status:
               getStudentStatus(
                 student.id
               ),
+
             notes:
               attendance[
                 student.id
@@ -872,8 +906,12 @@ export default function AttendancePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main
+        className="min-h-screen bg-gray-50 p-8"
+        dir="rtl"
+      >
         <div className="max-w-7xl mx-auto text-center py-20">
+
           <RefreshCw
             className="mx-auto animate-spin mb-4"
             size={32}
@@ -905,6 +943,7 @@ export default function AttendancePage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
 
           <div>
+
             <div className="flex items-center gap-3 mb-2">
 
               <h1 className="text-3xl font-bold text-gray-800">
@@ -933,6 +972,7 @@ export default function AttendancePage() {
 
             {currentInstitute && (
               <div className="flex items-center gap-2 mt-3 text-blue-700 font-semibold">
+
                 <Building2 size={18} />
 
                 <span>
@@ -948,8 +988,10 @@ export default function AttendancePage() {
                     )
                   </span>
                 )}
+
               </div>
             )}
+
           </div>
 
           {/* زر الحفظ لمسؤول IT فقط */}
@@ -975,6 +1017,7 @@ export default function AttendancePage() {
                 : "حفظ الحضور"}
             </button>
           )}
+
         </div>
 
         {/* Message */}
@@ -1021,6 +1064,7 @@ export default function AttendancePage() {
                     : "bg-white"
                 }`}
               >
+
                 <option value="">
                   اختر المعهد
                 </option>
@@ -1038,24 +1082,32 @@ export default function AttendancePage() {
                       {
                         institute.name
                       }
+
                       {institute.code
                         ? ` - ${institute.code}`
                         : ""}
                     </option>
                   )
                 )}
+
               </select>
+
             </div>
 
             <p className="text-sm text-gray-500 mt-2">
+
               {requestedInstituteId
                 ? "تم فتح الحضور من بطاقة المعهد المحدد، لذلك تم تثبيت هذا المعهد."
                 : "مدير الإدارة لديه صلاحية الاطلاع فقط على حضور طلاب جميع المعاهد التابعة للإدارة."}
+
             </p>
+
           </div>
         )}
 
+        {/* ================================================= */}
         {/* Filters */}
+        {/* ================================================= */}
 
         {selectedInstitute && (
           <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
@@ -1065,6 +1117,7 @@ export default function AttendancePage() {
               {/* Date */}
 
               <div>
+
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   التاريخ
                 </label>
@@ -1088,12 +1141,15 @@ export default function AttendancePage() {
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
+
                 </div>
+
               </div>
 
               {/* Class */}
 
               <div>
+
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   الفصل
                 </label>
@@ -1109,6 +1165,7 @@ export default function AttendancePage() {
                   }
                   className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
                 >
+
                   <option value="">
                     كل الفصول
                   </option>
@@ -1129,12 +1186,15 @@ export default function AttendancePage() {
                       </option>
                     )
                   )}
+
                 </select>
+
               </div>
 
               {/* Search */}
 
               <div>
+
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   بحث عن طالب
                 </label>
@@ -1159,13 +1219,19 @@ export default function AttendancePage() {
                     }
                     className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
+
                 </div>
+
               </div>
+
             </div>
+
           </div>
         )}
 
+        {/* ================================================= */}
         {/* No institute selected */}
+        {/* ================================================= */}
 
         {isSuperAdmin &&
           !selectedInstitute && (
@@ -1184,10 +1250,13 @@ export default function AttendancePage() {
                 اختر المعهد لعرض بيانات الحضور
                 والغياب الخاصة بطلابه.
               </p>
+
             </div>
           )}
 
+        {/* ================================================= */}
         {/* Institute data */}
+        {/* ================================================= */}
 
         {selectedInstitute && (
           <>
@@ -1197,10 +1266,13 @@ export default function AttendancePage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
 
               <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-green-500">
+
                 <div className="flex items-center gap-3">
+
                   <Check className="text-green-600" />
 
                   <div>
+
                     <p className="text-gray-500 text-sm">
                       حاضر
                     </p>
@@ -1210,15 +1282,21 @@ export default function AttendancePage() {
                         presentCount
                       }
                     </p>
+
                   </div>
+
                 </div>
+
               </div>
 
               <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-red-500">
+
                 <div className="flex items-center gap-3">
+
                   <UserX className="text-red-600" />
 
                   <div>
+
                     <p className="text-gray-500 text-sm">
                       غائب
                     </p>
@@ -1228,15 +1306,21 @@ export default function AttendancePage() {
                         absentCount
                       }
                     </p>
+
                   </div>
+
                 </div>
+
               </div>
 
               <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-yellow-500">
+
                 <div className="flex items-center gap-3">
+
                   <Clock className="text-yellow-600" />
 
                   <div>
+
                     <p className="text-gray-500 text-sm">
                       متأخر
                     </p>
@@ -1246,15 +1330,21 @@ export default function AttendancePage() {
                         lateCount
                       }
                     </p>
+
                   </div>
+
                 </div>
+
               </div>
 
               <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-blue-500">
+
                 <div className="flex items-center gap-3">
+
                   <CalendarDays className="text-blue-600" />
 
                   <div>
+
                     <p className="text-gray-500 text-sm">
                       معذور
                     </p>
@@ -1264,9 +1354,13 @@ export default function AttendancePage() {
                         excusedCount
                       }
                     </p>
+
                   </div>
+
                 </div>
+
               </div>
+
             </div>
 
             {/* Students */}
@@ -1278,6 +1372,7 @@ export default function AttendancePage() {
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
 
                   <div>
+
                     <h2 className="text-xl font-bold text-gray-800">
                       قائمة الطلاب
                     </h2>
@@ -1288,28 +1383,37 @@ export default function AttendancePage() {
                         filteredStudents.length
                       }
                     </p>
+
                   </div>
 
                   {loadingStudents && (
                     <div className="flex items-center gap-2 text-gray-500">
+
                       <RefreshCw
                         size={18}
                         className="animate-spin"
                       />
+
                       جاري تحميل الطلاب...
+
                     </div>
                   )}
 
                   {loadingAttendance && (
                     <div className="flex items-center gap-2 text-gray-500">
+
                       <RefreshCw
                         size={18}
                         className="animate-spin"
                       />
+
                       جاري تحميل الحضور...
+
                     </div>
                   )}
+
                 </div>
+
               </div>
 
               {filteredStudents.length ===
@@ -1337,6 +1441,7 @@ export default function AttendancePage() {
                       لا يوجد طلاب مطابقون للبحث
                     </p>
                   )}
+
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -1344,7 +1449,9 @@ export default function AttendancePage() {
                   <table className="w-full">
 
                     <thead className="bg-gray-50">
+
                       <tr>
+
                         <th className="text-right px-6 py-4">
                           الطالب
                         </th>
@@ -1356,13 +1463,16 @@ export default function AttendancePage() {
                         <th className="text-center px-6 py-4">
                           الحالة
                         </th>
+
                       </tr>
+
                     </thead>
 
                     <tbody className="divide-y">
 
                       {filteredStudents.map(
                         (student) => {
+
                           const status =
                             getStudentStatus(
                               student.id
@@ -1375,12 +1485,15 @@ export default function AttendancePage() {
                               }
                               className="hover:bg-gray-50"
                             >
+
                               <td className="px-6 py-5">
+
                                 <div className="font-semibold text-gray-800">
                                   {
                                     student.full_name
                                   }
                                 </div>
+
                               </td>
 
                               <td className="px-6 py-5 text-gray-500">
@@ -1391,7 +1504,10 @@ export default function AttendancePage() {
                               </td>
 
                               <td className="px-6 py-5">
+
                                 <div className="flex flex-wrap justify-center gap-2">
+
+                                  {/* حاضر */}
 
                                   <button
                                     type="button"
@@ -1418,6 +1534,8 @@ export default function AttendancePage() {
                                     حاضر
                                   </button>
 
+                                  {/* غائب */}
+
                                   <button
                                     type="button"
                                     disabled={
@@ -1442,6 +1560,8 @@ export default function AttendancePage() {
                                   >
                                     غائب
                                   </button>
+
+                                  {/* متأخر */}
 
                                   <button
                                     type="button"
@@ -1468,6 +1588,8 @@ export default function AttendancePage() {
                                     متأخر
                                   </button>
 
+                                  {/* معذور */}
+
                                   <button
                                     type="button"
                                     disabled={
@@ -1492,19 +1614,28 @@ export default function AttendancePage() {
                                   >
                                     معذور
                                   </button>
+
                                 </div>
+
                               </td>
+
                             </tr>
                           );
                         }
                       )}
+
                     </tbody>
+
                   </table>
+
                 </div>
               )}
+
             </div>
+
           </>
         )}
+
       </div>
     </main>
   );
