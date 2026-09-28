@@ -56,13 +56,17 @@ function StatCard({
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-500">{title}</p>
+          <p className="text-sm font-medium text-slate-500">
+            {title}
+          </p>
 
           <p className="mt-3 text-3xl font-black tracking-tight text-slate-900">
             {value.toLocaleString("ar-EG")}
           </p>
 
-          <p className="mt-2 text-xs text-slate-500">{subtitle}</p>
+          <p className="mt-2 text-xs text-slate-500">
+            {subtitle}
+          </p>
         </div>
 
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
@@ -95,7 +99,9 @@ function QuickAction({
         </div>
 
         <div className="min-w-0 flex-1">
-          <h3 className="font-bold text-slate-900">{title}</h3>
+          <h3 className="font-bold text-slate-900">
+            {title}
+          </h3>
 
           <p className="mt-1 text-sm leading-6 text-slate-500">
             {description}
@@ -141,11 +147,14 @@ export default function HomePage() {
         throw new Error("لم يتم العثور على المستخدم الحالي");
       }
 
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("role, full_name, institute_id, directorate_id")
-        .eq("id", user.id)
-        .maybeSingle();
+      const { data: profileData, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select(
+            "role, full_name, institute_id, directorate_id"
+          )
+          .eq("id", user.id)
+          .maybeSingle();
 
       if (profileError) {
         throw profileError;
@@ -193,7 +202,9 @@ export default function HomePage() {
         profileData.role === "deputy"
       ) {
         if (!profileData.directorate_id) {
-          throw new Error("الحساب غير مرتبط بإدارة تعليمية");
+          throw new Error(
+            "الحساب غير مرتبط بإدارة تعليمية"
+          );
         }
 
         query = query.eq(
@@ -208,15 +219,20 @@ export default function HomePage() {
         profileData.role === "it_admin"
       ) {
         if (!profileData.institute_id) {
-          throw new Error("الحساب غير مرتبط بمعهد");
+          throw new Error(
+            "الحساب غير مرتبط بمعهد"
+          );
         }
 
-        query = query.eq("id", profileData.institute_id);
+        query = query.eq(
+          "id",
+          profileData.institute_id
+        );
       } else {
-        /*
-         * أي دور غير معروف لا يرى بيانات المعاهد.
-         */
-        query = query.eq("id", "__no_matching_institute__");
+        query = query.eq(
+          "id",
+          "__no_matching_institute__"
+        );
       }
 
       const {
@@ -228,7 +244,9 @@ export default function HomePage() {
         throw instituteError;
       }
 
-      setInstitutes((instituteData || []) as Institute[]);
+      setInstitutes(
+        (instituteData || []) as Institute[]
+      );
     } catch (error: any) {
       console.error("Dashboard error:", error);
 
@@ -238,7 +256,10 @@ export default function HomePage() {
         error?.hint ||
         "خطأ غير معروف";
 
-      setErrorMessage("خطأ قاعدة البيانات: " + message);
+      setErrorMessage(
+        "خطأ قاعدة البيانات: " + message
+      );
+
       setInstitutes([]);
     } finally {
       setLoading(false);
@@ -261,12 +282,14 @@ export default function HomePage() {
   ).length;
 
   const totalStudents = institutes.reduce(
-    (total, item) => total + Number(item.student_count || 0),
+    (total, item) =>
+      total + Number(item.student_count || 0),
     0
   );
 
   const totalTeachers = institutes.reduce(
-    (total, item) => total + Number(item.teacher_count || 0),
+    (total, item) =>
+      total + Number(item.teacher_count || 0),
     0
   );
 
@@ -288,12 +311,37 @@ export default function HomePage() {
   const welcomeName =
     profile?.full_name || roleTitle;
 
-  const isItAdmin = profile?.role === "it_admin";
+  const isItAdmin =
+    profile?.role === "it_admin";
+
+  const isCentralManager =
+    profile?.role === "super_admin" ||
+    profile?.role === "director" ||
+    profile?.role === "deputy";
+
+  const currentInstitute =
+    institutes.length > 0
+      ? institutes[0]
+      : null;
+
+  /*
+   * مسؤول IT لا يدخل صفحة إدارة المعاهد المركزية.
+   *
+   * إذا كان معهده موجودًا، نرسله إلى تفاصيل المعهد.
+   */
+  const instituteDetailsHref =
+    currentInstitute
+      ? `/institutes/${currentInstitute.id}`
+      : "/";
 
   return (
     <AppShell>
       <div className="min-h-screen bg-slate-100">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+
+          {/* =========================================
+              عنوان الصفحة
+          ========================================== */}
           <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
@@ -320,11 +368,17 @@ export default function HomePage() {
               >
                 <RefreshCw
                   size={17}
-                  className={refreshing ? "animate-spin" : ""}
+                  className={
+                    refreshing
+                      ? "animate-spin"
+                      : ""
+                  }
                 />
 
                 <span>
-                  {refreshing ? "جاري التحديث..." : "تحديث"}
+                  {refreshing
+                    ? "جاري التحديث..."
+                    : "تحديث"}
                 </span>
               </button>
 
@@ -338,6 +392,9 @@ export default function HomePage() {
             </div>
           </div>
 
+          {/* =========================================
+              البانر الرئيسي
+          ========================================== */}
           <section className="relative mb-6 overflow-hidden rounded-3xl bg-slate-950 p-6 text-white shadow-xl sm:p-8">
             <div className="absolute -left-16 -top-16 h-40 w-40 rounded-full bg-white/5" />
             <div className="absolute -bottom-20 right-10 h-48 w-48 rounded-full bg-white/5" />
@@ -362,6 +419,9 @@ export default function HomePage() {
             </div>
           </section>
 
+          {/* =========================================
+              رسائل الخطأ
+          ========================================== */}
           {errorMessage && (
             <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5">
               <div className="flex items-start gap-3">
@@ -381,7 +441,9 @@ export default function HomePage() {
 
                   <button
                     type="button"
-                    onClick={() => loadDashboard(true)}
+                    onClick={() =>
+                      loadDashboard(true)
+                    }
                     className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
                   >
                     المحاولة مرة أخرى
@@ -391,6 +453,9 @@ export default function HomePage() {
             </div>
           )}
 
+          {/* =========================================
+              الملخص العام
+          ========================================== */}
           <section className="mb-8">
             <div className="mb-4">
               <h2 className="text-lg font-black text-slate-900">
@@ -403,12 +468,32 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+              {/* =====================================
+                  بطاقة المعاهد
+                  مسؤول IT يرى معهده فقط
+              ====================================== */}
               <StatCard
-                title="إجمالي المعاهد"
+                title={
+                  isItAdmin
+                    ? "المعهد التابع للحساب"
+                    : "إجمالي المعاهد"
+                }
                 value={totalInstitutes}
-                subtitle={activeInstitutes + " معهد نشط"}
-                href="/institutes"
-                icon={<Building2 size={22} />}
+                subtitle={
+                  isItAdmin
+                    ? "معهد مرتبط بالحساب"
+                    : activeInstitutes +
+                      " معهد نشط"
+                }
+                href={
+                  isItAdmin
+                    ? instituteDetailsHref
+                    : "/institutes"
+                }
+                icon={
+                  <Building2 size={22} />
+                }
               />
 
               <StatCard
@@ -416,7 +501,9 @@ export default function HomePage() {
                 value={totalStudents}
                 subtitle="طالب مسجل"
                 href="/students"
-                icon={<GraduationCap size={22} />}
+                icon={
+                  <GraduationCap size={22} />
+                }
               />
 
               <StatCard
@@ -424,22 +511,32 @@ export default function HomePage() {
                 value={totalTeachers}
                 subtitle="مدرس وعضو هيئة تعليمية"
                 href="/teachers"
-                icon={<Users size={22} />}
+                icon={
+                  <Users size={22} />
+                }
               />
 
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-sm font-medium text-slate-500">
-                      المعاهد النشطة
+                      {isItAdmin
+                        ? "حالة المعهد"
+                        : "المعاهد النشطة"}
                     </p>
 
                     <p className="mt-3 text-3xl font-black text-slate-900">
-                      {activeInstitutes.toLocaleString("ar-EG")}
+                      {activeInstitutes.toLocaleString(
+                        "ar-EG"
+                      )}
                     </p>
 
                     <p className="mt-2 text-xs text-slate-500">
-                      {inactiveInstitutes.toLocaleString("ar-EG")} معهد غير نشط
+                      {isItAdmin
+                        ? "معهد نشط"
+                        : inactiveInstitutes.toLocaleString(
+                            "ar-EG"
+                          ) + " معهد غير نشط"}
                     </p>
                   </div>
 
@@ -451,6 +548,9 @@ export default function HomePage() {
             </div>
           </section>
 
+          {/* =========================================
+              الوصول السريع
+          ========================================== */}
           <section className="mb-8">
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
@@ -465,18 +565,43 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <QuickAction
-                title="إدارة المعاهد"
-                description="إضافة المعاهد وتعديل بياناتها ومتابعة حالتها."
-                href="/institutes"
-                icon={<Building2 size={21} />}
-              />
+
+              {/* =====================================
+                  إدارة المعاهد المركزية
+                  تظهر فقط للإدارة
+              ====================================== */}
+              {isCentralManager && (
+                <QuickAction
+                  title="إدارة المعاهد"
+                  description="إضافة المعاهد وتعديل بياناتها ومتابعة حالتها."
+                  href="/institutes"
+                  icon={
+                    <Building2 size={21} />
+                  }
+                />
+              )}
+
+              {/* =====================================
+                  IT Admin يرى بيانات معهده
+              ====================================== */}
+              {isItAdmin && (
+                <QuickAction
+                  title="المعهد التابع للحساب"
+                  description="عرض بيانات المعهد ومتابعة معلوماته الأساسية."
+                  href={instituteDetailsHref}
+                  icon={
+                    <Building2 size={21} />
+                  }
+                />
+              )}
 
               <QuickAction
                 title="إدارة الطلاب"
                 description="عرض الطلاب وإضافة بيانات جديدة ومتابعة الفصول."
                 href="/students"
-                icon={<GraduationCap size={21} />}
+                icon={
+                  <GraduationCap size={21} />
+                }
               />
 
               <QuickAction
@@ -487,18 +612,25 @@ export default function HomePage() {
                     : "متابعة حضور وغياب الطلاب."
                 }
                 href="/attendance"
-                icon={<ClipboardList size={21} />}
+                icon={
+                  <ClipboardList size={21} />
+                }
               />
 
               <QuickAction
                 title="التقارير والإحصائيات"
                 description="عرض مؤشرات وتقارير الحضور والطلاب."
                 href="/attendance-report"
-                icon={<FileBarChart size={21} />}
+                icon={
+                  <FileBarChart size={21} />
+                }
               />
             </div>
           </section>
 
+          {/* =========================================
+              المعاهد
+          ========================================== */}
           <section className="mb-8">
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
@@ -509,17 +641,22 @@ export default function HomePage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  استعرض المعاهد وانتقل إلى تفاصيل أي معهد
+                  {isItAdmin
+                    ? "بيانات المعهد المرتبط بحساب مسؤول تكنولوجيا المعلومات."
+                    : "استعرض المعاهد وانتقل إلى تفاصيل أي معهد"}
                 </p>
               </div>
 
-              <Link
-                href="/institutes"
-                className="hidden items-center gap-1 text-sm font-bold text-slate-700 hover:text-slate-950 sm:flex"
-              >
-                عرض الكل
-                <ArrowLeft size={16} />
-              </Link>
+              {/* عرض الكل للإدارة المركزية فقط */}
+              {isCentralManager && (
+                <Link
+                  href="/institutes"
+                  className="hidden items-center gap-1 text-sm font-bold text-slate-700 hover:text-slate-950 sm:flex"
+                >
+                  عرض الكل
+                  <ArrowLeft size={16} />
+                </Link>
+              )}
             </div>
 
             {loading ? (
@@ -538,27 +675,40 @@ export default function HomePage() {
                 </div>
 
                 <h3 className="mt-4 font-bold text-slate-900">
-                  لا توجد بيانات معاهد
+                  {isItAdmin
+                    ? "لا يوجد معهد مرتبط بالحساب"
+                    : "لا توجد بيانات معاهد"}
                 </h3>
 
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  لا توجد معاهد مرتبطة بالحساب الحالي أو تعذر تحميل بياناتها.
+                  {isItAdmin
+                    ? "يرجى التأكد من ارتباط حساب مسؤول تكنولوجيا المعلومات بالمعهد الصحيح."
+                    : "لا توجد معاهد مرتبطة بالحساب الحالي أو تعذر تحميل بياناتها."}
                 </p>
 
-                <Link
-                  href="/institutes"
-                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-                >
-                  <Building2 size={17} />
-                  إدارة المعاهد
-                </Link>
+                {/* 
+                 * لا يوجد زر إدارة المعاهد لمسؤول IT.
+                 * يظهر فقط للإدارة المركزية.
+                 */}
+                {isCentralManager && (
+                  <Link
+                    href="/institutes"
+                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    <Building2 size={17} />
+                    إدارة المعاهد
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {institutes.map((institute) => (
                   <Link
                     key={institute.id}
-                    href={"/institutes/" + institute.id}
+                    href={
+                      "/institutes/" +
+                      institute.id
+                    }
                     className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -574,7 +724,8 @@ export default function HomePage() {
 
                           {institute.code && (
                             <p className="mt-1 text-xs text-slate-500">
-                              كود المعهد: {institute.code}
+                              كود المعهد:{" "}
+                              {institute.code}
                             </p>
                           )}
                         </div>
@@ -601,7 +752,8 @@ export default function HomePage() {
 
                         <div className="mt-1 text-lg font-black text-slate-900">
                           {Number(
-                            institute.student_count || 0
+                            institute.student_count ||
+                              0
                           ).toLocaleString("ar-EG")}
                         </div>
                       </div>
@@ -613,7 +765,8 @@ export default function HomePage() {
 
                         <div className="mt-1 text-lg font-black text-slate-900">
                           {Number(
-                            institute.teacher_count || 0
+                            institute.teacher_count ||
+                              0
                           ).toLocaleString("ar-EG")}
                         </div>
                       </div>
@@ -638,6 +791,9 @@ export default function HomePage() {
             )}
           </section>
 
+          {/* =========================================
+              حالة النظام
+          ========================================== */}
           <section className="mb-8">
             <div className="mb-4">
               <h2 className="text-lg font-black text-slate-900">
@@ -700,6 +856,9 @@ export default function HomePage() {
             </div>
           </section>
 
+          {/* =========================================
+              الإعلانات
+          ========================================== */}
           <section>
             <div className="mb-4">
               <h2 className="text-lg font-black text-slate-900">
@@ -743,6 +902,7 @@ export default function HomePage() {
           <div className="mt-8 border-t border-slate-200 pt-6 text-center text-xs text-slate-400">
             نظام إدارة المعاهد الأزهرية — منصة الإدارة والمتابعة التعليمية
           </div>
+
         </div>
       </div>
     </AppShell>
