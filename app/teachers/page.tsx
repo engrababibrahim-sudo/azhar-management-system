@@ -104,21 +104,29 @@ export default function TeachersPage() {
       setProfile(data);
 
       /*
-       * ================================
+       * ============================================
        * حسابات المعهد
-       * ================================
-       * شيخ المعهد / نائب / موظف
-       * يرى معهد الحساب فقط.
+       * ============================================
+       *
+       * شيخ المعهد
+       * وكيل شيخ المعهد
+       * موظف المعهد
+       * مدرس
+       * مسؤول تكنولوجيا المعلومات
+       *
+       * كل حساب من هذه الحسابات يرى معهده فقط.
        */
       if (
         data.role === "sheikh" ||
         data.role === "institute_deputy" ||
-        data.role === "deputy" ||
         data.role === "employee" ||
-        data.role === "teacher"
+        data.role === "teacher" ||
+        data.role === "it_admin"
       ) {
         if (!data.institute_id) {
-          throw new Error("الحساب غير مرتبط بمعهد.");
+          throw new Error(
+            "هذا الحساب غير مرتبط بمعهد."
+          );
         }
 
         const {
@@ -133,34 +141,32 @@ export default function TeachersPage() {
         if (instituteError) throw instituteError;
 
         setInstitutes([institute]);
+
+        /*
+         * مهم جدًا:
+         * مسؤول IT يتم تحديد معهده تلقائيًا.
+         */
         setSelectedInstitute(institute.id);
 
         return;
       }
 
       /*
-       * ================================
+       * ============================================
        * الحسابات المركزية
-       * ================================
+       * ============================================
        *
        * super_admin
-       * مدير الإدارة التعليمية الأزهرية
-       *
        * director
-       * دور قديم موجود للتوافق
-       *
        * deputy
-       * وكيل الإدارة
+       *
+       * ترى معاهد الإدارة التابعة لها.
        */
       let query = supabase
         .from("institutes")
         .select("id, name, code")
         .order("name");
 
-      /*
-       * مدير الإدارة ووكيل الإدارة
-       * يشاهدان معاهد الإدارة التابعة لهما.
-       */
       if (
         (data.role === "super_admin" ||
           data.role === "director" ||
@@ -183,8 +189,7 @@ export default function TeachersPage() {
       setInstitutes(instituteData || []);
 
       /*
-       * لا نختار معهد تلقائيًا للمدير المركزي،
-       * حتى يرى جميع المدرسين افتراضيًا.
+       * الحسابات المركزية تبدأ بعرض جميع المدرسين.
        */
       setSelectedInstitute("");
     } catch (error) {
@@ -218,21 +223,26 @@ export default function TeachersPage() {
 
       /*
        * ==========================================
-       * 1) حسابات المعهد
+       * حسابات المعهد
        * ==========================================
        */
       if (
         profile.role === "sheikh" ||
         profile.role === "institute_deputy" ||
-        profile.role === "deputy" ||
         profile.role === "employee" ||
-        profile.role === "teacher"
+        profile.role === "teacher" ||
+        profile.role === "it_admin"
       ) {
         if (!profile.institute_id) {
           setTeachers([]);
           return;
         }
 
+        /*
+         * لا نعتمد على selectedInstitute هنا
+         * حتى لا يستطيع حساب المعهد تغيير المعهد
+         * من خلال الواجهة.
+         */
         query = query.eq(
           "institute_id",
           profile.institute_id
@@ -241,20 +251,30 @@ export default function TeachersPage() {
 
       /*
        * ==========================================
-       * 2) مدير الإدارة التعليمية
+       * مدير الإدارة
        * ==========================================
-       *
-       * super_admin:
-       * - إذا اختار معهدًا → مدرسو المعهد فقط.
-       * - إذا لم يختر → مدرسو جميع معاهد الإدارة.
        */
-      else if (profile.role === "super_admin") {
+      else if (
+        profile.role === "super_admin" ||
+        profile.role === "director" ||
+        profile.role === "deputy"
+      ) {
+        /*
+         * إذا تم اختيار معهد:
+         * عرض مدرسين هذا المعهد فقط.
+         */
         if (selectedInstitute) {
           query = query.eq(
             "institute_id",
             selectedInstitute
           );
-        } else {
+        }
+
+        /*
+         * إذا لم يتم اختيار معهد:
+         * عرض جميع مدرسين معاهد الإدارة.
+         */
+        else {
           if (!profile.directorate_id) {
             setTeachers([]);
             return;
@@ -292,60 +312,6 @@ export default function TeachersPage() {
         }
       }
 
-      /*
-       * ==========================================
-       * 3) الدور القديم director
-       * ==========================================
-       */
-      else if (profile.role === "director") {
-        if (selectedInstitute) {
-          query = query.eq(
-            "institute_id",
-            selectedInstitute
-          );
-        } else {
-          if (!profile.directorate_id) {
-            setTeachers([]);
-            return;
-          }
-
-          const {
-            data: directorateInstitutes,
-            error: directorateError,
-          } = await supabase
-            .from("institutes")
-            .select("id")
-            .eq(
-              "directorate_id",
-              profile.directorate_id
-            );
-
-          if (directorateError) {
-            throw directorateError;
-          }
-
-          const instituteIds =
-            directorateInstitutes?.map(
-              (item) => item.id
-            ) || [];
-
-          if (instituteIds.length === 0) {
-            setTeachers([]);
-            return;
-          }
-
-          query = query.in(
-            "institute_id",
-            instituteIds
-          );
-        }
-      }
-
-      /*
-       * ==========================================
-       * تنفيذ الاستعلام
-       * ==========================================
-       */
       const { data, error } = await query;
 
       if (error) throw error;
@@ -375,13 +341,83 @@ export default function TeachersPage() {
     setQualification("");
   }
 
-  async function addTeacher() {
+  function openAddTeacherModal() {
     /*
-     * يجب اختيار المعهد عند إضافة مدرس
-     * من الحساب المركزي.
+     * حسابات المعهد:
+     * المعهد معروف تلقائيًا.
      */
-    if (!selectedInstitute) {
-      alert("من فضلك اختاري المعهد أولًا.");
+    if (
+      profile?.role === "it_admin" ||
+      profile?.role === "sheikh" ||
+      profile?.role === "institute_deputy" ||
+      profile?.role === "employee"
+    ) {
+      if (!profile.institute_id) {
+        setMessage(
+          "هذا الحساب غير مرتبط بمعهد."
+        );
+        return;
+      }
+
+      setSelectedInstitute(profile.institute_id);
+    }
+
+    resetForm();
+    setMessage("");
+    setShowAddModal(true);
+  }
+
+  async function addTeacher() {
+    if (!profile) {
+      alert("بيانات المستخدم غير متاحة.");
+      return;
+    }
+
+    /*
+     * ==========================================
+     * تحديد المعهد المسموح للإضافة
+     * ==========================================
+     */
+
+    let targetInstituteId = "";
+
+    /*
+     * مسؤول IT وحسابات المعهد:
+     * يستخدمون معهد الحساب فقط.
+     */
+    if (
+      profile.role === "it_admin" ||
+      profile.role === "sheikh" ||
+      profile.role === "institute_deputy" ||
+      profile.role === "employee"
+    ) {
+      if (!profile.institute_id) {
+        alert("الحساب غير مرتبط بمعهد.");
+        return;
+      }
+
+      targetInstituteId = profile.institute_id;
+    }
+
+    /*
+     * الحسابات المركزية:
+     * تستخدم المعهد المختار.
+     */
+    else if (
+      profile.role === "super_admin" ||
+      profile.role === "director" ||
+      profile.role === "deputy"
+    ) {
+      if (!selectedInstitute) {
+        alert("من فضلك اختاري المعهد أولًا.");
+        return;
+      }
+
+      targetInstituteId = selectedInstitute;
+    } else {
+      alert(
+        "ليس لديك صلاحية إضافة مدرس."
+      );
       return;
     }
 
@@ -397,7 +433,7 @@ export default function TeachersPage() {
       const { error } = await supabase
         .from("teachers")
         .insert({
-          institute_id: selectedInstitute,
+          institute_id: targetInstituteId,
           full_name: fullName.trim(),
           teacher_code:
             teacherCode.trim() || null,
@@ -417,7 +453,9 @@ export default function TeachersPage() {
 
       await loadTeachers();
 
-      setMessage("تم إضافة المدرس بنجاح.");
+      setMessage(
+        "تم إضافة المدرس بنجاح ✅"
+      );
     } catch (error) {
       console.error(error);
 
@@ -464,6 +502,28 @@ export default function TeachersPage() {
       (institute) =>
         institute.id === selectedInstitute
     )?.name || "";
+
+  /*
+   * هل الحساب يستطيع إضافة مدرس؟
+   */
+  const canAddTeacher =
+    profile?.role === "super_admin" ||
+    profile?.role === "director" ||
+    profile?.role === "deputy" ||
+    profile?.role === "sheikh" ||
+    profile?.role === "institute_deputy" ||
+    profile?.role === "employee" ||
+    profile?.role === "it_admin";
+
+  /*
+   * مسؤول IT:
+   * لا نعرض له اختيار المعهد.
+   */
+  const isInstituteAccount =
+    profile?.role === "it_admin" ||
+    profile?.role === "sheikh" ||
+    profile?.role === "institute_deputy" ||
+    profile?.role === "employee";
 
   if (loading) {
     return (
@@ -513,7 +573,7 @@ export default function TeachersPage() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               <button
                 onClick={loadTeachers}
                 disabled={loadingTeachers}
@@ -531,17 +591,9 @@ export default function TeachersPage() {
                 تحديث
               </button>
 
-              {(profile?.role === "sheikh" ||
-                profile?.role === "institute_deputy" ||
-                profile?.role === "deputy" ||
-                profile?.role === "employee" ||
-                profile?.role === "director" ||
-                profile?.role === "super_admin") && (
+              {canAddTeacher && (
                 <button
-                  onClick={() => {
-                    resetForm();
-                    setShowAddModal(true);
-                  }}
+                  onClick={openAddTeacherModal}
                   className="bg-slate-900 text-white px-5 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-800"
                 >
                   <Plus size={19} />
@@ -558,8 +610,9 @@ export default function TeachersPage() {
             </div>
           )}
 
-          {/* اختيار المعهد للحساب المركزي */}
+          {/* اختيار المعهد للحسابات المركزية */}
           {profile &&
+            !isInstituteAccount &&
             (profile.role === "director" ||
               profile.role === "super_admin" ||
               profile.role === "deputy") && (
@@ -621,8 +674,9 @@ export default function TeachersPage() {
             </div>
           )}
 
-          {/* الإحصائيات */}
+          {/* إحصائيات */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+
             <div className="bg-white rounded-2xl border shadow-sm p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -681,6 +735,7 @@ export default function TeachersPage() {
                 </div>
               </div>
             </div>
+
           </div>
 
           {/* البحث */}
@@ -739,9 +794,18 @@ export default function TeachersPage() {
                 </h3>
 
                 <p className="text-slate-500 mt-2">
-                  عند استيراد مدرسين من صفحة استيراد البيانات
-                  سيظهرون هنا تلقائيًا.
+                  عند إضافة أو استيراد مدرسين سيظهرون هنا تلقائيًا.
                 </p>
+
+                {canAddTeacher && (
+                  <button
+                    onClick={openAddTeacherModal}
+                    className="mt-5 bg-slate-900 text-white px-5 py-3 rounded-xl inline-flex items-center gap-2"
+                  >
+                    <Plus size={18} />
+                    إضافة مدرس
+                  </button>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -865,10 +929,14 @@ export default function TeachersPage() {
           </div>
         </div>
 
-        {/* إضافة مدرس */}
+        {/* ============================================
+            نافذة إضافة مدرس
+            ============================================ */}
         {showAddModal && (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+
               <div className="p-6 border-b flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold">
@@ -892,6 +960,7 @@ export default function TeachersPage() {
               </div>
 
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+
                 <div>
                   <label className="block font-semibold mb-2">
                     اسم المعلم *
@@ -989,9 +1058,11 @@ export default function TeachersPage() {
                     placeholder="ليسانس..."
                   />
                 </div>
+
               </div>
 
               <div className="p-6 border-t flex justify-end gap-3">
+
                 <button
                   onClick={() =>
                     setShowAddModal(false)
@@ -1015,6 +1086,7 @@ export default function TeachersPage() {
 
                   حفظ المدرس
                 </button>
+
               </div>
             </div>
           </div>
