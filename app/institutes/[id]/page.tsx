@@ -51,6 +51,15 @@ type AttendanceSummary = {
   attendanceRate: number;
 };
 
+type InstituteMetrics = {
+  studentCount: number;
+  teacherCount: number;
+  attendanceRate: number;
+  totalAttendance: number;
+  pendingTasks: number;
+  studentsNeedingFollowUp: number;
+};
+
 export default function InstituteDashboard() {
   const params = useParams();
   const router = useRouter();
@@ -66,6 +75,15 @@ export default function InstituteDashboard() {
       totalRecorded: 0,
       attendanceRate: 0,
     });
+
+  const [metrics, setMetrics] = useState<InstituteMetrics>({
+    studentCount: 0,
+    teacherCount: 0,
+    attendanceRate: 0,
+    totalAttendance: 0,
+    pendingTasks: 0,
+    studentsNeedingFollowUp: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -161,9 +179,97 @@ export default function InstituteDashboard() {
     setLoading(false);
   }
 
+
+  async function loadRealMetrics() {
+    if (!instituteId) return;
+
+    try {
+      const [
+        { count: studentCount, error: studentError },
+        { count: teacherCount, error: teacherError },
+      ] = await Promise.all([
+        supabase
+          .from("students")
+          .select("id", { count: "exact", head: true })
+          .eq("institute_id", instituteId)
+          .eq("is_active", true),
+        supabase
+          .from("teachers")
+          .select("id", { count: "exact", head: true })
+          .eq("institute_id", instituteId)
+          .eq("is_active", true),
+      ]);
+
+      if (studentError) throw studentError;
+      if (teacherError) throw teacherError;
+
+      const { data: attendanceRows, error: attendanceError } = await supabase
+        .from("attendance")
+        .select(`
+          student_id,
+          status
+        `)
+        .eq("attendance_date", new Date().toISOString().slice(0, 10))
+        .in(
+          "student_id",
+          (
+            await supabase
+              .from("students")
+              .select("id")
+              .eq("institute_id", instituteId)
+              .eq("is_active", true)
+          ).data?.map((row) => row.id) || []
+        );
+
+      if (attendanceError) throw attendanceError;
+
+      const attendance = attendanceRows || [];
+      const present = attendance.filter((r) => r.status === "present").length;
+      const late = attendance.filter((r) => r.status === "late").length;
+      const absent = attendance.filter((r) => r.status === "absent").length;
+      const total = present + late + absent;
+
+      let pendingTasks = 0;
+      const { data: taskRows, error: taskError } = await supabase
+        .from("institute_tasks")
+        .select("status")
+        .eq("institute_id", instituteId);
+
+      if (!taskError) {
+        pendingTasks = (taskRows || []).filter((row) => {
+          const status = String(row.status || "").toLowerCase();
+          return [
+            "",
+            "pending",
+            "new",
+            "open",
+            "in_progress",
+            "in progress",
+            "قيد التنفيذ",
+            "معلقة",
+            "معلق",
+            "قيد المتابعة",
+          ].includes(status);
+        }).length;
+      }
+
+      setMetrics({
+        studentCount: studentCount || 0,
+        teacherCount: teacherCount || 0,
+        attendanceRate: total ? Math.round(((present + late) / total) * 100) : 0,
+        totalAttendance: attendance.length,
+        pendingTasks,
+        studentsNeedingFollowUp: absent,
+      });
+    } catch (err) {
+      console.error("REAL INSTITUTE METRICS ERROR:", err);
+    }
+  }
+
   useEffect(() => {
     loadInstitute();
     loadAttendanceSummary();
+    loadRealMetrics();
   }, [instituteId]);
 
   async function handleLogout() {
@@ -231,8 +337,8 @@ export default function InstituteDashboard() {
     );
   }
 
-  const studentCount = institute.student_count || 0;
-  const teacherCount = institute.teacher_count || 0;
+  const studentCount = metrics.studentCount;
+  const teacherCount = metrics.teacherCount;
 
   return (
     <main
@@ -496,9 +602,8 @@ export default function InstituteDashboard() {
             <StatCard
               icon={BarChart3}
               title="نسبة النجاح"
-              value="94%"
-              description="آخر نتائج معتمدة"
-              positive
+              value="—"
+              description="لا توجد نتائج معتمدة مسجلة"
             />
           </section>
 
@@ -521,26 +626,30 @@ export default function InstituteDashboard() {
               <div className="space-y-5">
                 <ProgressRow
                   title="انتظام الطلاب"
-                  value={96}
+                  value={metrics.attendanceRate}
                   target="90%"
+                  available={metrics.totalAttendance > 0}
                 />
 
                 <ProgressRow
                   title="انتظام المعلمين"
-                  value={98}
+                  value={0}
                   target="95%"
+                  available={false}
                 />
 
                 <ProgressRow
                   title="تنفيذ الخطة الدراسية"
-                  value={93}
+                  value={0}
                   target="90%"
+                  available={false}
                 />
 
                 <ProgressRow
                   title="الأنشطة الطلابية"
-                  value={88}
+                  value={0}
                   target="80%"
+                  available={false}
                 />
               </div>
             </div>
@@ -563,21 +672,43 @@ export default function InstituteDashboard() {
               </div>
 
               <div className="space-y-3">
-                <Alert
-                  title="متابعة الطلاب"
-                  text="يوجد طلاب يحتاجون إلى متابعة"
-                  danger
-                />
+                {metrics.studentsNeedingFollowUp > 0 ? (
+                  <Alert
+                    title="متابعة الطلاب"
+                    text={`${metrics.studentsNeedingFollowUp.toLocaleString("ar-EG")} طالب مسجل غيابه اليوم`}
+                    danger
+                  />
+                ) : (
+                  <Alert
+                    title="متابعة الطلاب"
+                    text="لا توجد حالات غياب مسجلة اليوم"
+                  />
+                )}
 
-                <Alert
-                  title="تقرير الحضور"
-                  text="يحتاج مراجعة"
-                />
+                {metrics.totalAttendance > 0 ? (
+                  <Alert
+                    title="تقرير الحضور"
+                    text={`${metrics.totalAttendance.toLocaleString("ar-EG")} سجل حضور مسجل اليوم`}
+                  />
+                ) : (
+                  <Alert
+                    title="تقرير الحضور"
+                    text="لا توجد سجلات حضور اليوم"
+                  />
+                )}
 
-                <Alert
-                  title="تكليف إداري"
-                  text="يوجد تكليف جديد"
-                />
+                {metrics.pendingTasks > 0 ? (
+                  <Alert
+                    title="تكليف إداري"
+                    text={`${metrics.pendingTasks.toLocaleString("ar-EG")} تكليف يحتاج إلى متابعة`}
+                    danger
+                  />
+                ) : (
+                  <Alert
+                    title="تكليف إداري"
+                    text="لا توجد تكليفات معلقة حاليًا"
+                  />
+                )}
               </div>
             </div>
           </section>
@@ -863,10 +994,12 @@ function ProgressRow({
   title,
   value,
   target,
+  available = true,
 }: {
   title: string;
   value: number;
   target: string;
+  available?: boolean;
 }) {
   return (
     <div>
@@ -874,19 +1007,19 @@ function ProgressRow({
         <span>{title}</span>
 
         <span className="font-bold">
-          {value}%
+          {available ? `${value}%` : "غير متاح"}
         </span>
       </div>
 
       <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
         <div
           className="h-full rounded-full bg-slate-800"
-          style={{ width: value + "%" }}
+          style={{ width: available ? value + "%" : "0%" }}
         />
       </div>
 
       <div className="mt-1 text-[11px] text-slate-400">
-        المستهدف {target}
+        {available ? `المستهدف ${target}` : "لا توجد بيانات مسجلة في النظام"}
       </div>
     </div>
   );
