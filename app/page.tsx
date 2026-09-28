@@ -38,6 +38,7 @@ type Institute = {
   student_count: number | null;
   teacher_count: number | null;
   is_active: boolean | null;
+  directorate_id?: string | null;
 };
 
 type AttendanceSummary = {
@@ -590,12 +591,6 @@ export default function HomePage() {
           error
         );
 
-        /*
-         * في حالة عدم وجود status
-         * نستخدم عدد المهام الموجودة
-         * كبيانات متابعة احتياطية.
-         */
-
         try {
           let fallbackQuery =
             supabase
@@ -840,9 +835,6 @@ export default function HomePage() {
           (item) => item.id
         );
 
-      /*
-       * تحميل الحضور والمتابعة
-       */
       await Promise.all([
         loadAttendanceData(
           instituteIds
@@ -880,12 +872,6 @@ export default function HomePage() {
   useEffect(() => {
     loadDashboard();
   }, []);
-
-  /*
-   * =========================================================
-   * الإحصائيات الأساسية
-   * =========================================================
-   */
 
   const totalInstitutes =
     institutes.length;
@@ -998,12 +984,6 @@ export default function HomePage() {
     );
   }
 
-  /*
-   * =========================================================
-   * البحث في المعاهد
-   * =========================================================
-   */
-
   const filteredInstitutes =
     useMemo(() => {
       const search =
@@ -1046,9 +1026,7 @@ export default function HomePage() {
       <div className="min-h-screen bg-slate-100">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
 
-          {/* =====================================================
-              العنوان
-          ====================================================== */}
+          {/* العنوان */}
 
           <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1102,9 +1080,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* =====================================================
-              البانر الرئيسي
-          ====================================================== */}
+          {/* البانر الرئيسي */}
 
           <section className="relative mb-6 overflow-hidden rounded-3xl bg-slate-950 p-6 text-white shadow-xl sm:p-8">
             <div className="absolute -left-16 -top-16 h-40 w-40 rounded-full bg-white/5" />
@@ -1130,9 +1106,7 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* =====================================================
-              رسائل الخطأ
-          ====================================================== */}
+          {/* رسائل الخطأ */}
 
           {errorMessage && (
             <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5">
@@ -1165,9 +1139,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* =====================================================
-              الملخص العام
-          ====================================================== */}
+          {/* الملخص العام */}
 
           <section className="mb-8">
             <div className="mb-4">
@@ -1257,9 +1229,7 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* =====================================================
-              الوصول السريع
-          ====================================================== */}
+          {/* الوصول السريع */}
 
           <section className="mb-8">
             <div className="mb-4">
@@ -1328,9 +1298,7 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* =====================================================
-              المعاهد — مركز المتابعة الكامل
-          ====================================================== */}
+          {/* المعاهد */}
 
           <section className="mb-8">
             <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1360,10 +1328,6 @@ export default function HomePage() {
                 )}
               </div>
             </div>
-
-            {/* ===================================================
-                البحث
-            ==================================================== */}
 
             {!isItAdmin &&
               institutes.length > 3 && (
@@ -1468,12 +1432,6 @@ export default function HomePage() {
                           )
                         : 0;
 
-                    /*
-                     * =========================================
-                     * تحديد ما يحتاج تدخل المدير
-                     * =========================================
-                     */
-
                     const attendanceNeedsAction =
                       attendance.total === 0;
 
@@ -1520,9 +1478,7 @@ export default function HomePage() {
                       >
                         <div className="p-5">
 
-                          {/* =====================================
-                              رأس البطاقة
-                          ====================================== */}
+                          {/* رأس البطاقة */}
 
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex min-w-0 items-center gap-3">
@@ -1559,9 +1515,7 @@ export default function HomePage() {
                             </span>
                           </div>
 
-                          {/* =====================================
-                              الطلاب والمدرسون
-                          ====================================== */}
+                          {/* الطلاب والمدرسون */}
 
                           <div className="mt-5 grid grid-cols-2 gap-3">
                             <div className="rounded-xl bg-slate-50 p-3">
@@ -1597,9 +1551,7 @@ export default function HomePage() {
                             </div>
                           </div>
 
-                          {/* =====================================
-                              الحضور داخل بطاقة المعهد
-                          ====================================== */}
+                          {/* الحضور */}
 
                           <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
                             <div className="flex items-center justify-between gap-2">
@@ -1685,9 +1637,7 @@ export default function HomePage() {
                             </div>
                           </div>
 
-                          {/* =====================================
-                              يحتاج تدخل المدير
-                          ====================================== */}
+                          {/* يحتاج تدخل المدير */}
 
                           <div
                             className={`mt-4 rounded-xl border p-4 ${
@@ -1736,11 +1686,9 @@ export default function HomePage() {
                             {needsManagerIntervention && (
                               <div className="mt-3 space-y-2">
 
-                                {/* الحضور */}
-
                                 {attendanceNeedsAction && (
                                   <Link
-                                    href="/attendance"
+                                    href={`/attendance?instituteId=${institute.id}`}
                                     className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-amber-800 shadow-sm transition hover:bg-amber-100"
                                   >
                                     <span className="flex items-center gap-2">
@@ -1754,11 +1702,9 @@ export default function HomePage() {
                                   </Link>
                                 )}
 
-                                {/* المهام */}
-
                                 {tasksNeedAction && (
                                   <Link
-                                    href="/institute-tasks"
+                                    href={`/institute-tasks?instituteId=${institute.id}`}
                                     className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-blue-800 shadow-sm transition hover:bg-blue-50"
                                   >
                                     <span className="flex items-center gap-2">
@@ -1775,11 +1721,9 @@ export default function HomePage() {
                                   </Link>
                                 )}
 
-                                {/* الطلبات */}
-
                                 {requestsNeedAction && (
                                   <Link
-                                    href="/institute-requests"
+                                    href={`/institute-requests?instituteId=${institute.id}`}
                                     className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-amber-800 shadow-sm transition hover:bg-amber-50"
                                   >
                                     <span className="flex items-center gap-2">
@@ -1796,11 +1740,9 @@ export default function HomePage() {
                                   </Link>
                                 )}
 
-                                {/* الشكاوى */}
-
                                 {complaintsNeedAction && (
                                   <Link
-                                    href="/complaints"
+                                    href={`/complaints?instituteId=${institute.id}`}
                                     className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-red-800 shadow-sm transition hover:bg-red-50"
                                   >
                                     <span className="flex items-center gap-2">
@@ -1822,9 +1764,7 @@ export default function HomePage() {
                             )}
                           </div>
 
-                          {/* =====================================
-                              المتابعة الإدارية
-                          ====================================== */}
+                          {/* المتابعة الإدارية */}
 
                           <div className="mt-4">
                             <div className="mb-3 flex items-center gap-2">
@@ -1874,9 +1814,7 @@ export default function HomePage() {
                             </div>
                           </div>
 
-                          {/* =====================================
-                              شيخ المعهد
-                          ====================================== */}
+                          {/* شيخ المعهد */}
 
                           {institute.director_name && (
                             <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
@@ -1895,57 +1833,53 @@ export default function HomePage() {
                             </div>
                           )}
 
-                          {/* =====================================
-                              أزرار الوصول المباشر
-                          ====================================== */}
+                          {/* أزرار الوصول المباشر */}
 
                           <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
                             <Link
-                              href={`/students?institute=${institute.id}`}
+                              href={`/students?instituteId=${institute.id}`}
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               الطلاب
                             </Link>
 
                             <Link
-                              href={`/teachers?institute=${institute.id}`}
+                              href={`/teachers?instituteId=${institute.id}`}
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               المدرسون
                             </Link>
 
                             <Link
-                              href="/attendance"
+                              href={`/attendance?instituteId=${institute.id}`}
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               الحضور
                             </Link>
 
                             <Link
-                              href="/institute-tasks"
+                              href={`/institute-tasks?instituteId=${institute.id}`}
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               المهام
                             </Link>
 
                             <Link
-                              href="/institute-requests"
+                              href={`/institute-requests?instituteId=${institute.id}`}
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               الطلبات
                             </Link>
 
                             <Link
-                              href="/complaints"
+                              href={`/complaints?instituteId=${institute.id}`}
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               الشكاوى
                             </Link>
                           </div>
 
-                          {/* =====================================
-                              فتح ملف المعهد
-                          ====================================== */}
+                          {/* فتح ملف المعهد */}
 
                           <Link
                             href={`/institutes/${institute.id}`}
@@ -1963,9 +1897,7 @@ export default function HomePage() {
             )}
           </section>
 
-          {/* =====================================================
-              حالة النظام
-          ====================================================== */}
+          {/* حالة النظام */}
 
           <section className="mb-8">
             <div className="mb-4">
@@ -2029,9 +1961,7 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* =====================================================
-              الإعلانات
-          ====================================================== */}
+          {/* الإعلانات */}
 
           <section>
             <div className="mb-4">
