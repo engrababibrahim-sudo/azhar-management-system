@@ -96,6 +96,24 @@ export default function AttendanceReportPage() {
   const [reportLoading, setReportLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  const allowedRoles = [
+    "sheikh",
+    "director",
+    "super_admin",
+    "it_admin",
+  ];
+
+  const isCentralManager =
+    profile?.role === "director" ||
+    profile?.role === "super_admin";
+
+  const isInstituteUser =
+    profile?.role === "sheikh" ||
+    profile?.role === "it_admin";
+
+  /*
+   * تحميل الحساب والمعاهد أولًا
+   */
   useEffect(() => {
     loadInitialData();
   }, []);
@@ -118,7 +136,9 @@ export default function AttendanceReportPage() {
       const { data: profileData, error: profileError } =
         await supabase
           .from("profiles")
-          .select("role, institute_id, directorate_id")
+          .select(
+            "role, institute_id, directorate_id"
+          )
           .eq("id", user.id)
           .maybeSingle();
 
@@ -129,23 +149,10 @@ export default function AttendanceReportPage() {
         return;
       }
 
-      /*
-       * الصلاحيات:
-       *
-       * super_admin = مدير الإدارة التعليمية الأزهرية
-       * director   = مدير قديم للتوافق مع الحسابات السابقة
-       * sheikh     = شيخ المعهد
-       * it_admin   = مسؤول تكنولوجيا المعلومات للمعهد
-       */
-      const allowedRoles = [
-        "sheikh",
-        "director",
-        "super_admin",
-        "it_admin",
-      ];
-
       if (!allowedRoles.includes(profileData.role)) {
-        setMessage("ليس لديك صلاحية لعرض تقارير الحضور");
+        setMessage(
+          "ليس لديك صلاحية لعرض تقارير الحضور"
+        );
         setLoading(false);
         return;
       }
@@ -153,7 +160,7 @@ export default function AttendanceReportPage() {
       setProfile(profileData);
 
       /*
-       * شيخ المعهد + مسؤول IT:
+       * شيخ المعهد + مسؤول IT
        * كل واحد يرى معهده فقط.
        */
       if (
@@ -166,12 +173,14 @@ export default function AttendanceReportPage() {
           return;
         }
 
-        const { data: instituteData, error: instituteError } =
-          await supabase
-            .from("institutes")
-            .select("id, name, code")
-            .eq("id", profileData.institute_id)
-            .maybeSingle();
+        const {
+          data: instituteData,
+          error: instituteError,
+        } = await supabase
+          .from("institutes")
+          .select("id, name, code")
+          .eq("id", profileData.institute_id)
+          .maybeSingle();
 
         if (instituteError || !instituteData) {
           console.error(instituteError);
@@ -182,12 +191,13 @@ export default function AttendanceReportPage() {
 
         setInstitutes([instituteData]);
         setSelectedInstitute(instituteData.id);
+
+        return;
       }
 
       /*
-       * مدير الإدارة:
-       * super_admin أو director
-       * يرى جميع المعاهد التابعة لإدارته التعليمية.
+       * مدير الإدارة
+       * يرى جميع المعاهد التابعة للإدارة التعليمية.
        */
       if (
         profileData.role === "director" ||
@@ -201,15 +211,17 @@ export default function AttendanceReportPage() {
           return;
         }
 
-        const { data: institutesData, error: institutesError } =
-          await supabase
-            .from("institutes")
-            .select("id, name, code")
-            .eq(
-              "directorate_id",
-              profileData.directorate_id
-            )
-            .order("name");
+        const {
+          data: institutesData,
+          error: institutesError,
+        } = await supabase
+          .from("institutes")
+          .select("id, name, code")
+          .eq(
+            "directorate_id",
+            profileData.directorate_id
+          )
+          .order("name");
 
         if (institutesError) {
           console.error(institutesError);
@@ -218,23 +230,34 @@ export default function AttendanceReportPage() {
           return;
         }
 
-        setInstitutes(institutesData || []);
+        const loadedInstitutes =
+          institutesData || [];
 
-        // مدير الإدارة يبدأ على جميع المعاهد
+        setInstitutes(loadedInstitutes);
+
+        /*
+         * مدير الإدارة يبدأ على جميع المعاهد.
+         */
         setSelectedInstitute("");
       }
     } catch (error) {
       console.error(error);
       setMessage("حدث خطأ غير متوقع");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
+  /*
+   * مهم:
+   * ننتظر أن تصبح المعاهد محملة فعلًا قبل تحميل التقرير.
+   */
   useEffect(() => {
+    if (!profile) return;
+
     if (
-      (profile?.role === "sheikh" ||
-        profile?.role === "it_admin") &&
+      (profile.role === "sheikh" ||
+        profile.role === "it_admin") &&
       selectedInstitute
     ) {
       loadInstituteData(selectedInstitute);
@@ -242,35 +265,63 @@ export default function AttendanceReportPage() {
     }
 
     if (
-      profile?.role === "director" ||
-      profile?.role === "super_admin"
+      (profile.role === "director" ||
+        profile.role === "super_admin") &&
+      institutes.length > 0
     ) {
       loadDirectorateData();
     }
-  }, [profile, selectedInstitute, fromDate, toDate]);
+  }, [
+    profile,
+    selectedInstitute,
+    fromDate,
+    toDate,
+    institutes.length,
+  ]);
 
-  async function loadInstituteData(instituteId: string) {
+  /*
+   * تحميل بيانات معهد واحد
+   */
+  async function loadInstituteData(
+    instituteId: string
+  ) {
     setReportLoading(true);
     setMessage("");
 
     try {
-      const { data: classesData, error: classesError } =
-        await supabase
-          .from("classes")
-          .select("id, name, institute_id")
-          .eq("institute_id", instituteId)
-          .eq("is_active", true)
-          .order("name");
+      /*
+       * الفصول
+       */
+      const {
+        data: classesData,
+        error: classesError,
+      } = await supabase
+        .from("classes")
+        .select(
+          "id, name, institute_id"
+        )
+        .eq("institute_id", instituteId)
+        .eq("is_active", true)
+        .order("name");
 
       if (classesError) {
         console.error(classesError);
-        setMessage("حدث خطأ أثناء تحميل الفصول");
-        setReportLoading(false);
-        return;
+        setMessage(
+          "حدث خطأ أثناء تحميل الفصول"
+        );
+
+        setClasses([]);
+      } else {
+        setClasses(classesData || []);
       }
 
-      setClasses(classesData || []);
-
+      /*
+       * الطلاب
+       *
+       * مهم:
+       * لا نربط الطلاب بتاريخ الحضور.
+       * الطالب يجب أن يظهر حتى لو لم يسجل له حضور.
+       */
       const {
         data: studentsData,
         error: studentsError,
@@ -280,44 +331,66 @@ export default function AttendanceReportPage() {
           "id, full_name, student_code, class_id, institute_id"
         )
         .eq("institute_id", instituteId)
-        .eq("is_active", true)
         .order("full_name");
 
       if (studentsError) {
-        console.error(studentsError);
-        setMessage("حدث خطأ أثناء تحميل الطلاب");
+        console.error(
+          "STUDENTS REPORT ERROR:",
+          studentsError
+        );
+
+        setStudents([]);
+
+        setMessage(
+          "تعذر تحميل الطلاب من قاعدة البيانات"
+        );
+
         setReportLoading(false);
         return;
       }
 
       setStudents(studentsData || []);
 
+      /*
+       * الحضور منفصل عن الطلاب.
+       */
       await loadAttendance(instituteId);
     } catch (error) {
       console.error(error);
       setMessage("حدث خطأ غير متوقع");
+    } finally {
+      setReportLoading(false);
     }
-
-    setReportLoading(false);
   }
 
+  /*
+   * تحميل بيانات جميع معاهد الإدارة
+   */
   async function loadDirectorateData() {
     setReportLoading(true);
     setMessage("");
 
     try {
       /*
-       * إذا اختار مدير الإدارة معهداً معيناً،
-       * يتم تحميل بيانات هذا المعهد فقط.
+       * إذا اختار المدير معهدًا محددًا
        */
       if (selectedInstitute) {
-        await loadInstituteData(selectedInstitute);
+        await loadInstituteData(
+          selectedInstitute
+        );
         return;
       }
 
-      const instituteIds = institutes.map(
-        (item) => item.id
-      );
+      /*
+       * نستخدم institutes الحالية
+       * بعد التأكد أنها محملة.
+       */
+      const currentInstitutes = institutes;
+
+      const instituteIds =
+        currentInstitutes.map(
+          (item) => item.id
+        );
 
       if (instituteIds.length === 0) {
         setClasses([]);
@@ -328,44 +401,80 @@ export default function AttendanceReportPage() {
         return;
       }
 
+      /*
+       * الفصول
+       */
       const {
         data: classesData,
         error: classesError,
       } = await supabase
         .from("classes")
-        .select("id, name, institute_id")
-        .in("institute_id", instituteIds)
+        .select(
+          "id, name, institute_id"
+        )
+        .in(
+          "institute_id",
+          instituteIds
+        )
         .eq("is_active", true)
         .order("name");
 
       if (classesError) {
-        console.error(classesError);
-        setMessage("حدث خطأ أثناء تحميل الفصول");
+        console.error(
+          "CLASSES REPORT ERROR:",
+          classesError
+        );
+
+        setClasses([]);
+      } else {
+        setClasses(classesData || []);
       }
 
-      setClasses(classesData || []);
+      /*
+       * الطلاب
+       *
+       * نقرأ الطلاب من كل معهد مباشرة.
+       */
+      const studentResults =
+        await Promise.all(
+          currentInstitutes.map(
+            async (institute) => {
+              const {
+                data,
+                error,
+              } = await supabase
+                .from("students")
+                .select(
+                  "id, full_name, student_code, class_id, institute_id"
+                )
+                .eq(
+                  "institute_id",
+                  institute.id
+                )
+                .order("full_name");
 
-      const studentResults = await Promise.all(
-        institutes.map(async (institute) => {
-          const { data, error } = await supabase
-            .from("students")
-            .select(
-              "id, full_name, student_code, class_id, institute_id"
-            )
-            .eq("institute_id", institute.id)
-            .eq("is_active", true)
-            .order("full_name");
+              if (error) {
+                console.error(
+                  `STUDENTS ERROR - ${institute.name}:`,
+                  error
+                );
 
-          if (error) {
-            throw error;
-          }
+                return [];
+              }
 
-          return data || [];
-        })
-      );
+              return data || [];
+            }
+          )
+        );
 
-      setStudents(studentResults.flat());
+      const allStudents =
+        studentResults.flat();
 
+      setStudents(allStudents);
+
+      /*
+       * سجلات الحضور منفصلة.
+       */
       const {
         data: attendanceData,
         error: attendanceError,
@@ -374,43 +483,85 @@ export default function AttendanceReportPage() {
         .select(
           "student_id, attendance_date, status, institute_id"
         )
-        .in("institute_id", instituteIds)
-        .gte("attendance_date", fromDate)
-        .lte("attendance_date", toDate);
+        .in(
+          "institute_id",
+          instituteIds
+        )
+        .gte(
+          "attendance_date",
+          fromDate
+        )
+        .lte(
+          "attendance_date",
+          toDate
+        );
 
       if (attendanceError) {
-        console.error(attendanceError);
-        setMessage(
-          "حدث خطأ أثناء تحميل سجلات الحضور"
+        console.error(
+          "ATTENDANCE REPORT ERROR:",
+          attendanceError
         );
+
+        setAttendance([]);
+
+        setMessage(
+          "تم تحميل الطلاب، لكن تعذر تحميل سجلات الحضور"
+        );
+
         setReportLoading(false);
         return;
       }
 
-      setAttendance(attendanceData || []);
+      setAttendance(
+        attendanceData || []
+      );
     } catch (error) {
       console.error(error);
       setMessage("حدث خطأ غير متوقع");
+    } finally {
+      setReportLoading(false);
     }
-
-    setReportLoading(false);
   }
 
-  async function loadAttendance(instituteId: string) {
-    const { data, error } = await supabase
+  /*
+   * تحميل الحضور لمعهد واحد
+   */
+  async function loadAttendance(
+    instituteId: string
+  ) {
+    const {
+      data,
+      error,
+    } = await supabase
       .from("attendance")
       .select(
         "student_id, attendance_date, status, institute_id"
       )
-      .eq("institute_id", instituteId)
-      .gte("attendance_date", fromDate)
-      .lte("attendance_date", toDate);
+      .eq(
+        "institute_id",
+        instituteId
+      )
+      .gte(
+        "attendance_date",
+        fromDate
+      )
+      .lte(
+        "attendance_date",
+        toDate
+      );
 
     if (error) {
-      console.error(error);
-      setMessage(
-        "حدث خطأ أثناء تحميل سجلات الحضور"
+      console.error(
+        "ATTENDANCE ERROR:",
+        error
       );
+
+      setAttendance([]);
+
+      setMessage(
+        "تم تحميل الطلاب، لكن تعذر تحميل سجلات الحضور"
+      );
+
       return;
     }
 
@@ -429,97 +580,122 @@ export default function AttendanceReportPage() {
 
     setReportLoading(true);
 
-    if (
-      profile.role === "sheikh" ||
-      profile.role === "it_admin"
-    ) {
-      if (selectedInstitute) {
-        await loadInstituteData(selectedInstitute);
+    try {
+      if (
+        profile.role === "sheikh" ||
+        profile.role === "it_admin"
+      ) {
+        if (selectedInstitute) {
+          await loadInstituteData(
+            selectedInstitute
+          );
+        }
+      } else {
+        await loadDirectorateData();
       }
-    } else {
-      await loadDirectorateData();
+    } finally {
+      setReportLoading(false);
     }
-
-    setReportLoading(false);
   }
 
+  /*
+   * التقرير التفصيلي للطلاب
+   */
   const report = useMemo<ReportRow[]>(() => {
     let filteredStudents = students;
 
     if (selectedClass) {
-      filteredStudents = filteredStudents.filter(
-        (student) =>
-          student.class_id === selectedClass
-      );
+      filteredStudents =
+        filteredStudents.filter(
+          (student) =>
+            student.class_id ===
+            selectedClass
+        );
     }
 
     if (searchTerm.trim()) {
-      const search = searchTerm.toLowerCase();
+      const search =
+        searchTerm
+          .trim()
+          .toLowerCase();
 
-      filteredStudents = filteredStudents.filter(
-        (student) =>
-          student.full_name
-            .toLowerCase()
-            .includes(search) ||
-          (student.student_code || "")
-            .toLowerCase()
-            .includes(search)
-      );
+      filteredStudents =
+        filteredStudents.filter(
+          (student) =>
+            student.full_name
+              .toLowerCase()
+              .includes(search) ||
+            (student.student_code || "")
+              .toLowerCase()
+              .includes(search)
+        );
     }
 
-    return filteredStudents.map((student) => {
-      const records = attendance.filter(
-        (record) =>
-          record.student_id === student.id
-      );
+    return filteredStudents.map(
+      (student) => {
+        const records =
+          attendance.filter(
+            (record) =>
+              record.student_id ===
+              student.id
+          );
 
-      const present = records.filter(
-        (record) =>
-          record.status === "present"
-      ).length;
+        const present =
+          records.filter(
+            (record) =>
+              record.status ===
+              "present"
+          ).length;
 
-      const absent = records.filter(
-        (record) =>
-          record.status === "absent"
-      ).length;
+        const absent =
+          records.filter(
+            (record) =>
+              record.status ===
+              "absent"
+          ).length;
 
-      const late = records.filter(
-        (record) =>
-          record.status === "late"
-      ).length;
+        const late =
+          records.filter(
+            (record) =>
+              record.status ===
+              "late"
+          ).length;
 
-      const excused = records.filter(
-        (record) =>
-          record.status === "excused"
-      ).length;
+        const excused =
+          records.filter(
+            (record) =>
+              record.status ===
+              "excused"
+          ).length;
 
-      const total =
-        present +
-        absent +
-        late +
-        excused;
+        const total =
+          present +
+          absent +
+          late +
+          excused;
 
-      const percentage =
-        total > 0
-          ? Math.round(
-              ((present +
-                late +
-                excused) /
-                total) *
-                100
-            )
-          : 0;
+        const percentage =
+          total > 0
+            ? Math.round(
+                ((present +
+                  late +
+                  excused) /
+                  total) *
+                  100
+              )
+            : 0;
 
-      return {
-        student,
-        present,
-        absent,
-        late,
-        excused,
-        total,
-        percentage,
-      };
-    });
+        return {
+          student,
+          present,
+          absent,
+          late,
+          excused,
+          total,
+          percentage,
+        };
+      }
+    );
   }, [
     students,
     attendance,
@@ -527,6 +703,9 @@ export default function AttendanceReportPage() {
     searchTerm,
   ]);
 
+  /*
+   * إجمالي التقرير
+   */
   const totals = useMemo(() => {
     return report.reduce(
       (acc, row) => {
@@ -561,85 +740,109 @@ export default function AttendanceReportPage() {
         )
       : 0;
 
+  /*
+   * ملخص المعاهد
+   */
   const instituteSummary =
     useMemo<InstituteSummary[]>(() => {
-      return institutes.map((institute) => {
-        const instituteStudents =
-          students.filter(
-            (student) =>
-              student.institute_id ===
-              institute.id
-          );
+      return institutes.map(
+        (institute) => {
+          const instituteStudents =
+            students.filter(
+              (student) =>
+                student.institute_id ===
+                institute.id
+            );
 
-        const studentIds = new Set(
-          instituteStudents.map(
-            (student) => student.id
-          )
-        );
-
-        const records = attendance.filter(
-          (record) =>
-            studentIds.has(record.student_id)
-        );
-
-        const present = records.filter(
-          (record) =>
-            record.status === "present"
-        ).length;
-
-        const absent = records.filter(
-          (record) =>
-            record.status === "absent"
-        ).length;
-
-        const late = records.filter(
-          (record) =>
-            record.status === "late"
-        ).length;
-
-        const excused = records.filter(
-          (record) =>
-            record.status === "excused"
-        ).length;
-
-        const total =
-          present +
-          absent +
-          late +
-          excused;
-
-        const percentage =
-          total > 0
-            ? Math.round(
-                ((present +
-                  late +
-                  excused) /
-                  total) *
-                  100
+          const studentIds =
+            new Set(
+              instituteStudents.map(
+                (student) =>
+                  student.id
               )
-            : 0;
+            );
 
-        return {
-          institute,
-          students:
-            instituteStudents.length,
-          present,
-          absent,
-          late,
-          excused,
-          total,
-          percentage,
-        };
-      });
+          const records =
+            attendance.filter(
+              (record) =>
+                studentIds.has(
+                  record.student_id
+                )
+            );
+
+          const present =
+            records.filter(
+              (record) =>
+                record.status ===
+                "present"
+            ).length;
+
+          const absent =
+            records.filter(
+              (record) =>
+                record.status ===
+                "absent"
+            ).length;
+
+          const late =
+            records.filter(
+              (record) =>
+                record.status ===
+                "late"
+            ).length;
+
+          const excused =
+            records.filter(
+              (record) =>
+                record.status ===
+                "excused"
+            ).length;
+
+          const total =
+            present +
+            absent +
+            late +
+            excused;
+
+          const percentage =
+            total > 0
+              ? Math.round(
+                  ((present +
+                    late +
+                    excused) /
+                    total) *
+                    100
+                )
+              : 0;
+
+          return {
+            institute,
+            students:
+              instituteStudents.length,
+            present,
+            absent,
+            late,
+            excused,
+            total,
+            percentage,
+          };
+        }
+      );
     }, [
       institutes,
       students,
       attendance,
     ]);
 
+  /*
+   * Loading
+   */
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main
+        className="min-h-screen bg-gray-50 p-8"
+        dir="rtl"
+      >
         <div className="max-w-7xl mx-auto text-center py-20">
           <RefreshCw
             className="mx-auto animate-spin mb-4 text-blue-600"
@@ -655,21 +858,19 @@ export default function AttendanceReportPage() {
   }
 
   /*
-   * الحماية النهائية للصفحة.
+   * الحماية النهائية
    */
-  const allowedPageRoles = [
-    "sheikh",
-    "director",
-    "super_admin",
-    "it_admin",
-  ];
-
   if (
     !profile ||
-    !allowedPageRoles.includes(profile.role)
+    !allowedRoles.includes(
+      profile.role
+    )
   ) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main
+        className="min-h-screen bg-gray-50 p-8"
+        dir="rtl"
+      >
         <div className="max-w-3xl mx-auto bg-white rounded-2xl p-8 text-center">
           <ShieldCheck
             className="mx-auto text-red-500 mb-4"
@@ -688,16 +889,8 @@ export default function AttendanceReportPage() {
     );
   }
 
-  const isDirector =
-    profile.role === "director" ||
-    profile.role === "super_admin";
-
-  const isInstituteUser =
-    profile.role === "sheikh" ||
-    profile.role === "it_admin";
-
   const isAllInstitutes =
-    isDirector &&
+    isCentralManager &&
     selectedInstitute === "";
 
   return (
@@ -722,9 +915,10 @@ export default function AttendanceReportPage() {
                 </h1>
 
                 <p className="text-gray-500 mt-1">
-                  {isDirector
+                  {isCentralManager
                     ? "لوحة المتابعة المركزية للإدارة التعليمية الأزهرية"
-                    : profile.role === "it_admin"
+                    : profile.role ===
+                      "it_admin"
                       ? "تقارير وإحصائيات معهدك"
                       : "متابعة وتحليل حضور الطلاب خلال الفترة المحددة"}
                 </p>
@@ -779,23 +973,28 @@ export default function AttendanceReportPage() {
               </label>
 
               <select
-                value={selectedInstitute}
+                value={
+                  selectedInstitute
+                }
                 onChange={(e) => {
-                  /*
-                   * مسؤول IT وشيخ المعهد لا يستطيعان
-                   * تغيير المعهد.
-                   */
-                  if (isInstituteUser) return;
+                  if (
+                    isInstituteUser
+                  ) {
+                    return;
+                  }
 
                   setSelectedInstitute(
                     e.target.value
                   );
+
                   setSelectedClass("");
                 }}
-                disabled={isInstituteUser}
+                disabled={
+                  isInstituteUser
+                }
                 className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
               >
-                {isDirector && (
+                {isCentralManager && (
                   <option value="">
                     جميع المعاهد
                   </option>
@@ -804,10 +1003,16 @@ export default function AttendanceReportPage() {
                 {institutes.map(
                   (institute) => (
                     <option
-                      key={institute.id}
-                      value={institute.id}
+                      key={
+                        institute.id
+                      }
+                      value={
+                        institute.id
+                      }
                     >
-                      {institute.name}
+                      {
+                        institute.name
+                      }
                     </option>
                   )
                 )}
@@ -821,7 +1026,9 @@ export default function AttendanceReportPage() {
               </label>
 
               <select
-                value={selectedClass}
+                value={
+                  selectedClass
+                }
                 onChange={(e) =>
                   setSelectedClass(
                     e.target.value
@@ -836,10 +1043,16 @@ export default function AttendanceReportPage() {
                 {classes.map(
                   (classItem) => (
                     <option
-                      key={classItem.id}
-                      value={classItem.id}
+                      key={
+                        classItem.id
+                      }
+                      value={
+                        classItem.id
+                      }
                     >
-                      {classItem.name}
+                      {
+                        classItem.name
+                      }
                     </option>
                   )
                 )}
@@ -860,7 +1073,9 @@ export default function AttendanceReportPage() {
 
                 <input
                   type="date"
-                  value={fromDate}
+                  value={
+                    fromDate
+                  }
                   onChange={(e) =>
                     setFromDate(
                       e.target.value
@@ -885,7 +1100,9 @@ export default function AttendanceReportPage() {
 
                 <input
                   type="date"
-                  value={toDate}
+                  value={
+                    toDate
+                  }
                   onChange={(e) =>
                     setToDate(
                       e.target.value
@@ -911,7 +1128,9 @@ export default function AttendanceReportPage() {
 
               <input
                 type="text"
-                value={searchTerm}
+                value={
+                  searchTerm
+                }
                 onChange={(e) =>
                   setSearchTerm(
                     e.target.value
@@ -924,7 +1143,7 @@ export default function AttendanceReportPage() {
           </div>
         </div>
 
-        {/* Main Statistics */}
+        {/* Statistics */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
 
           <div className="bg-white rounded-2xl shadow-sm p-5">
@@ -938,7 +1157,7 @@ export default function AttendanceReportPage() {
             </p>
 
             <p className="text-2xl font-bold text-gray-800">
-              {isDirector
+              {isCentralManager
                 ? institutes.length
                 : 1}
             </p>
@@ -1020,135 +1239,164 @@ export default function AttendanceReportPage() {
           </div>
         </div>
 
-        {/* Directorate Institute Summary */}
-        {isDirector && isAllInstitutes && (
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
+        {/* Institute Summary */}
+        {isCentralManager &&
+          isAllInstitutes && (
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
 
-            <div className="p-6 border-b">
-              <div className="flex items-center gap-3">
-                <Building2
-                  size={24}
-                  className="text-blue-600"
-                />
+              <div className="p-6 border-b">
+                <div className="flex items-center gap-3">
+                  <Building2
+                    size={24}
+                    className="text-blue-600"
+                  />
 
-                <div>
-                  <h2 className="text-xl font-bold text-gray-800">
-                    ملخص أداء المعاهد
-                  </h2>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-800">
+                      ملخص أداء المعاهد
+                    </h2>
 
-                  <p className="text-gray-500 text-sm mt-1">
-                    مقارنة مؤشرات الحضور والطلاب بين المعاهد التابعة للإدارة
-                  </p>
+                    <p className="text-gray-500 text-sm mt-1">
+                      مقارنة مؤشرات الحضور والطلاب بين المعاهد التابعة للإدارة
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {instituteSummary.length === 0 ? (
-              <div className="text-center py-14 text-gray-500">
-                لا توجد معاهد مسجلة
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              {instituteSummary.length ===
+              0 ? (
+                <div className="text-center py-14 text-gray-500">
+                  لا توجد معاهد مسجلة
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
 
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="text-right px-5 py-4">
-                        المعهد
-                      </th>
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-right px-5 py-4">
+                          المعهد
+                        </th>
 
-                      <th className="text-center px-5 py-4">
-                        الطلاب
-                      </th>
+                        <th className="text-center px-5 py-4">
+                          الطلاب
+                        </th>
 
-                      <th className="text-center px-5 py-4">
-                        الحضور
-                      </th>
+                        <th className="text-center px-5 py-4">
+                          الحضور
+                        </th>
 
-                      <th className="text-center px-5 py-4">
-                        الغياب
-                      </th>
+                        <th className="text-center px-5 py-4">
+                          الغياب
+                        </th>
 
-                      <th className="text-center px-5 py-4">
-                        التأخير
-                      </th>
+                        <th className="text-center px-5 py-4">
+                          التأخير
+                        </th>
 
-                      <th className="text-center px-5 py-4">
-                        المعذور
-                      </th>
+                        <th className="text-center px-5 py-4">
+                          المعذور
+                        </th>
 
-                      <th className="text-center px-5 py-4">
-                        نسبة الحضور
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y">
-                    {instituteSummary.map((row) => (
-                      <tr
-                        key={row.institute.id}
-                        className="hover:bg-gray-50"
-                      >
-                        <td className="px-5 py-5">
-                          <div className="font-semibold text-gray-800">
-                            {row.institute.name}
-                          </div>
-
-                          <div className="text-xs text-gray-400 mt-1">
-                            {row.institute.code}
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-5 text-center font-semibold">
-                          {row.students}
-                        </td>
-
-                        <td className="px-5 py-5 text-center">
-                          <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">
-                            {row.present}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-5 text-center">
-                          <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-red-50 text-red-700 font-semibold">
-                            {row.absent}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-5 text-center">
-                          <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">
-                            {row.late}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-5 text-center">
-                          <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
-                            {row.excused}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-5 text-center">
-                          <span
-                            className={`inline-flex px-3 py-1 rounded-lg font-bold ${
-                              row.percentage >= 90
-                                ? "bg-green-50 text-green-700"
-                                : row.percentage >= 75
-                                  ? "bg-yellow-50 text-yellow-700"
-                                  : "bg-red-50 text-red-700"
-                            }`}
-                          >
-                            {row.percentage}%
-                          </span>
-                        </td>
+                        <th className="text-center px-5 py-4">
+                          نسبة الحضور
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
+                    </thead>
 
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+                    <tbody className="divide-y">
+                      {instituteSummary.map(
+                        (row) => (
+                          <tr
+                            key={
+                              row.institute
+                                .id
+                            }
+                            className="hover:bg-gray-50"
+                          >
+                            <td className="px-5 py-5">
+                              <div className="font-semibold text-gray-800">
+                                {
+                                  row
+                                    .institute
+                                    .name
+                                }
+                              </div>
+
+                              <div className="text-xs text-gray-400 mt-1">
+                                {
+                                  row
+                                    .institute
+                                    .code
+                                }
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-5 text-center font-semibold">
+                              {
+                                row.students
+                              }
+                            </td>
+
+                            <td className="px-5 py-5 text-center">
+                              <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">
+                                {
+                                  row.present
+                                }
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-5 text-center">
+                              <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-red-50 text-red-700 font-semibold">
+                                {
+                                  row.absent
+                                }
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-5 text-center">
+                              <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">
+                                {
+                                  row.late
+                                }
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-5 text-center">
+                              <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
+                                {
+                                  row.excused
+                                }
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-5 text-center">
+                              <span
+                                className={`inline-flex px-3 py-1 rounded-lg font-bold ${
+                                  row.percentage >=
+                                  90
+                                    ? "bg-green-50 text-green-700"
+                                    : row.percentage >=
+                                      75
+                                      ? "bg-yellow-50 text-yellow-700"
+                                      : "bg-red-50 text-red-700"
+                                }`}
+                              >
+                                {
+                                  row.percentage
+                                }
+                                %
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
         {/* Student Details */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -1164,7 +1412,8 @@ export default function AttendanceReportPage() {
                 <p className="text-gray-500 text-sm mt-1">
                   {isAllInstitutes
                     ? "تفاصيل الطلاب في جميع المعاهد التابعة للإدارة"
-                    : profile.role === "it_admin"
+                    : profile.role ===
+                      "it_admin"
                       ? "تفاصيل طلاب المعهد التابع للحساب"
                       : "التقرير حسب الفترة والفصل المحددين"}
                 </p>
@@ -1173,20 +1422,22 @@ export default function AttendanceReportPage() {
               <div className="text-sm text-gray-500">
                 عدد النتائج:
                 <span className="font-bold text-gray-800 mr-1">
-                  {report.length}
+                  {
+                    report.length
+                  }
                 </span>
               </div>
 
             </div>
           </div>
 
-          {report.length === 0 ? (
+          {report.length ===
+          0 ? (
             <div className="text-center py-16 text-gray-500">
               لا توجد بيانات مطابقة للفترة أو البحث المحدد
             </div>
           ) : (
             <div className="overflow-x-auto">
-
               <table className="w-full">
 
                 <thead className="bg-gray-50">
@@ -1235,92 +1486,126 @@ export default function AttendanceReportPage() {
 
                 <tbody className="divide-y">
 
-                  {report.map((row) => {
-                    const institute = institutes.find(
-                      (item) =>
-                        item.id ===
-                        row.student.institute_id
-                    );
+                  {report.map(
+                    (row) => {
+                      const institute =
+                        institutes.find(
+                          (item) =>
+                            item.id ===
+                            row
+                              .student
+                              .institute_id
+                        );
 
-                    return (
-                      <tr
-                        key={row.student.id}
-                        className="hover:bg-gray-50"
-                      >
+                      return (
+                        <tr
+                          key={
+                            row
+                              .student
+                              .id
+                          }
+                          className="hover:bg-gray-50"
+                        >
 
-                        {isAllInstitutes && (
+                          {isAllInstitutes && (
+                            <td className="px-5 py-5">
+                              <div className="text-sm font-semibold text-gray-700">
+                                {
+                                  institute?.name ||
+                                  "-"
+                                }
+                              </div>
+                            </td>
+                          )}
+
                           <td className="px-5 py-5">
-                            <div className="text-sm font-semibold text-gray-700">
-                              {institute?.name || "-"}
+                            <div className="font-semibold text-gray-800">
+                              {
+                                row
+                                  .student
+                                  .full_name
+                              }
                             </div>
                           </td>
-                        )}
 
-                        <td className="px-5 py-5">
-                          <div className="font-semibold text-gray-800">
-                            {row.student.full_name}
-                          </div>
-                        </td>
+                          <td className="px-5 py-5 text-gray-500">
+                            {
+                              row
+                                .student
+                                .student_code ||
+                              "-"
+                            }
+                          </td>
 
-                        <td className="px-5 py-5 text-gray-500">
-                          {row.student.student_code || "-"}
-                        </td>
+                          <td className="px-5 py-5 text-center">
+                            <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">
+                              {
+                                row.present
+                              }
+                            </span>
+                          </td>
 
-                        <td className="px-5 py-5 text-center">
-                          <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">
-                            {row.present}
-                          </span>
-                        </td>
+                          <td className="px-5 py-5 text-center">
+                            <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-red-50 text-red-700 font-semibold">
+                              {
+                                row.absent
+                              }
+                            </span>
+                          </td>
 
-                        <td className="px-5 py-5 text-center">
-                          <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-red-50 text-red-700 font-semibold">
-                            {row.absent}
-                          </span>
-                        </td>
+                          <td className="px-5 py-5 text-center">
+                            <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">
+                              {
+                                row.late
+                              }
+                            </span>
+                          </td>
 
-                        <td className="px-5 py-5 text-center">
-                          <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">
-                            {row.late}
-                          </span>
-                        </td>
+                          <td className="px-5 py-5 text-center">
+                            <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
+                              {
+                                row.excused
+                              }
+                            </span>
+                          </td>
 
-                        <td className="px-5 py-5 text-center">
-                          <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
-                            {row.excused}
-                          </span>
-                        </td>
+                          <td className="px-5 py-5 text-center font-semibold">
+                            {
+                              row.total
+                            }
+                          </td>
 
-                        <td className="px-5 py-5 text-center font-semibold">
-                          {row.total}
-                        </td>
+                          <td className="px-5 py-5 text-center">
+                            <span
+                              className={`inline-flex px-3 py-1 rounded-lg font-bold ${
+                                row.percentage >=
+                                90
+                                  ? "bg-green-50 text-green-700"
+                                  : row.percentage >=
+                                    75
+                                    ? "bg-yellow-50 text-yellow-700"
+                                    : "bg-red-50 text-red-700"
+                              }`}
+                            >
+                              {
+                                row.percentage
+                              }
+                              %
+                            </span>
+                          </td>
 
-                        <td className="px-5 py-5 text-center">
-                          <span
-                            className={`inline-flex px-3 py-1 rounded-lg font-bold ${
-                              row.percentage >= 90
-                                ? "bg-green-50 text-green-700"
-                                : row.percentage >= 75
-                                  ? "bg-yellow-50 text-yellow-700"
-                                  : "bg-red-50 text-red-700"
-                            }`}
-                          >
-                            {row.percentage}%
-                          </span>
-                        </td>
-
-                      </tr>
-                    );
-                  })}
+                        </tr>
+                      );
+                    }
+                  )}
 
                 </tbody>
 
               </table>
-
             </div>
           )}
 
         </div>
-
       </div>
     </main>
   );
