@@ -24,6 +24,7 @@ type Role =
   | "super_admin"
   | "director"
   | "deputy"
+  | "it_admin"
   | "employee"
   | "sheikh"
   | "teacher"
@@ -151,6 +152,15 @@ export default function ComplaintsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  /*
+   * undefined = لم يتم قراءة الرابط بعد
+   * null      = لا يوجد instituteId في الرابط
+   * string    = يوجد معهد محدد في الرابط
+   */
+  const [requestedInstituteId, setRequestedInstituteId] = useState<
+    string | null | undefined
+  >(undefined);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -170,7 +180,8 @@ export default function ComplaintsPage() {
 
   const isDirector =
     profile?.role === "director" ||
-    profile?.role === "super_admin";
+    profile?.role === "super_admin" ||
+    profile?.role === "deputy";
 
   const canCreateComplaint =
     profile?.role === "parent" ||
@@ -182,14 +193,40 @@ export default function ComplaintsPage() {
     profile?.role === "director" ||
     profile?.role === "super_admin";
 
-  async function loadData() {
+  /*
+   * ---------------------------------------------------------
+   * Read instituteId from URL
+   * ---------------------------------------------------------
+   */
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const instituteId = params.get("instituteId");
+
+    setRequestedInstituteId(instituteId);
+  }, []);
+
+  /*
+   * ---------------------------------------------------------
+   * Load data
+   * ---------------------------------------------------------
+   */
+
+  async function loadData(
+    requestedInstituteIdOverride?: string | null
+  ) {
     setLoading(true);
     setError("");
 
     try {
       const {
         data: { user },
+        error: authError,
       } = await supabase.auth.getUser();
+
+      if (authError) {
+        throw authError;
+      }
 
       if (!user) {
         setError("يجب تسجيل الدخول أولًا.");
@@ -197,14 +234,22 @@ export default function ComplaintsPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select(
-            "id, role, full_name, institute_id, directorate_id"
-          )
-          .eq("id", user.id)
-          .single();
+      /*
+       * -------------------------------------------------------
+       * Current profile
+       * -------------------------------------------------------
+       */
+
+      const {
+        data: profileData,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select(
+          "id, role, full_name, institute_id, directorate_id"
+        )
+        .eq("id", user.id)
+        .single();
 
       if (profileError || !profileData) {
         setError(
@@ -220,9 +265,26 @@ export default function ComplaintsPage() {
       setProfile(currentProfile);
 
       /*
-       * ---------------------------------------------------------
+       * -------------------------------------------------------
+       * Determine account scope
+       * -------------------------------------------------------
+       */
+
+      const isCentralManager =
+        currentProfile.role === "super_admin" ||
+        currentProfile.role === "director" ||
+        currentProfile.role === "deputy";
+
+      const isInstituteUser =
+        currentProfile.role === "sheikh" ||
+        currentProfile.role === "teacher" ||
+        currentProfile.role === "employee" ||
+        currentProfile.role === "it_admin";
+
+      /*
+       * -------------------------------------------------------
        * Load institutes
-       * ---------------------------------------------------------
+       * -------------------------------------------------------
        */
 
       let instituteQuery = supabase
@@ -230,13 +292,32 @@ export default function ComplaintsPage() {
         .select("id, name, directorate_id")
         .order("name");
 
-      if (
-        currentProfile.role !== "super_admin" &&
-        currentProfile.directorate_id
-      ) {
+      if (isCentralManager) {
+        if (!currentProfile.directorate_id) {
+          setInstitutes([]);
+          setComplaints([]);
+          setLoading(false);
+          return;
+        }
+
         instituteQuery = instituteQuery.eq(
           "directorate_id",
           currentProfile.directorate_id
+        );
+      } else if (
+        isInstituteUser &&
+        currentProfile.institute_id
+      ) {
+        instituteQuery = instituteQuery.eq(
+          "id",
+          currentProfile.institute_id
+        );
+      } else if (
+        currentProfile.role !== "parent"
+      ) {
+        instituteQuery = instituteQuery.eq(
+          "id",
+          "00000000-0000-0000-0000-000000000000"
         );
       }
 
@@ -258,9 +339,67 @@ export default function ComplaintsPage() {
       setInstitutes(currentInstitutes);
 
       /*
-       * ---------------------------------------------------------
+       * -------------------------------------------------------
+       * Determine effective institute
+       *
+       * Central manager:
+       *   بدون instituteId => كل المعاهد
+       *   مع instituteId    => المعهد المحدد فقط
+       *
+       * Institute user:
+       *   دائمًا معهد الحساب
+       *   ويتم تجاهل أي instituteId في الرابط
+       * -------------------------------------------------------
+       */
+
+      let effectiveInstituteIds =
+        currentInstitutes.map(
+          (institute) => institute.id
+        );
+
+      if (isCentralManager) {
+        if (requestedInstituteIdOverride) {
+          const requestedInstitute =
+            currentInstitutes.find(
+              (institute) =>
+                institute.id ===
+                requestedInstituteIdOverride
+            );
+
+          /*
+           * حماية مهمة:
+           * لو المعهد غير موجود داخل مديرية المدير
+           * لا نسمح بعرض أي بيانات.
+           */
+
+          if (!requestedInstitute) {
+            setComplaints([]);
+            setInstituteFilter("all");
+            setLoading(false);
+
+            setError(
+              "المعهد المطلوب غير تابع للإدارة التعليمية الحالية."
+            );
+
+            return;
+          }
+
+          effectiveInstituteIds = [
+            requestedInstitute.id,
+          ];
+
+          setInstituteFilter(
+            requestedInstitute.id
+          );
+        } else {
+          setInstituteFilter("all");
+        }
+      }
+
+      /*
+       * -------------------------------------------------------
        * Load complaints
-       * ---------------------------------------------------------
+       * -------------------------------------------------------
        */
 
       let query = supabase
@@ -291,19 +430,17 @@ export default function ComplaintsPage() {
           )
         `
         )
-        .order("created_at", { ascending: false });
+        .order("created_at", {
+          ascending: false,
+        });
 
       /*
-       * Sheikh / teacher / employee
-       * ------------------------------------
-       * يرون شكاوى معهدهم فقط
+       * -------------------------------------------------------
+       * Institute users
+       * -------------------------------------------------------
        */
 
-      if (
-        currentProfile.role === "sheikh" ||
-        currentProfile.role === "teacher" ||
-        currentProfile.role === "employee"
-      ) {
+      if (isInstituteUser) {
         if (!currentProfile.institute_id) {
           setComplaints([]);
           setLoading(false);
@@ -317,36 +454,42 @@ export default function ComplaintsPage() {
       }
 
       /*
+       * -------------------------------------------------------
        * Parent
-       * ------------------------------------
-       * ولي الأمر يرى شكاواه فقط
+       * -------------------------------------------------------
        */
 
       if (currentProfile.role === "parent") {
-        query = query.eq("parent_id", user.id);
+        query = query.eq(
+          "parent_id",
+          user.id
+        );
       }
 
       /*
-       * Director
-       * ------------------------------------
-       * مدير الإدارة يرى فقط معاهد مديريتـه
+       * -------------------------------------------------------
+       * Central manager
+       * -------------------------------------------------------
        */
 
-      if (
-        currentProfile.role === "director" ||
-        currentProfile.role === "deputy"
-      ) {
-        if (!currentProfile.directorate_id) {
+      if (isCentralManager) {
+        if (
+          !currentProfile.directorate_id
+        ) {
           setComplaints([]);
           setLoading(false);
           return;
         }
 
-        const instituteIds = currentInstitutes.map(
-          (institute) => institute.id
-        );
+        /*
+         * مهم جدًا:
+         * نستخدم effectiveInstituteIds
+         * وليس كل المعاهد.
+         */
 
-        if (instituteIds.length === 0) {
+        if (
+          effectiveInstituteIds.length === 0
+        ) {
           setComplaints([]);
           setLoading(false);
           return;
@@ -354,9 +497,15 @@ export default function ComplaintsPage() {
 
         query = query.in(
           "institute_id",
-          instituteIds
+          effectiveInstituteIds
         );
       }
+
+      /*
+       * -------------------------------------------------------
+       * Execute complaint query
+       * -------------------------------------------------------
+       */
 
       const {
         data,
@@ -369,24 +518,52 @@ export default function ComplaintsPage() {
           complaintsError
         );
 
-        setError(complaintsError.message);
+        setError(
+          complaintsError.message
+        );
+
         setComplaints([]);
       } else {
-        const normalizedComplaints: Complaint[] = (
-          data || []
-        ).map((complaint: any) => ({
-          ...complaint,
-          institute: Array.isArray(
-            complaint.institute
-          )
-            ? complaint.institute[0] ?? null
-            : complaint.institute ?? null,
-        }));
+        const normalizedComplaints: Complaint[] =
+          (data || []).map(
+            (complaint: any) => ({
+              ...complaint,
+              institute:
+                Array.isArray(
+                  complaint.institute
+                )
+                  ? complaint.institute[0] ??
+                    null
+                  : complaint.institute ??
+                    null,
+            })
+          );
 
-        setComplaints(normalizedComplaints);
+        /*
+         * حماية إضافية في الواجهة:
+         * لو المدير فتح بطاقة معهد محدد،
+         * نتأكد أن البيانات المعروضة تخص هذا المعهد فقط.
+         */
+
+        const finalComplaints =
+          isCentralManager &&
+          requestedInstituteIdOverride
+            ? normalizedComplaints.filter(
+                (complaint) =>
+                  complaint.institute_id ===
+                  requestedInstituteIdOverride
+              )
+            : normalizedComplaints;
+
+        setComplaints(
+          finalComplaints
+        );
       }
     } catch (err) {
-      console.error("LOAD COMPLAINTS ERROR:", err);
+      console.error(
+        "LOAD COMPLAINTS ERROR:",
+        err
+      );
 
       setError(
         err instanceof Error
@@ -398,48 +575,70 @@ export default function ComplaintsPage() {
     setLoading(false);
   }
 
+  /*
+   * ---------------------------------------------------------
+   * Initial load
+   * ---------------------------------------------------------
+   *
+   * لا نحمل البيانات إلا بعد معرفة instituteId
+   * من الرابط، حتى لا يظهر كل المعاهد لحظيًا.
+   */
+
   useEffect(() => {
-    loadData();
-  }, []);
+    if (requestedInstituteId !== undefined) {
+      loadData(
+        requestedInstituteId
+      );
+    }
+  }, [requestedInstituteId]);
+
+  /*
+   * ---------------------------------------------------------
+   * Filter complaints
+   * ---------------------------------------------------------
+   */
 
   const filteredComplaints = useMemo(() => {
-    const search = searchTerm
-      .trim()
-      .toLowerCase();
+    const search =
+      searchTerm.trim().toLowerCase();
 
-    return complaints.filter((complaint) => {
-      const matchesSearch =
-        !search ||
-        complaint.title
-          .toLowerCase()
-          .includes(search) ||
-        complaint.description
-          .toLowerCase()
-          .includes(search) ||
-        complaint.institute?.name
-          ?.toLowerCase()
-          .includes(search);
+    return complaints.filter(
+      (complaint) => {
+        const matchesSearch =
+          !search ||
+          complaint.title
+            .toLowerCase()
+            .includes(search) ||
+          complaint.description
+            .toLowerCase()
+            .includes(search) ||
+          complaint.institute?.name
+            ?.toLowerCase()
+            .includes(search);
 
-      const matchesStatus =
-        statusFilter === "all" ||
-        complaint.status === statusFilter;
+        const matchesStatus =
+          statusFilter === "all" ||
+          complaint.status ===
+            statusFilter;
 
-      const matchesPriority =
-        priorityFilter === "all" ||
-        complaint.priority === priorityFilter;
+        const matchesPriority =
+          priorityFilter === "all" ||
+          complaint.priority ===
+            priorityFilter;
 
-      const matchesInstitute =
-        instituteFilter === "all" ||
-        complaint.institute_id ===
-          instituteFilter;
+        const matchesInstitute =
+          instituteFilter === "all" ||
+          complaint.institute_id ===
+            instituteFilter;
 
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesPriority &&
-        matchesInstitute
-      );
-    });
+        return (
+          matchesSearch &&
+          matchesStatus &&
+          matchesPriority &&
+          matchesInstitute
+        );
+      }
+    );
   }, [
     complaints,
     searchTerm,
@@ -448,29 +647,47 @@ export default function ComplaintsPage() {
     instituteFilter,
   ]);
 
+  /*
+   * ---------------------------------------------------------
+   * Statistics
+   * ---------------------------------------------------------
+   */
+
   const statistics = useMemo(() => {
     return {
       total: complaints.length,
 
       newCount: complaints.filter(
-        (item) => item.status === "new"
+        (item) =>
+          item.status === "new"
       ).length,
 
       inProgress: complaints.filter(
-        (item) => item.status === "in_progress"
+        (item) =>
+          item.status ===
+          "in_progress"
       ).length,
 
       escalated: complaints.filter(
-        (item) => item.status === "escalated"
+        (item) =>
+          item.status ===
+          "escalated"
       ).length,
 
       resolved: complaints.filter(
         (item) =>
-          item.status === "resolved" ||
+          item.status ===
+            "resolved" ||
           item.status === "closed"
       ).length,
     };
   }, [complaints]);
+
+  /*
+   * ---------------------------------------------------------
+   * Create complaint
+   * ---------------------------------------------------------
+   */
 
   async function createComplaint() {
     if (!profile) return;
@@ -500,32 +717,36 @@ export default function ComplaintsPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        alert("يجب تسجيل الدخول أولًا.");
+        alert(
+          "يجب تسجيل الدخول أولًا."
+        );
         setSaving(false);
         return;
       }
 
-      const { error: insertError } =
-        await supabase
-          .from("complaints")
-          .insert({
-            institute_id: profile.institute_id,
-            parent_id:
-              profile.role === "parent"
-                ? user.id
-                : null,
-            created_by: user.id,
-            source:
-              profile.role === "parent"
-                ? "parent"
-                : "institute",
-            complaint_type: newType,
-            title: newTitle.trim(),
-            description:
-              newDescription.trim(),
-            priority: newPriority,
-            status: "new",
-          });
+      const {
+        error: insertError,
+      } = await supabase
+        .from("complaints")
+        .insert({
+          institute_id:
+            profile.institute_id,
+          parent_id:
+            profile.role === "parent"
+              ? user.id
+              : null,
+          created_by: user.id,
+          source:
+            profile.role === "parent"
+              ? "parent"
+              : "institute",
+          complaint_type: newType,
+          title: newTitle.trim(),
+          description:
+            newDescription.trim(),
+          priority: newPriority,
+          status: "new",
+        });
 
       if (insertError) {
         console.error(
@@ -548,16 +769,29 @@ export default function ComplaintsPage() {
       setNewPriority("normal");
       setShowNewComplaint(false);
 
-      alert("تم إرسال الشكوى بنجاح ✅");
+      alert(
+        "تم إرسال الشكوى بنجاح ✅"
+      );
 
-      await loadData();
+      await loadData(
+        requestedInstituteId
+      );
     } finally {
       setSaving(false);
     }
   }
 
+  /*
+   * ---------------------------------------------------------
+   * Update complaint
+   * ---------------------------------------------------------
+   */
+
   async function updateComplaint() {
-    if (!selectedComplaint || !profile) {
+    if (
+      !selectedComplaint ||
+      !profile
+    ) {
       return;
     }
 
@@ -569,15 +803,23 @@ export default function ComplaintsPage() {
     }
 
     const statusChanged =
-      newStatus !== selectedComplaint.status;
+      newStatus !==
+      selectedComplaint.status;
 
     const responseChanged =
       responseText.trim() !==
-      (selectedComplaint.director_response ||
-        "").trim();
+      (
+        selectedComplaint.director_response ||
+        ""
+      ).trim();
 
-    if (!statusChanged && !responseChanged) {
-      alert("لا توجد تغييرات جديدة لحفظها.");
+    if (
+      !statusChanged &&
+      !responseChanged
+    ) {
+      alert(
+        "لا توجد تغييرات جديدة لحفظها."
+      );
       return;
     }
 
@@ -588,41 +830,57 @@ export default function ComplaintsPage() {
         string,
         string | null
       > = {
-        updated_at: new Date().toISOString(),
+        updated_at:
+          new Date().toISOString(),
       };
 
       if (statusChanged) {
-        updateData.status = newStatus;
+        updateData.status =
+          newStatus;
 
-        if (newStatus === "escalated") {
+        if (
+          newStatus ===
+          "escalated"
+        ) {
           updateData.escalated_at =
             selectedComplaint.escalated_at ||
             new Date().toISOString();
         }
 
-        if (newStatus !== "escalated") {
+        if (
+          newStatus !==
+          "escalated"
+        ) {
           updateData.escalated_at =
             selectedComplaint.escalated_at;
         }
 
-        if (newStatus === "resolved") {
+        if (
+          newStatus ===
+          "resolved"
+        ) {
           updateData.resolved_at =
             selectedComplaint.resolved_at ||
             new Date().toISOString();
         }
 
-        if (newStatus === "closed") {
+        if (
+          newStatus ===
+          "closed"
+        ) {
           updateData.closed_at =
             selectedComplaint.closed_at ||
             new Date().toISOString();
         }
 
         if (
-          newStatus !== "resolved" &&
+          newStatus !==
+            "resolved" &&
           newStatus !== "closed"
         ) {
           updateData.resolved_at =
             selectedComplaint.resolved_at;
+
           updateData.closed_at =
             selectedComplaint.closed_at;
         }
@@ -630,7 +888,8 @@ export default function ComplaintsPage() {
 
       if (responseChanged) {
         updateData.director_response =
-          responseText.trim() || null;
+          responseText.trim() ||
+          null;
       }
 
       const {
@@ -638,7 +897,10 @@ export default function ComplaintsPage() {
       } = await supabase
         .from("complaints")
         .update(updateData)
-        .eq("id", selectedComplaint.id);
+        .eq(
+          "id",
+          selectedComplaint.id
+        );
 
       if (updateError) {
         console.error(
@@ -657,7 +919,8 @@ export default function ComplaintsPage() {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } =
+        await supabase.auth.getUser();
 
       if (
         user &&
@@ -691,16 +954,26 @@ export default function ComplaintsPage() {
 
       closeComplaint();
 
-      await loadData();
+      await loadData(
+        requestedInstituteId
+      );
     } finally {
       setSaving(false);
     }
   }
 
+  /*
+   * ---------------------------------------------------------
+   * Complaint modal
+   * ---------------------------------------------------------
+   */
+
   function openComplaint(
     complaint: Complaint
   ) {
-    setSelectedComplaint(complaint);
+    setSelectedComplaint(
+      complaint
+    );
 
     setResponseText("");
 
@@ -714,6 +987,12 @@ export default function ComplaintsPage() {
     setResponseText("");
     setNewStatus("new");
   }
+
+  /*
+   * ---------------------------------------------------------
+   * Render
+   * ---------------------------------------------------------
+   */
 
   return (
     <AppShell>
@@ -755,6 +1034,9 @@ export default function ComplaintsPage() {
                         : profile.role ===
                           "parent"
                         ? "ولي أمر"
+                        : profile.role ===
+                          "it_admin"
+                        ? "مسؤول تكنولوجيا المعلومات"
                         : "المعهد"}
                     </span>
 
@@ -771,7 +1053,9 @@ export default function ComplaintsPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    loadData()
+                    loadData(
+                      requestedInstituteId
+                    )
                   }
                   className="flex items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
@@ -783,7 +1067,9 @@ export default function ComplaintsPage() {
                   <button
                     type="button"
                     onClick={() =>
-                      setShowNewComplaint(true)
+                      setShowNewComplaint(
+                        true
+                      )
                     }
                     className="flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
                   >
@@ -1019,6 +1305,21 @@ export default function ComplaintsPage() {
                 </select>
               )}
             </div>
+
+            {/* Selected institute notice */}
+
+            {isDirector &&
+              requestedInstituteId && (
+                <div className="mt-4 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+                  <Building2
+                    size={18}
+                  />
+
+                  <span>
+                    يتم عرض شكاوى المعهد المحدد فقط
+                  </span>
+                </div>
+              )}
           </div>
 
           {/* =====================================================
@@ -1363,8 +1664,7 @@ export default function ComplaintsPage() {
                           }
                           onChange={(e) =>
                             setNewPriority(
-                              e.target
-                                .value
+                              e.target.value
                             )
                           }
                           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none"
@@ -1404,8 +1704,7 @@ export default function ComplaintsPage() {
                           }
                           onChange={(e) =>
                             setNewDescription(
-                              e.target
-                                .value
+                              e.target.value
                             )
                           }
                           rows={7}
@@ -1558,9 +1857,7 @@ export default function ComplaintsPage() {
                         <div className="rounded-2xl bg-slate-50 p-4">
                           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
                             <Building2
-                              size={
-                                16
-                              }
+                              size={16}
                             />
 
                             المعهد
@@ -1577,9 +1874,7 @@ export default function ComplaintsPage() {
                         <div className="rounded-2xl bg-slate-50 p-4">
                           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
                             <FileText
-                              size={
-                                16
-                              }
+                              size={16}
                             />
 
                             نوع الشكوى
@@ -1597,9 +1892,7 @@ export default function ComplaintsPage() {
                         <div className="rounded-2xl bg-slate-50 p-4">
                           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
                             <Clock3
-                              size={
-                                16
-                              }
+                              size={16}
                             />
 
                             تاريخ الإنشاء
@@ -1615,9 +1908,7 @@ export default function ComplaintsPage() {
                         <div className="rounded-2xl bg-slate-50 p-4">
                           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
                             <UserRound
-                              size={
-                                16
-                              }
+                              size={16}
                             />
 
                             مصدر البلاغ
@@ -1678,15 +1969,13 @@ export default function ComplaintsPage() {
                         </div>
                       )}
 
-                      {/* Sheikh Read Only Notice */}
+                      {/* Read Only Notice */}
 
                       {!canManageComplaint && (
                         <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
                           <div className="flex items-start gap-3">
                             <MessageSquareWarning
-                              size={
-                                21
-                              }
+                              size={21}
                               className="mt-0.5 text-blue-600"
                             />
 
@@ -1730,9 +2019,7 @@ export default function ComplaintsPage() {
                                 e
                               ) =>
                                 setNewStatus(
-                                  e
-                                    .target
-                                    .value
+                                  e.target.value
                                 )
                               }
                               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-400"
@@ -1774,9 +2061,7 @@ export default function ComplaintsPage() {
                                 e
                               ) =>
                                 setResponseText(
-                                  e
-                                    .target
-                                    .value
+                                  e.target.value
                                 )
                               }
                               rows={5}
@@ -1816,16 +2101,12 @@ export default function ComplaintsPage() {
                       >
                         {saving ? (
                           <RefreshCw
-                            size={
-                              18
-                            }
+                            size={18}
                             className="animate-spin"
                           />
                         ) : (
                           <CheckCircle2
-                            size={
-                              18
-                            }
+                            size={18}
                           />
                         )}
 
