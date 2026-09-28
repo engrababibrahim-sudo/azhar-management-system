@@ -13,6 +13,8 @@ import {
   RefreshCw,
   Users,
   XCircle,
+  ListChecks,
+  MessageSquareWarning,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -49,9 +51,17 @@ type InstituteAttendance = AttendanceSummary & {
   instituteId: string;
 };
 
+type InstituteFollowUp = {
+  instituteId: string;
+  pendingTasks: number;
+  pendingRequests: number;
+  openComplaints: number;
+};
+
 type DashboardFollowUp = {
   pendingRequests: number;
   openComplaints: number;
+  pendingTasks: number;
 };
 
 function StatCard({
@@ -191,34 +201,102 @@ function AttendanceBadge({
   );
 }
 
+function FollowUpNumber({
+  icon,
+  title,
+  value,
+  color,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  value: number;
+  color: "blue" | "amber" | "red";
+}) {
+  const styles = {
+    blue: {
+      box: "bg-blue-50 text-blue-700",
+      number: "text-blue-800",
+    },
+    amber: {
+      box: "bg-amber-50 text-amber-700",
+      number: "text-amber-800",
+    },
+    red: {
+      box: "bg-red-50 text-red-700",
+      number: "text-red-800",
+    },
+  };
+
+  const current = styles[color];
+
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className={`flex h-8 w-8 items-center justify-center rounded-lg ${current.box}`}
+      >
+        {icon}
+      </div>
+
+      <div className="min-w-0">
+        <div className="truncate text-[11px] font-semibold text-slate-500">
+          {title}
+        </div>
+
+        <div
+          className={`text-base font-black ${current.number}`}
+        >
+          {value.toLocaleString("ar-EG")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
 
-  const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [institutes, setInstitutes] =
+    useState<Institute[]>([]);
 
-  const [attendanceByInstitute, setAttendanceByInstitute] =
-    useState<InstituteAttendance[]>([]);
+  const [
+    attendanceByInstitute,
+    setAttendanceByInstitute,
+  ] = useState<InstituteAttendance[]>([]);
+
+  const [
+    followUpByInstitute,
+    setFollowUpByInstitute,
+  ] = useState<InstituteFollowUp[]>([]);
 
   const [followUp, setFollowUp] =
     useState<DashboardFollowUp>({
       pendingRequests: 0,
       openComplaints: 0,
+      pendingTasks: 0,
     });
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [errorMessage, setErrorMessage] = useState("");
+  const [refreshing, setRefreshing] =
+    useState(false);
 
-  const [today, setToday] = useState("");
+  const [errorMessage, setErrorMessage] =
+    useState("");
+
+  const [today, setToday] =
+    useState("");
 
   function getTodayDate() {
     const date = new Date();
 
     const year = date.getFullYear();
+
     const month = String(
       date.getMonth() + 1
     ).padStart(2, "0");
+
     const day = String(
       date.getDate()
     ).padStart(2, "0");
@@ -236,6 +314,14 @@ export default function HomePage() {
     };
   }
 
+  function normalizeStatus(
+    status: unknown
+  ) {
+    return String(status || "")
+      .trim()
+      .toLowerCase();
+  }
+
   async function loadAttendanceData(
     instituteIds: string[]
   ) {
@@ -244,7 +330,8 @@ export default function HomePage() {
       return;
     }
 
-    const todayDate = getTodayDate();
+    const todayDate =
+      getTodayDate();
 
     const {
       data,
@@ -254,8 +341,14 @@ export default function HomePage() {
       .select(
         "institute_id, student_id, status, attendance_date"
       )
-      .in("institute_id", instituteIds)
-      .eq("attendance_date", todayDate);
+      .in(
+        "institute_id",
+        instituteIds
+      )
+      .eq(
+        "attendance_date",
+        todayDate
+      );
 
     if (error) {
       console.error(
@@ -263,11 +356,15 @@ export default function HomePage() {
         error
       );
 
-      /*
-       * لا نوقف لوحة التحكم بالكامل إذا حدثت مشكلة
-       * في بيانات الحضور.
-       */
-      setAttendanceByInstitute([]);
+      setAttendanceByInstitute(
+        instituteIds.map(
+          (instituteId) => ({
+            instituteId,
+            ...getEmptyAttendanceSummary(),
+          })
+        )
+      );
+
       return;
     }
 
@@ -282,7 +379,8 @@ export default function HomePage() {
     }
 
     for (const row of data || []) {
-      const instituteId = row.institute_id;
+      const instituteId =
+        row.institute_id;
 
       if (!grouped[instituteId]) {
         grouped[instituteId] =
@@ -291,22 +389,39 @@ export default function HomePage() {
 
       grouped[instituteId].total += 1;
 
-      if (row.status === "present") {
+      const status =
+        normalizeStatus(row.status);
+
+      if (
+        status === "present" ||
+        status === "حاضر"
+      ) {
         grouped[instituteId].present += 1;
-      } else if (row.status === "absent") {
+      } else if (
+        status === "absent" ||
+        status === "غائب"
+      ) {
         grouped[instituteId].absent += 1;
-      } else if (row.status === "late") {
+      } else if (
+        status === "late" ||
+        status === "متأخر"
+      ) {
         grouped[instituteId].late += 1;
-      } else if (row.status === "excused") {
+      } else if (
+        status === "excused" ||
+        status === "معذور"
+      ) {
         grouped[instituteId].excused += 1;
       }
     }
 
     setAttendanceByInstitute(
-      instituteIds.map((instituteId) => ({
-        instituteId,
-        ...grouped[instituteId],
-      }))
+      instituteIds.map(
+        (instituteId) => ({
+          instituteId,
+          ...grouped[instituteId],
+        })
+      )
     );
   }
 
@@ -315,80 +430,115 @@ export default function HomePage() {
   ) {
     let pendingRequests = 0;
     let openComplaints = 0;
+    let pendingTasks = 0;
+
+    const grouped: Record<
+      string,
+      InstituteFollowUp
+    > = {};
+
+    for (const instituteId of instituteIds) {
+      grouped[instituteId] = {
+        instituteId,
+        pendingTasks: 0,
+        pendingRequests: 0,
+        openComplaints: 0,
+      };
+    }
 
     /*
      * =========================================================
-     * الطلبات المعلقة
+     * طلبات المعاهد
      * =========================================================
      */
 
     try {
       let requestQuery = supabase
         .from("institute_requests")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .eq("status", "pending");
+        .select(
+          "id, institute_id, status"
+        );
 
-      /*
-       * الإدارة المركزية ترى طلبات الإدارة كلها.
-       * مستخدم المعهد يرى طلبات معهده فقط.
-       */
       if (
-        profile?.role !== "super_admin" &&
+        profile?.role !==
+          "super_admin" &&
         profile?.role !== "director" &&
         profile?.role !== "deputy"
       ) {
         if (instituteIds.length) {
-          requestQuery = requestQuery.eq(
-            "institute_id",
-            instituteIds[0]
-          );
+          requestQuery =
+            requestQuery.eq(
+              "institute_id",
+              instituteIds[0]
+            );
         }
       }
 
       const {
-        count,
+        data,
         error,
       } = await requestQuery;
 
       if (error) {
         console.error(
-          "Pending requests error:",
+          "Institute requests dashboard error:",
           error
         );
       } else {
-        pendingRequests = count || 0;
+        for (const row of data || []) {
+          const status =
+            normalizeStatus(
+              row.status
+            );
+
+          const isPending =
+            status === "pending" ||
+            status === "new" ||
+            status === "open" ||
+            status === "قيد المراجعة" ||
+            status === "معلق";
+
+          if (!isPending) {
+            continue;
+          }
+
+          pendingRequests += 1;
+
+          if (
+            row.institute_id &&
+            grouped[
+              row.institute_id
+            ]
+          ) {
+            grouped[
+              row.institute_id
+            ].pendingRequests += 1;
+          }
+        }
       }
     } catch (error) {
       console.error(
-        "Pending requests exception:",
+        "Requests exception:",
         error
       );
     }
 
     /*
      * =========================================================
-     * الشكاوى المفتوحة
+     * الشكاوى
      * =========================================================
      */
 
     try {
       let complaintQuery = supabase
         .from("complaints")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .in("status", [
-          "new",
-          "pending",
-          "open",
-        ]);
+        .select(
+          "id, institute_id, status"
+        );
 
       if (
-        profile?.role !== "super_admin" &&
+        profile?.role !==
+          "super_admin" &&
         profile?.role !== "director" &&
         profile?.role !== "deputy"
       ) {
@@ -402,21 +552,181 @@ export default function HomePage() {
       }
 
       const {
-        count,
+        data,
         error,
       } = await complaintQuery;
 
       if (error) {
         console.error(
-          "Open complaints error:",
+          "Complaints dashboard error:",
           error
         );
       } else {
-        openComplaints = count || 0;
+        for (const row of data || []) {
+          const status =
+            normalizeStatus(
+              row.status
+            );
+
+          const isOpen =
+            status === "new" ||
+            status === "pending" ||
+            status === "open" ||
+            status === "in_progress" ||
+            status === "in progress" ||
+            status === "جديدة" ||
+            status === "مفتوحة" ||
+            status === "قيد المتابعة";
+
+          if (!isOpen) {
+            continue;
+          }
+
+          openComplaints += 1;
+
+          if (
+            row.institute_id &&
+            grouped[
+              row.institute_id
+            ]
+          ) {
+            grouped[
+              row.institute_id
+            ].openComplaints += 1;
+          }
+        }
       }
     } catch (error) {
       console.error(
-        "Open complaints exception:",
+        "Complaints exception:",
+        error
+      );
+    }
+
+    /*
+     * =========================================================
+     * المهام
+     * =========================================================
+     *
+     * نحاول قراءة الحالة.
+     * لو جدول المهام الحالي لا يحتوي status
+     * لا نوقف لوحة التحكم.
+     */
+
+    try {
+      let taskQuery = supabase
+        .from("institute_tasks")
+        .select(
+          "id, institute_id, status"
+        );
+
+      const {
+        data,
+        error,
+      } = await taskQuery;
+
+      if (error) {
+        console.error(
+          "Tasks dashboard error:",
+          error
+        );
+
+        /*
+         * محاولة احتياطية:
+         * لو status غير موجود، نعرض عدد
+         * المهام المسجلة فقط.
+         */
+        try {
+          let fallbackQuery =
+            supabase
+              .from("institute_tasks")
+              .select(
+                "id, institute_id"
+              );
+
+          if (
+            profile?.role !==
+              "super_admin" &&
+            profile?.role !==
+              "director" &&
+            profile?.role !== "deputy"
+          ) {
+            if (instituteIds.length) {
+              fallbackQuery =
+                fallbackQuery.eq(
+                  "institute_id",
+                  instituteIds[0]
+                );
+            }
+          }
+
+          const {
+            data: fallbackData,
+          } =
+            await fallbackQuery;
+
+          for (
+            const row of
+              fallbackData || []
+          ) {
+            pendingTasks += 1;
+
+            if (
+              row.institute_id &&
+              grouped[
+                row.institute_id
+              ]
+            ) {
+              grouped[
+                row.institute_id
+              ].pendingTasks += 1;
+            }
+          }
+        } catch (fallbackError) {
+          console.error(
+            "Tasks fallback error:",
+            fallbackError
+          );
+        }
+      } else {
+        for (const row of data || []) {
+          const status =
+            normalizeStatus(
+              row.status
+            );
+
+          const isPending =
+            status === "" ||
+            status === "pending" ||
+            status === "new" ||
+            status === "open" ||
+            status === "in_progress" ||
+            status === "in progress" ||
+            status === "قيد التنفيذ" ||
+            status === "معلقة" ||
+            status === "معلق";
+
+          if (!isPending) {
+            continue;
+          }
+
+          pendingTasks += 1;
+
+          if (
+            row.institute_id &&
+            grouped[
+              row.institute_id
+            ]
+          ) {
+            grouped[
+              row.institute_id
+            ].pendingTasks += 1;
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        "Tasks exception:",
         error
       );
     }
@@ -424,7 +734,20 @@ export default function HomePage() {
     setFollowUp({
       pendingRequests,
       openComplaints,
+      pendingTasks,
     });
+
+    setFollowUpByInstitute(
+      instituteIds.map(
+        (instituteId) =>
+          grouped[instituteId] || {
+            instituteId,
+            pendingTasks: 0,
+            pendingRequests: 0,
+            openComplaints: 0,
+          }
+      )
+    );
   }
 
   async function loadDashboard(
@@ -442,7 +765,8 @@ export default function HomePage() {
       const {
         data: { user },
         error: userError,
-      } = await supabase.auth.getUser();
+      } =
+        await supabase.auth.getUser();
 
       if (userError) {
         throw userError;
@@ -457,13 +781,14 @@ export default function HomePage() {
       const {
         data: profileData,
         error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select(
-          "role, full_name, institute_id, directorate_id"
-        )
-        .eq("id", user.id)
-        .maybeSingle();
+      } =
+        await supabase
+          .from("profiles")
+          .select(
+            "role, full_name, institute_id, directorate_id"
+          )
+          .eq("id", user.id)
+          .maybeSingle();
 
       if (profileError) {
         throw profileError;
@@ -478,7 +803,9 @@ export default function HomePage() {
       const currentProfile =
         profileData as Profile;
 
-      setProfile(currentProfile);
+      setProfile(
+        currentProfile
+      );
 
       let query = supabase
         .from("institutes")
@@ -489,18 +816,17 @@ export default function HomePage() {
           ascending: true,
         });
 
-      /*
-       * =========================================================
-       * صلاحيات عرض المعاهد
-       * =========================================================
-       */
-
       if (
-        currentProfile.role === "super_admin" ||
-        currentProfile.role === "director" ||
-        currentProfile.role === "deputy"
+        currentProfile.role ===
+          "super_admin" ||
+        currentProfile.role ===
+          "director" ||
+        currentProfile.role ===
+          "deputy"
       ) {
-        if (!currentProfile.directorate_id) {
+        if (
+          !currentProfile.directorate_id
+        ) {
           throw new Error(
             "الحساب غير مرتبط بإدارة تعليمية"
           );
@@ -511,14 +837,20 @@ export default function HomePage() {
           currentProfile.directorate_id
         );
       } else if (
-        currentProfile.role === "sheikh" ||
+        currentProfile.role ===
+          "sheikh" ||
         currentProfile.role ===
           "institute_deputy" ||
-        currentProfile.role === "teacher" ||
-        currentProfile.role === "employee" ||
-        currentProfile.role === "it_admin"
+        currentProfile.role ===
+          "teacher" ||
+        currentProfile.role ===
+          "employee" ||
+        currentProfile.role ===
+          "it_admin"
       ) {
-        if (!currentProfile.institute_id) {
+        if (
+          !currentProfile.institute_id
+        ) {
           throw new Error(
             "الحساب غير مرتبط بمعهد"
           );
@@ -548,7 +880,9 @@ export default function HomePage() {
         (instituteData ||
           []) as Institute[];
 
-      setInstitutes(loadedInstitutes);
+      setInstitutes(
+        loadedInstitutes
+      );
 
       const instituteIds =
         loadedInstitutes.map(
@@ -560,10 +894,6 @@ export default function HomePage() {
 
       setToday(currentDate);
 
-      /*
-       * تشغيل بيانات المتابعة والحضور
-       * بشكل مستقل حتى لا تعطل لوحة التحكم.
-       */
       await Promise.all([
         loadAttendanceData(
           instituteIds
@@ -591,6 +921,7 @@ export default function HomePage() {
 
       setInstitutes([]);
       setAttendanceByInstitute([]);
+      setFollowUpByInstitute([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -644,7 +975,7 @@ export default function HomePage() {
 
   /*
    * =========================================================
-   * إحصائيات الحضور اليوم
+   * إحصائيات الحضور
    * =========================================================
    */
 
@@ -705,7 +1036,8 @@ export default function HomePage() {
         : profile?.role ===
             "institute_deputy"
           ? "وكيل شيخ المعهد"
-          : profile?.role === "teacher"
+          : profile?.role ===
+              "teacher"
             ? "المدرس"
             : profile?.role ===
                 "employee"
@@ -725,8 +1057,10 @@ export default function HomePage() {
   const isCentralManager =
     profile?.role ===
       "super_admin" ||
-    profile?.role === "director" ||
-    profile?.role === "deputy";
+    profile?.role ===
+      "director" ||
+    profile?.role ===
+      "deputy";
 
   const currentInstitute =
     institutes.length > 0
@@ -749,6 +1083,23 @@ export default function HomePage() {
       ) || {
         instituteId,
         ...getEmptyAttendanceSummary(),
+      }
+    );
+  }
+
+  function getInstituteFollowUp(
+    instituteId: string
+  ) {
+    return (
+      followUpByInstitute.find(
+        (item) =>
+          item.instituteId ===
+          instituteId
+      ) || {
+        instituteId,
+        pendingTasks: 0,
+        pendingRequests: 0,
+        openComplaints: 0,
       }
     );
   }
@@ -893,16 +1244,13 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
               <StatCard
                 title={
                   isItAdmin
                     ? "المعهد التابع للحساب"
                     : "إجمالي المعاهد"
                 }
-                value={
-                  totalInstitutes
-                }
+                value={totalInstitutes}
                 subtitle={
                   isItAdmin
                     ? "معهد مرتبط بالحساب"
@@ -926,9 +1274,7 @@ export default function HomePage() {
                 subtitle="طالب مسجل"
                 href="/students"
                 icon={
-                  <GraduationCap
-                    size={22}
-                  />
+                  <GraduationCap size={22} />
                 }
               />
 
@@ -1066,9 +1412,7 @@ export default function HomePage() {
                 </p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-
-                {/* طلبات معلقة */}
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 
                 <Link
                   href="/institute-requests"
@@ -1076,21 +1420,17 @@ export default function HomePage() {
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-                      <ClipboardList
-                        size={22}
-                      />
+                      <ClipboardList size={22} />
                     </div>
 
                     <span
                       className={
-                        followUp.pendingRequests >
-                        0
+                        followUp.pendingRequests > 0
                           ? "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700"
                           : "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
                       }
                     >
-                      {followUp.pendingRequests >
-                      0
+                      {followUp.pendingRequests > 0
                         ? "تحتاج متابعة"
                         : "لا توجد طلبات معلقة"}
                     </span>
@@ -1112,29 +1452,23 @@ export default function HomePage() {
                   </div>
                 </Link>
 
-                {/* الشكاوى */}
-
                 <Link
                   href="/complaints"
                   className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-                      <AlertTriangle
-                        size={22}
-                      />
+                      <AlertTriangle size={22} />
                     </div>
 
                     <span
                       className={
-                        followUp.openComplaints >
-                        0
+                        followUp.openComplaints > 0
                           ? "rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700"
                           : "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
                       }
                     >
-                      {followUp.openComplaints >
-                      0
+                      {followUp.openComplaints > 0
                         ? "تحتاج متابعة"
                         : "لا توجد شكاوى مفتوحة"}
                     </span>
@@ -1156,7 +1490,43 @@ export default function HomePage() {
                   </div>
                 </Link>
 
-                {/* الحضور */}
+                <Link
+                  href="/institute-tasks"
+                  className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                      <ListChecks size={22} />
+                    </div>
+
+                    <span
+                      className={
+                        followUp.pendingTasks > 0
+                          ? "rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700"
+                          : "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
+                      }
+                    >
+                      {followUp.pendingTasks > 0
+                        ? "تحتاج متابعة"
+                        : "لا توجد مهام معلقة"}
+                    </span>
+                  </div>
+
+                  <p className="mt-5 text-sm font-semibold text-slate-500">
+                    مهام المعاهد
+                  </p>
+
+                  <p className="mt-1 text-3xl font-black text-slate-900">
+                    {followUp.pendingTasks.toLocaleString(
+                      "ar-EG"
+                    )}
+                  </p>
+
+                  <div className="mt-4 flex items-center gap-1 text-xs font-bold text-slate-500 group-hover:text-slate-900">
+                    متابعة المهام
+                    <ArrowLeft size={14} />
+                  </div>
+                </Link>
 
                 <Link
                   href="/attendance"
@@ -1169,14 +1539,12 @@ export default function HomePage() {
 
                     <span
                       className={
-                        notRecordedInstitutes >
-                        0
+                        notRecordedInstitutes > 0
                           ? "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700"
                           : "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
                       }
                     >
-                      {notRecordedInstitutes >
-                      0
+                      {notRecordedInstitutes > 0
                         ? "توجد متابعة"
                         : "تم التسجيل"}
                     </span>
@@ -1217,7 +1585,6 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-
               {isCentralManager && (
                 <QuickAction
                   title="إدارة المعاهد"
@@ -1245,9 +1612,7 @@ export default function HomePage() {
                 description="عرض الطلاب وإضافة بيانات جديدة ومتابعة الفصول."
                 href="/students"
                 icon={
-                  <GraduationCap
-                    size={21}
-                  />
+                  <GraduationCap size={21} />
                 }
               />
 
@@ -1260,9 +1625,7 @@ export default function HomePage() {
                 }
                 href="/attendance"
                 icon={
-                  <ClipboardList
-                    size={21}
-                  />
+                  <ClipboardList size={21} />
                 }
               />
 
@@ -1271,9 +1634,7 @@ export default function HomePage() {
                 description="عرض مؤشرات وتقارير الحضور والطلاب."
                 href="/attendance-report"
                 icon={
-                  <FileBarChart
-                    size={21}
-                  />
+                  <FileBarChart size={21} />
                 }
               />
             </div>
@@ -1325,8 +1686,7 @@ export default function HomePage() {
                       );
 
                     const instituteAttendanceRate =
-                      attendance.total >
-                      0
+                      attendance.total > 0
                         ? Math.round(
                             (attendance.present /
                               attendance.total) *
@@ -1336,39 +1696,30 @@ export default function HomePage() {
 
                     return (
                       <Link
-                        key={
-                          institute.id
-                        }
+                        key={institute.id}
                         href={`/institutes/${institute.id}`}
                         className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-3">
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
-                              <Building2
-                                size={21}
-                              />
+                              <Building2 size={21} />
                             </div>
 
                             <div className="min-w-0">
                               <h3 className="truncate font-bold text-slate-900">
-                                {
-                                  institute.name
-                                }
+                                {institute.name}
                               </h3>
 
                               <p className="mt-1 text-xs text-slate-500">
-                                {
-                                  institute.code
-                                }
+                                {institute.code}
                               </p>
                             </div>
                           </div>
 
                           <AttendanceBadge
                             recorded={
-                              attendance.total >
-                              0
+                              attendance.total > 0
                             }
                           />
                         </div>
@@ -1437,9 +1788,7 @@ export default function HomePage() {
 
                         <div className="mt-4 flex items-center justify-end gap-1 text-xs font-bold text-slate-500 transition group-hover:text-slate-900">
                           عرض تفاصيل المعهد
-                          <ArrowLeft
-                            size={14}
-                          />
+                          <ArrowLeft size={14} />
                         </div>
                       </Link>
                     );
@@ -1450,7 +1799,7 @@ export default function HomePage() {
           </section>
 
           {/* =====================================================
-              المعاهد
+              المعاهد — مركز المتابعة الكامل
           ====================================================== */}
 
           <section className="mb-8">
@@ -1465,7 +1814,7 @@ export default function HomePage() {
                 <p className="mt-1 text-sm text-slate-500">
                   {isItAdmin
                     ? "بيانات المعهد المرتبط بحساب مسؤول تكنولوجيا المعلومات."
-                    : "استعرض المعاهد وانتقل إلى تفاصيل أي معهد."}
+                    : "بطاقات متابعة متكاملة للمعاهد والطلاب والحضور والمهام والطلبات والشكاوى."}
                 </p>
               </div>
 
@@ -1486,18 +1835,15 @@ export default function HomePage() {
                   (item) => (
                     <div
                       key={item}
-                      className="h-52 animate-pulse rounded-2xl bg-white shadow-sm"
+                      className="h-96 animate-pulse rounded-2xl bg-white shadow-sm"
                     />
                   )
                 )}
               </div>
-            ) : institutes.length ===
-              0 ? (
+            ) : institutes.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
-                  <Building2
-                    size={25}
-                  />
+                  <Building2 size={25} />
                 </div>
 
                 <h3 className="mt-4 font-bold text-slate-900">
@@ -1517,15 +1863,13 @@ export default function HomePage() {
                     href="/institutes"
                     className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                   >
-                    <Building2
-                      size={17}
-                    />
+                    <Building2 size={17} />
                     إدارة المعاهد
                   </Link>
                 )}
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {institutes.map(
                   (institute) => {
                     const attendance =
@@ -1533,160 +1877,334 @@ export default function HomePage() {
                         institute.id
                       );
 
+                    const instituteFollowUp =
+                      getInstituteFollowUp(
+                        institute.id
+                      );
+
+                    const instituteAttendanceRate =
+                      attendance.total > 0
+                        ? Math.round(
+                            (attendance.present /
+                              attendance.total) *
+                              100
+                          )
+                        : 0;
+
                     return (
-                      <Link
-                        key={
-                          institute.id
-                        }
-                        href={`/institutes/${institute.id}`}
-                        className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                      <div
+                        key={institute.id}
+                        className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
-                              <Building2
-                                size={21}
+                        {/* ==========================================
+                            رأس البطاقة
+                        =========================================== */}
+
+                        <div className="p-5">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
+                                <Building2 size={22} />
+                              </div>
+
+                              <div className="min-w-0">
+                                <h3 className="truncate text-base font-black text-slate-900">
+                                  {institute.name}
+                                </h3>
+
+                                {institute.code && (
+                                  <p className="mt-1 text-xs font-medium text-slate-500">
+                                    كود المعهد:{" "}
+                                    {institute.code}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <span
+                              className={
+                                institute.is_active === false
+                                  ? "shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600"
+                                  : "shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600"
+                              }
+                            >
+                              {institute.is_active === false
+                                ? "غير نشط"
+                                : "نشط"}
+                            </span>
+                          </div>
+
+                          {/* ==========================================
+                              الطلاب والمدرسون
+                          =========================================== */}
+
+                          <div className="mt-5 grid grid-cols-2 gap-3">
+                            <div className="rounded-xl bg-slate-50 p-3">
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <GraduationCap size={15} />
+                                الطلاب
+                              </div>
+
+                              <div className="mt-1 text-xl font-black text-slate-900">
+                                {Number(
+                                  institute.student_count || 0
+                                ).toLocaleString("ar-EG")}
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl bg-slate-50 p-3">
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <Users size={15} />
+                                المدرسون
+                              </div>
+
+                              <div className="mt-1 text-xl font-black text-slate-900">
+                                {Number(
+                                  institute.teacher_count || 0
+                                ).toLocaleString("ar-EG")}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ==========================================
+                              الحضور
+                          =========================================== */}
+
+                          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <Activity
+                                  size={17}
+                                  className="text-slate-600"
+                                />
+
+                                <span className="text-xs font-bold text-slate-700">
+                                  حضور اليوم
+                                </span>
+                              </div>
+
+                              <AttendanceBadge
+                                recorded={
+                                  attendance.total > 0
+                                }
                               />
                             </div>
 
-                            <div className="min-w-0">
-                              <h3 className="truncate font-bold text-slate-900">
-                                {
-                                  institute.name
+                            <div className="mt-4 grid grid-cols-3 gap-2">
+                              <div className="rounded-lg bg-emerald-50 p-2.5 text-center">
+                                <div className="text-[11px] text-emerald-700">
+                                  حاضر
+                                </div>
+
+                                <div className="mt-1 font-black text-emerald-800">
+                                  {attendance.present.toLocaleString(
+                                    "ar-EG"
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="rounded-lg bg-red-50 p-2.5 text-center">
+                                <div className="text-[11px] text-red-700">
+                                  غائب
+                                </div>
+
+                                <div className="mt-1 font-black text-red-800">
+                                  {attendance.absent.toLocaleString(
+                                    "ar-EG"
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="rounded-lg bg-amber-50 p-2.5 text-center">
+                                <div className="text-[11px] text-amber-700">
+                                  متأخر
+                                </div>
+
+                                <div className="mt-1 font-black text-amber-800">
+                                  {attendance.late.toLocaleString(
+                                    "ar-EG"
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="mt-3">
+                              <div className="mb-1.5 flex items-center justify-between text-[11px]">
+                                <span className="font-semibold text-slate-500">
+                                  نسبة الحضور
+                                </span>
+
+                                <span className="font-black text-slate-800">
+                                  {instituteAttendanceRate}%
+                                </span>
+                              </div>
+
+                              <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                <div
+                                  className="h-full rounded-full bg-emerald-500 transition-all"
+                                  style={{
+                                    width: `${Math.min(
+                                      instituteAttendanceRate,
+                                      100
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ==========================================
+                              المتابعة الإدارية
+                          =========================================== */}
+
+                          <div className="mt-4">
+                            <div className="mb-3 flex items-center gap-2">
+                              <ClipboardList
+                                size={17}
+                                className="text-slate-600"
+                              />
+
+                              <span className="text-xs font-black text-slate-700">
+                                المتابعة الإدارية
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                              <FollowUpNumber
+                                icon={
+                                  <ListChecks size={15} />
                                 }
-                              </h3>
+                                title="المهام"
+                                value={
+                                  instituteFollowUp.pendingTasks
+                                }
+                                color="blue"
+                              />
 
-                              {institute.code && (
-                                <p className="mt-1 text-xs text-slate-500">
-                                  كود المعهد:{" "}
-                                  {
-                                    institute.code
-                                  }
-                                </p>
-                              )}
+                              <FollowUpNumber
+                                icon={
+                                  <ClipboardList size={15} />
+                                }
+                                title="الطلبات"
+                                value={
+                                  instituteFollowUp.pendingRequests
+                                }
+                                color="amber"
+                              />
+
+                              <FollowUpNumber
+                                icon={
+                                  <MessageSquareWarning size={15} />
+                                }
+                                title="الشكاوى"
+                                value={
+                                  instituteFollowUp.openComplaints
+                                }
+                                color="red"
+                              />
                             </div>
                           </div>
 
-                          <span
-                            className={
-                              institute.is_active ===
-                              false
-                                ? "shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600"
-                                : "shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600"
-                            }
-                          >
-                            {institute.is_active ===
-                            false
-                              ? "غير نشط"
-                              : "نشط"}
-                          </span>
-                        </div>
+                          {/* ==========================================
+                              شيخ المعهد
+                          =========================================== */}
 
-                        <div className="mt-5 grid grid-cols-2 gap-3">
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-xs text-slate-500">
-                              الطلاب
+                          {institute.director_name && (
+                            <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
+                              <Users
+                                size={15}
+                                className="text-slate-400"
+                              />
+
+                              <span className="font-semibold text-slate-700">
+                                شيخ المعهد:
+                              </span>
+
+                              <span className="truncate">
+                                {institute.director_name}
+                              </span>
                             </div>
+                          )}
 
-                            <div className="mt-1 text-lg font-black text-slate-900">
-                              {Number(
-                                institute.student_count ||
-                                  0
-                              ).toLocaleString(
-                                "ar-EG"
-                              )}
-                            </div>
-                          </div>
+                          {/* ==========================================
+                              أزرار الوصول المباشر
+                          =========================================== */}
 
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-xs text-slate-500">
-                              المدرسون
-                            </div>
-
-                            <div className="mt-1 text-lg font-black text-slate-900">
-                              {Number(
-                                institute.teacher_count ||
-                                  0
-                              ).toLocaleString(
-                                "ar-EG"
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* حالة الحضور داخل كارت المعهد */}
-
-                        <div className="mt-4 rounded-xl bg-slate-50 p-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-slate-500">
-                              حضور اليوم
-                            </span>
-
-                            <AttendanceBadge
-                              recorded={
-                                attendance.total >
-                                0
+                          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
+                            <Link
+                              href={`/students?institute=${institute.id}`}
+                              onClick={(event) =>
+                                event.stopPropagation()
                               }
-                            />
+                              className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
+                            >
+                              الطلاب
+                            </Link>
+
+                            <Link
+                              href={`/teachers?institute=${institute.id}`}
+                              onClick={(event) =>
+                                event.stopPropagation()
+                              }
+                              className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
+                            >
+                              المدرسون
+                            </Link>
+
+                            <Link
+                              href="/attendance"
+                              onClick={(event) =>
+                                event.stopPropagation()
+                              }
+                              className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
+                            >
+                              الحضور
+                            </Link>
+
+                            <Link
+                              href="/institute-tasks"
+                              onClick={(event) =>
+                                event.stopPropagation()
+                              }
+                              className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
+                            >
+                              المهام
+                            </Link>
+
+                            <Link
+                              href="/institute-requests"
+                              onClick={(event) =>
+                                event.stopPropagation()
+                              }
+                              className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
+                            >
+                              الطلبات
+                            </Link>
+
+                            <Link
+                              href="/complaints"
+                              onClick={(event) =>
+                                event.stopPropagation()
+                              }
+                              className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
+                            >
+                              الشكاوى
+                            </Link>
                           </div>
 
-                          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                            <div>
-                              <div className="text-xs text-emerald-600">
-                                حاضر
-                              </div>
+                          {/* ==========================================
+                              فتح ملف المعهد
+                          =========================================== */}
 
-                              <div className="mt-1 font-black text-slate-900">
-                                {
-                                  attendance.present
-                                }
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="text-xs text-red-600">
-                                غائب
-                              </div>
-
-                              <div className="mt-1 font-black text-slate-900">
-                                {
-                                  attendance.absent
-                                }
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="text-xs text-amber-600">
-                                متأخر
-                              </div>
-
-                              <div className="mt-1 font-black text-slate-900">
-                                {
-                                  attendance.late
-                                }
-                              </div>
-                            </div>
-                          </div>
+                          <Link
+                            href={`/institutes/${institute.id}`}
+                            className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800"
+                          >
+                            فتح ملف المعهد
+                            <ArrowLeft size={15} />
+                          </Link>
                         </div>
-
-                        {institute.director_name && (
-                          <div className="mt-4 border-t border-slate-100 pt-4 text-xs text-slate-500">
-                            <span className="font-semibold text-slate-700">
-                              شيخ المعهد:
-                            </span>{" "}
-                            {
-                              institute.director_name
-                            }
-                          </div>
-                        )}
-
-                        <div className="mt-4 flex items-center justify-end gap-1 text-xs font-bold text-slate-500 transition group-hover:text-slate-900">
-                          عرض تفاصيل المعهد
-                          <ArrowLeft
-                            size={14}
-                          />
-                        </div>
-                      </Link>
+                      </div>
                     );
                   }
                 )}
@@ -1712,9 +2230,7 @@ export default function HomePage() {
             <div className="grid gap-4 md:grid-cols-3">
               <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                  <CheckCircle2
-                    size={21}
-                  />
+                  <CheckCircle2 size={21} />
                 </div>
 
                 <div>
@@ -1730,9 +2246,7 @@ export default function HomePage() {
 
               <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                  <CheckCircle2
-                    size={21}
-                  />
+                  <CheckCircle2 size={21} />
                 </div>
 
                 <div>
@@ -1748,9 +2262,7 @@ export default function HomePage() {
 
               <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                  <CheckCircle2
-                    size={21}
-                  />
+                  <CheckCircle2 size={21} />
                 </div>
 
                 <div>
