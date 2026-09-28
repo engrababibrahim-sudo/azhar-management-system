@@ -15,6 +15,7 @@ import {
   XCircle,
   ListChecks,
   MessageSquareWarning,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -56,12 +57,6 @@ type InstituteFollowUp = {
   pendingTasks: number;
   pendingRequests: number;
   openComplaints: number;
-};
-
-type DashboardFollowUp = {
-  pendingRequests: number;
-  openComplaints: number;
-  pendingTasks: number;
 };
 
 function StatCard({
@@ -142,40 +137,6 @@ function QuickAction({
         />
       </div>
     </Link>
-  );
-}
-
-function MiniMetric({
-  title,
-  value,
-  icon,
-  className = "",
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold text-slate-500">
-            {title}
-          </p>
-
-          <p className="mt-2 text-2xl font-black text-slate-900">
-            {value.toLocaleString("ar-EG")}
-          </p>
-        </div>
-
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-          {icon}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -269,13 +230,6 @@ export default function HomePage() {
     setFollowUpByInstitute,
   ] = useState<InstituteFollowUp[]>([]);
 
-  const [followUp, setFollowUp] =
-    useState<DashboardFollowUp>({
-      pendingRequests: 0,
-      openComplaints: 0,
-      pendingTasks: 0,
-    });
-
   const [loading, setLoading] =
     useState(true);
 
@@ -285,7 +239,7 @@ export default function HomePage() {
   const [errorMessage, setErrorMessage] =
     useState("");
 
-  const [today, setToday] =
+  const [searchTerm, setSearchTerm] =
     useState("");
 
   function getTodayDate() {
@@ -428,10 +382,6 @@ export default function HomePage() {
   async function loadFollowUpData(
     instituteIds: string[]
   ) {
-    let pendingRequests = 0;
-    let openComplaints = 0;
-    let pendingTasks = 0;
-
     const grouped: Record<
       string,
       InstituteFollowUp
@@ -501,8 +451,6 @@ export default function HomePage() {
           if (!isPending) {
             continue;
           }
-
-          pendingRequests += 1;
 
           if (
             row.institute_id &&
@@ -582,8 +530,6 @@ export default function HomePage() {
             continue;
           }
 
-          openComplaints += 1;
-
           if (
             row.institute_id &&
             grouped[
@@ -607,10 +553,6 @@ export default function HomePage() {
      * =========================================================
      * المهام
      * =========================================================
-     *
-     * نحاول قراءة الحالة.
-     * لو جدول المهام الحالي لا يحتوي status
-     * لا نوقف لوحة التحكم.
      */
 
     try {
@@ -619,6 +561,23 @@ export default function HomePage() {
         .select(
           "id, institute_id, status"
         );
+
+      if (
+        profile?.role !==
+          "super_admin" &&
+        profile?.role !==
+          "director" &&
+        profile?.role !==
+          "deputy"
+      ) {
+        if (instituteIds.length) {
+          taskQuery =
+            taskQuery.eq(
+              "institute_id",
+              instituteIds[0]
+            );
+        }
+      }
 
       const {
         data,
@@ -632,10 +591,11 @@ export default function HomePage() {
         );
 
         /*
-         * محاولة احتياطية:
-         * لو status غير موجود، نعرض عدد
-         * المهام المسجلة فقط.
+         * في حالة عدم وجود status
+         * نستخدم عدد المهام الموجودة
+         * كبيانات متابعة احتياطية.
          */
+
         try {
           let fallbackQuery =
             supabase
@@ -649,7 +609,8 @@ export default function HomePage() {
               "super_admin" &&
             profile?.role !==
               "director" &&
-            profile?.role !== "deputy"
+            profile?.role !==
+              "deputy"
           ) {
             if (instituteIds.length) {
               fallbackQuery =
@@ -669,8 +630,6 @@ export default function HomePage() {
             const row of
               fallbackData || []
           ) {
-            pendingTasks += 1;
-
             if (
               row.institute_id &&
               grouped[
@@ -710,8 +669,6 @@ export default function HomePage() {
             continue;
           }
 
-          pendingTasks += 1;
-
           if (
             row.institute_id &&
             grouped[
@@ -730,12 +687,6 @@ export default function HomePage() {
         error
       );
     }
-
-    setFollowUp({
-      pendingRequests,
-      openComplaints,
-      pendingTasks,
-    });
 
     setFollowUpByInstitute(
       instituteIds.map(
@@ -889,11 +840,9 @@ export default function HomePage() {
           (item) => item.id
         );
 
-      const currentDate =
-        getTodayDate();
-
-      setToday(currentDate);
-
+      /*
+       * تحميل الحضور والمتابعة
+       */
       await Promise.all([
         loadAttendanceData(
           instituteIds
@@ -973,61 +922,6 @@ export default function HomePage() {
       0
     );
 
-  /*
-   * =========================================================
-   * إحصائيات الحضور
-   * =========================================================
-   */
-
-  const attendanceSummary =
-    useMemo(() => {
-      return attendanceByInstitute.reduce(
-        (summary, item) => ({
-          present:
-            summary.present +
-            item.present,
-
-          absent:
-            summary.absent +
-            item.absent,
-
-          late:
-            summary.late +
-            item.late,
-
-          excused:
-            summary.excused +
-            item.excused,
-
-          total:
-            summary.total +
-            item.total,
-        }),
-        getEmptyAttendanceSummary()
-      );
-    }, [attendanceByInstitute]);
-
-  const attendanceRate =
-    attendanceSummary.total > 0
-      ? Math.round(
-          (attendanceSummary.present /
-            attendanceSummary.total) *
-            100
-        )
-      : 0;
-
-  const recordedInstitutes =
-    attendanceByInstitute.filter(
-      (item) => item.total > 0
-    ).length;
-
-  const notRecordedInstitutes =
-    Math.max(
-      totalInstitutes -
-        recordedInstitutes,
-      0
-    );
-
   const roleTitle =
     profile?.role === "it_admin"
       ? "مسؤول تكنولوجيا المعلومات"
@@ -1103,6 +997,49 @@ export default function HomePage() {
       }
     );
   }
+
+  /*
+   * =========================================================
+   * البحث في المعاهد
+   * =========================================================
+   */
+
+  const filteredInstitutes =
+    useMemo(() => {
+      const search =
+        searchTerm
+          .trim()
+          .toLowerCase();
+
+      if (!search) {
+        return institutes;
+      }
+
+      return institutes.filter(
+        (institute) => {
+          const name =
+            institute.name
+              ?.toLowerCase() || "";
+
+          const code =
+            institute.code
+              ?.toLowerCase() || "";
+
+          const director =
+            institute.director_name
+              ?.toLowerCase() || "";
+
+          return (
+            name.includes(search) ||
+            code.includes(search) ||
+            director.includes(search)
+          );
+        }
+      );
+    }, [
+      institutes,
+      searchTerm,
+    ]);
 
   return (
     <AppShell>
@@ -1321,255 +1258,6 @@ export default function HomePage() {
           </section>
 
           {/* =====================================================
-              مؤشرات اليوم
-          ====================================================== */}
-
-          <section className="mb-8">
-            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-lg font-black text-slate-900">
-                  مؤشرات اليوم
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  ملخص الحضور والغياب المسجل اليوم
-                </p>
-              </div>
-
-              {today && (
-                <span className="text-xs font-semibold text-slate-400">
-                  {today}
-                </span>
-              )}
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-              <MiniMetric
-                title="الحضور"
-                value={
-                  attendanceSummary.present
-                }
-                icon={
-                  <CheckCircle2 size={20} />
-                }
-              />
-
-              <MiniMetric
-                title="الغياب"
-                value={
-                  attendanceSummary.absent
-                }
-                icon={
-                  <XCircle size={20} />
-                }
-              />
-
-              <MiniMetric
-                title="التأخير"
-                value={
-                  attendanceSummary.late
-                }
-                icon={
-                  <Activity size={20} />
-                }
-              />
-
-              <MiniMetric
-                title="المعاهد التي سجلت"
-                value={
-                  recordedInstitutes
-                }
-                icon={
-                  <Building2 size={20} />
-                }
-              />
-
-              <MiniMetric
-                title="نسبة الحضور"
-                value={
-                  attendanceRate
-                }
-                icon={
-                  <FileBarChart size={20} />
-                }
-              />
-            </div>
-          </section>
-
-          {/* =====================================================
-              يحتاج تدخل المدير
-          ====================================================== */}
-
-          {isCentralManager && (
-            <section className="mb-8">
-              <div className="mb-4">
-                <h2 className="text-lg font-black text-slate-900">
-                  يحتاج تدخل المدير
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  أهم العناصر التي تحتاج إلى متابعة إدارية
-                </p>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-
-                <Link
-                  href="/institute-requests"
-                  className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-                      <ClipboardList size={22} />
-                    </div>
-
-                    <span
-                      className={
-                        followUp.pendingRequests > 0
-                          ? "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700"
-                          : "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
-                      }
-                    >
-                      {followUp.pendingRequests > 0
-                        ? "تحتاج متابعة"
-                        : "لا توجد طلبات معلقة"}
-                    </span>
-                  </div>
-
-                  <p className="mt-5 text-sm font-semibold text-slate-500">
-                    طلبات المعاهد المعلقة
-                  </p>
-
-                  <p className="mt-1 text-3xl font-black text-slate-900">
-                    {followUp.pendingRequests.toLocaleString(
-                      "ar-EG"
-                    )}
-                  </p>
-
-                  <div className="mt-4 flex items-center gap-1 text-xs font-bold text-slate-500 group-hover:text-slate-900">
-                    مراجعة الطلبات
-                    <ArrowLeft size={14} />
-                  </div>
-                </Link>
-
-                <Link
-                  href="/complaints"
-                  className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-                      <AlertTriangle size={22} />
-                    </div>
-
-                    <span
-                      className={
-                        followUp.openComplaints > 0
-                          ? "rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700"
-                          : "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
-                      }
-                    >
-                      {followUp.openComplaints > 0
-                        ? "تحتاج متابعة"
-                        : "لا توجد شكاوى مفتوحة"}
-                    </span>
-                  </div>
-
-                  <p className="mt-5 text-sm font-semibold text-slate-500">
-                    الشكاوى المفتوحة
-                  </p>
-
-                  <p className="mt-1 text-3xl font-black text-slate-900">
-                    {followUp.openComplaints.toLocaleString(
-                      "ar-EG"
-                    )}
-                  </p>
-
-                  <div className="mt-4 flex items-center gap-1 text-xs font-bold text-slate-500 group-hover:text-slate-900">
-                    مراجعة الشكاوى
-                    <ArrowLeft size={14} />
-                  </div>
-                </Link>
-
-                <Link
-                  href="/institute-tasks"
-                  className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-                      <ListChecks size={22} />
-                    </div>
-
-                    <span
-                      className={
-                        followUp.pendingTasks > 0
-                          ? "rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700"
-                          : "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
-                      }
-                    >
-                      {followUp.pendingTasks > 0
-                        ? "تحتاج متابعة"
-                        : "لا توجد مهام معلقة"}
-                    </span>
-                  </div>
-
-                  <p className="mt-5 text-sm font-semibold text-slate-500">
-                    مهام المعاهد
-                  </p>
-
-                  <p className="mt-1 text-3xl font-black text-slate-900">
-                    {followUp.pendingTasks.toLocaleString(
-                      "ar-EG"
-                    )}
-                  </p>
-
-                  <div className="mt-4 flex items-center gap-1 text-xs font-bold text-slate-500 group-hover:text-slate-900">
-                    متابعة المهام
-                    <ArrowLeft size={14} />
-                  </div>
-                </Link>
-
-                <Link
-                  href="/attendance"
-                  className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                      <Activity size={22} />
-                    </div>
-
-                    <span
-                      className={
-                        notRecordedInstitutes > 0
-                          ? "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700"
-                          : "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
-                      }
-                    >
-                      {notRecordedInstitutes > 0
-                        ? "توجد متابعة"
-                        : "تم التسجيل"}
-                    </span>
-                  </div>
-
-                  <p className="mt-5 text-sm font-semibold text-slate-500">
-                    المعاهد التي لم تسجل الحضور
-                  </p>
-
-                  <p className="mt-1 text-3xl font-black text-slate-900">
-                    {notRecordedInstitutes.toLocaleString(
-                      "ar-EG"
-                    )}
-                  </p>
-
-                  <div className="mt-4 flex items-center gap-1 text-xs font-bold text-slate-500 group-hover:text-slate-900">
-                    متابعة الحضور
-                    <ArrowLeft size={14} />
-                  </div>
-                </Link>
-              </div>
-            </section>
-          )}
-
-          {/* =====================================================
               الوصول السريع
           ====================================================== */}
 
@@ -1641,169 +1329,11 @@ export default function HomePage() {
           </section>
 
           {/* =====================================================
-              حالة الحضور لكل معهد
-          ====================================================== */}
-
-          <section className="mb-8">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-lg font-black text-slate-900">
-                  حالة الحضور اليوم
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  متابعة تسجيل الحضور في كل معهد
-                </p>
-              </div>
-
-              <Link
-                href="/attendance"
-                className="hidden items-center gap-1 text-sm font-bold text-slate-700 hover:text-slate-950 sm:flex"
-              >
-                فتح الحضور والغياب
-                <ArrowLeft size={16} />
-              </Link>
-            </div>
-
-            {loading ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {[1, 2, 3].map(
-                  (item) => (
-                    <div
-                      key={item}
-                      className="h-52 animate-pulse rounded-2xl bg-white shadow-sm"
-                    />
-                  )
-                )}
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {institutes.map(
-                  (institute) => {
-                    const attendance =
-                      getInstituteAttendance(
-                        institute.id
-                      );
-
-                    const instituteAttendanceRate =
-                      attendance.total > 0
-                        ? Math.round(
-                            (attendance.present /
-                              attendance.total) *
-                              100
-                          )
-                        : 0;
-
-                    return (
-                      <Link
-                        key={institute.id}
-                        href={`/institutes/${institute.id}`}
-                        className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
-                              <Building2 size={21} />
-                            </div>
-
-                            <div className="min-w-0">
-                              <h3 className="truncate font-bold text-slate-900">
-                                {institute.name}
-                              </h3>
-
-                              <p className="mt-1 text-xs text-slate-500">
-                                {institute.code}
-                              </p>
-                            </div>
-                          </div>
-
-                          <AttendanceBadge
-                            recorded={
-                              attendance.total > 0
-                            }
-                          />
-                        </div>
-
-                        <div className="mt-5 grid grid-cols-3 gap-2">
-                          <div className="rounded-xl bg-emerald-50 p-3">
-                            <div className="text-xs text-emerald-700">
-                              حاضر
-                            </div>
-
-                            <div className="mt-1 text-lg font-black text-emerald-800">
-                              {attendance.present.toLocaleString(
-                                "ar-EG"
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl bg-red-50 p-3">
-                            <div className="text-xs text-red-700">
-                              غائب
-                            </div>
-
-                            <div className="mt-1 text-lg font-black text-red-800">
-                              {attendance.absent.toLocaleString(
-                                "ar-EG"
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl bg-amber-50 p-3">
-                            <div className="text-xs text-amber-700">
-                              متأخر
-                            </div>
-
-                            <div className="mt-1 text-lg font-black text-amber-800">
-                              {attendance.late.toLocaleString(
-                                "ar-EG"
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4">
-                          <div className="mb-2 flex items-center justify-between text-xs">
-                            <span className="font-semibold text-slate-500">
-                              نسبة الحضور
-                            </span>
-
-                            <span className="font-black text-slate-900">
-                              {instituteAttendanceRate}%
-                            </span>
-                          </div>
-
-                          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                            <div
-                              className="h-full rounded-full bg-emerald-500 transition-all"
-                              style={{
-                                width: `${Math.min(
-                                  instituteAttendanceRate,
-                                  100
-                                )}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex items-center justify-end gap-1 text-xs font-bold text-slate-500 transition group-hover:text-slate-900">
-                          عرض تفاصيل المعهد
-                          <ArrowLeft size={14} />
-                        </div>
-                      </Link>
-                    );
-                  }
-                )}
-              </div>
-            )}
-          </section>
-
-          {/* =====================================================
               المعاهد — مركز المتابعة الكامل
           ====================================================== */}
 
           <section className="mb-8">
-            <div className="mb-4 flex items-end justify-between gap-4">
+            <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <h2 className="text-lg font-black text-slate-900">
                   {isItAdmin
@@ -1813,64 +1343,111 @@ export default function HomePage() {
 
                 <p className="mt-1 text-sm text-slate-500">
                   {isItAdmin
-                    ? "بيانات المعهد المرتبط بحساب مسؤول تكنولوجيا المعلومات."
-                    : "بطاقات متابعة متكاملة للمعاهد والطلاب والحضور والمهام والطلبات والشكاوى."}
+                    ? "بطاقة متابعة كاملة للمعهد المرتبط بحساب مسؤول تكنولوجيا المعلومات."
+                    : "كل معهد يظهر في بطاقة واحدة تشمل الطلاب والمدرسين والحضور والمهام والطلبات والشكاوى وما يحتاج تدخل المدير."}
                 </p>
               </div>
 
-              {isCentralManager && (
-                <Link
-                  href="/institutes"
-                  className="hidden items-center gap-1 text-sm font-bold text-slate-700 hover:text-slate-950 sm:flex"
-                >
-                  عرض الكل
-                  <ArrowLeft size={16} />
-                </Link>
-              )}
+              <div className="flex items-center gap-2">
+                {isCentralManager && (
+                  <Link
+                    href="/institutes"
+                    className="hidden items-center gap-1 text-sm font-bold text-slate-700 hover:text-slate-950 sm:flex"
+                  >
+                    إدارة المعاهد
+                    <ArrowLeft size={16} />
+                  </Link>
+                )}
+              </div>
             </div>
 
+            {/* ===================================================
+                البحث
+            ==================================================== */}
+
+            {!isItAdmin &&
+              institutes.length > 3 && (
+                <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="relative">
+                    <Search
+                      size={19}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(event) =>
+                        setSearchTerm(
+                          event.target.value
+                        )
+                      }
+                      placeholder="ابحث باسم المعهد أو الكود أو اسم الشيخ..."
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-4 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
             {loading ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {[1, 2, 3].map(
                   (item) => (
                     <div
                       key={item}
-                      className="h-96 animate-pulse rounded-2xl bg-white shadow-sm"
+                      className="h-[650px] animate-pulse rounded-2xl bg-white shadow-sm"
                     />
                   )
                 )}
               </div>
-            ) : institutes.length === 0 ? (
+            ) : filteredInstitutes.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
                   <Building2 size={25} />
                 </div>
 
                 <h3 className="mt-4 font-bold text-slate-900">
-                  {isItAdmin
-                    ? "لا يوجد معهد مرتبط بالحساب"
-                    : "لا توجد بيانات معاهد"}
+                  {searchTerm
+                    ? "لا توجد نتائج"
+                    : isItAdmin
+                      ? "لا يوجد معهد مرتبط بالحساب"
+                      : "لا توجد بيانات معاهد"}
                 </h3>
 
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  {isItAdmin
-                    ? "يرجى التأكد من ارتباط حساب مسؤول تكنولوجيا المعلومات بالمعهد الصحيح."
-                    : "لا توجد معاهد مرتبطة بالحساب الحالي أو تعذر تحميل بياناتها."}
+                  {searchTerm
+                    ? "لم يتم العثور على معهد يطابق بيانات البحث."
+                    : isItAdmin
+                      ? "يرجى التأكد من ارتباط حساب مسؤول تكنولوجيا المعلومات بالمعهد الصحيح."
+                      : "لا توجد معاهد مرتبطة بالحساب الحالي أو تعذر تحميل بياناتها."}
                 </p>
 
-                {isCentralManager && (
-                  <Link
-                    href="/institutes"
-                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSearchTerm("")
+                    }
+                    className="mt-5 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                   >
-                    <Building2 size={17} />
-                    إدارة المعاهد
-                  </Link>
+                    إظهار كل المعاهد
+                  </button>
                 )}
+
+                {!searchTerm &&
+                  isCentralManager && (
+                    <Link
+                      href="/institutes"
+                      className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      <Building2 size={17} />
+                      إدارة المعاهد
+                    </Link>
+                  )}
               </div>
             ) : (
-              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {institutes.map(
+              <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
+                {filteredInstitutes.map(
                   (institute) => {
                     const attendance =
                       getInstituteAttendance(
@@ -1891,16 +1468,62 @@ export default function HomePage() {
                           )
                         : 0;
 
+                    /*
+                     * =========================================
+                     * تحديد ما يحتاج تدخل المدير
+                     * =========================================
+                     */
+
+                    const attendanceNeedsAction =
+                      attendance.total === 0;
+
+                    const tasksNeedAction =
+                      instituteFollowUp.pendingTasks >
+                      0;
+
+                    const requestsNeedAction =
+                      instituteFollowUp.pendingRequests >
+                      0;
+
+                    const complaintsNeedAction =
+                      instituteFollowUp.openComplaints >
+                      0;
+
+                    const needsManagerIntervention =
+                      attendanceNeedsAction ||
+                      tasksNeedAction ||
+                      requestsNeedAction ||
+                      complaintsNeedAction;
+
+                    const interventionCount =
+                      Number(
+                        attendanceNeedsAction
+                      ) +
+                      Number(
+                        tasksNeedAction
+                      ) +
+                      Number(
+                        requestsNeedAction
+                      ) +
+                      Number(
+                        complaintsNeedAction
+                      );
+
                     return (
                       <div
                         key={institute.id}
-                        className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+                        className={`group overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
+                          needsManagerIntervention
+                            ? "border-amber-200"
+                            : "border-slate-200"
+                        }`}
                       >
-                        {/* ==========================================
-                            رأس البطاقة
-                        =========================================== */}
-
                         <div className="p-5">
+
+                          {/* =====================================
+                              رأس البطاقة
+                          ====================================== */}
+
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex min-w-0 items-center gap-3">
                               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
@@ -1923,20 +1546,22 @@ export default function HomePage() {
 
                             <span
                               className={
-                                institute.is_active === false
+                                institute.is_active ===
+                                false
                                   ? "shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600"
                                   : "shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-600"
                               }
                             >
-                              {institute.is_active === false
+                              {institute.is_active ===
+                              false
                                 ? "غير نشط"
                                 : "نشط"}
                             </span>
                           </div>
 
-                          {/* ==========================================
+                          {/* =====================================
                               الطلاب والمدرسون
-                          =========================================== */}
+                          ====================================== */}
 
                           <div className="mt-5 grid grid-cols-2 gap-3">
                             <div className="rounded-xl bg-slate-50 p-3">
@@ -1947,8 +1572,11 @@ export default function HomePage() {
 
                               <div className="mt-1 text-xl font-black text-slate-900">
                                 {Number(
-                                  institute.student_count || 0
-                                ).toLocaleString("ar-EG")}
+                                  institute.student_count ||
+                                    0
+                                ).toLocaleString(
+                                  "ar-EG"
+                                )}
                               </div>
                             </div>
 
@@ -1960,15 +1588,18 @@ export default function HomePage() {
 
                               <div className="mt-1 text-xl font-black text-slate-900">
                                 {Number(
-                                  institute.teacher_count || 0
-                                ).toLocaleString("ar-EG")}
+                                  institute.teacher_count ||
+                                    0
+                                ).toLocaleString(
+                                  "ar-EG"
+                                )}
                               </div>
                             </div>
                           </div>
 
-                          {/* ==========================================
-                              الحضور
-                          =========================================== */}
+                          {/* =====================================
+                              الحضور داخل بطاقة المعهد
+                          ====================================== */}
 
                           <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
                             <div className="flex items-center justify-between gap-2">
@@ -1985,7 +1616,8 @@ export default function HomePage() {
 
                               <AttendanceBadge
                                 recorded={
-                                  attendance.total > 0
+                                  attendance.total >
+                                  0
                                 }
                               />
                             </div>
@@ -2053,9 +1685,146 @@ export default function HomePage() {
                             </div>
                           </div>
 
-                          {/* ==========================================
+                          {/* =====================================
+                              يحتاج تدخل المدير
+                          ====================================== */}
+
+                          <div
+                            className={`mt-4 rounded-xl border p-4 ${
+                              needsManagerIntervention
+                                ? "border-amber-200 bg-amber-50/70"
+                                : "border-emerald-200 bg-emerald-50/60"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2">
+                                {needsManagerIntervention ? (
+                                  <AlertTriangle
+                                    size={18}
+                                    className="text-amber-600"
+                                  />
+                                ) : (
+                                  <CheckCircle2
+                                    size={18}
+                                    className="text-emerald-600"
+                                  />
+                                )}
+
+                                <span
+                                  className={`text-sm font-black ${
+                                    needsManagerIntervention
+                                      ? "text-amber-800"
+                                      : "text-emerald-800"
+                                  }`}
+                                >
+                                  {needsManagerIntervention
+                                    ? "يحتاج تدخل المدير"
+                                    : "لا توجد عناصر تحتاج تدخل المدير"}
+                                </span>
+                              </div>
+
+                              {needsManagerIntervention && (
+                                <span className="rounded-full bg-amber-600 px-2.5 py-1 text-[11px] font-black text-white">
+                                  {interventionCount.toLocaleString(
+                                    "ar-EG"
+                                  )}{" "}
+                                  متابعة
+                                </span>
+                              )}
+                            </div>
+
+                            {needsManagerIntervention && (
+                              <div className="mt-3 space-y-2">
+
+                                {/* الحضور */}
+
+                                {attendanceNeedsAction && (
+                                  <Link
+                                    href="/attendance"
+                                    className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-amber-800 shadow-sm transition hover:bg-amber-100"
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <Activity size={15} />
+                                      لم يتم تسجيل حضور اليوم
+                                    </span>
+
+                                    <ArrowLeft
+                                      size={14}
+                                    />
+                                  </Link>
+                                )}
+
+                                {/* المهام */}
+
+                                {tasksNeedAction && (
+                                  <Link
+                                    href="/institute-tasks"
+                                    className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-blue-800 shadow-sm transition hover:bg-blue-50"
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <ListChecks size={15} />
+                                      {instituteFollowUp.pendingTasks.toLocaleString(
+                                        "ar-EG"
+                                      )}{" "}
+                                      مهام تحتاج متابعة
+                                    </span>
+
+                                    <ArrowLeft
+                                      size={14}
+                                    />
+                                  </Link>
+                                )}
+
+                                {/* الطلبات */}
+
+                                {requestsNeedAction && (
+                                  <Link
+                                    href="/institute-requests"
+                                    className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-amber-800 shadow-sm transition hover:bg-amber-50"
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <ClipboardList size={15} />
+                                      {instituteFollowUp.pendingRequests.toLocaleString(
+                                        "ar-EG"
+                                      )}{" "}
+                                      طلبات معلقة
+                                    </span>
+
+                                    <ArrowLeft
+                                      size={14}
+                                    />
+                                  </Link>
+                                )}
+
+                                {/* الشكاوى */}
+
+                                {complaintsNeedAction && (
+                                  <Link
+                                    href="/complaints"
+                                    className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-red-800 shadow-sm transition hover:bg-red-50"
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <MessageSquareWarning
+                                        size={15}
+                                      />
+                                      {instituteFollowUp.openComplaints.toLocaleString(
+                                        "ar-EG"
+                                      )}{" "}
+                                      شكاوى مفتوحة
+                                    </span>
+
+                                    <ArrowLeft
+                                      size={14}
+                                    />
+                                  </Link>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* =====================================
                               المتابعة الإدارية
-                          =========================================== */}
+                          ====================================== */}
 
                           <div className="mt-4">
                             <div className="mb-3 flex items-center gap-2">
@@ -2105,9 +1874,9 @@ export default function HomePage() {
                             </div>
                           </div>
 
-                          {/* ==========================================
+                          {/* =====================================
                               شيخ المعهد
-                          =========================================== */}
+                          ====================================== */}
 
                           {institute.director_name && (
                             <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
@@ -2126,16 +1895,13 @@ export default function HomePage() {
                             </div>
                           )}
 
-                          {/* ==========================================
+                          {/* =====================================
                               أزرار الوصول المباشر
-                          =========================================== */}
+                          ====================================== */}
 
                           <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
                             <Link
                               href={`/students?institute=${institute.id}`}
-                              onClick={(event) =>
-                                event.stopPropagation()
-                              }
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               الطلاب
@@ -2143,9 +1909,6 @@ export default function HomePage() {
 
                             <Link
                               href={`/teachers?institute=${institute.id}`}
-                              onClick={(event) =>
-                                event.stopPropagation()
-                              }
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               المدرسون
@@ -2153,9 +1916,6 @@ export default function HomePage() {
 
                             <Link
                               href="/attendance"
-                              onClick={(event) =>
-                                event.stopPropagation()
-                              }
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               الحضور
@@ -2163,9 +1923,6 @@ export default function HomePage() {
 
                             <Link
                               href="/institute-tasks"
-                              onClick={(event) =>
-                                event.stopPropagation()
-                              }
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               المهام
@@ -2173,9 +1930,6 @@ export default function HomePage() {
 
                             <Link
                               href="/institute-requests"
-                              onClick={(event) =>
-                                event.stopPropagation()
-                              }
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               الطلبات
@@ -2183,18 +1937,15 @@ export default function HomePage() {
 
                             <Link
                               href="/complaints"
-                              onClick={(event) =>
-                                event.stopPropagation()
-                              }
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
                             >
                               الشكاوى
                             </Link>
                           </div>
 
-                          {/* ==========================================
+                          {/* =====================================
                               فتح ملف المعهد
-                          =========================================== */}
+                          ====================================== */}
 
                           <Link
                             href={`/institutes/${institute.id}`}
