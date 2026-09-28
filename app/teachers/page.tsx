@@ -10,6 +10,7 @@ import {
   Phone,
   BookOpen,
   GraduationCap,
+  Pencil,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
@@ -53,13 +54,18 @@ export default function TeachersPage() {
   const [loadingTeachers, setLoadingTeachers] = useState(false);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTeacher, setEditingTeacher] =
+    useState<Teacher | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [teacherCode, setTeacherCode] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [specialization, setSpecialization] = useState("");
-  const [qualification, setQualification] = useState("");
+  const [specialization, setSpecialization] =
+    useState("");
+  const [qualification, setQualification] =
+    useState("");
+  const [isActive, setIsActive] = useState(true);
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -141,11 +147,6 @@ export default function TeachersPage() {
         if (instituteError) throw instituteError;
 
         setInstitutes([institute]);
-
-        /*
-         * مهم جدًا:
-         * مسؤول IT يتم تحديد معهده تلقائيًا.
-         */
         setSelectedInstitute(institute.id);
 
         return;
@@ -238,11 +239,6 @@ export default function TeachersPage() {
           return;
         }
 
-        /*
-         * لا نعتمد على selectedInstitute هنا
-         * حتى لا يستطيع حساب المعهد تغيير المعهد
-         * من خلال الواجهة.
-         */
         query = query.eq(
           "institute_id",
           profile.institute_id
@@ -251,7 +247,7 @@ export default function TeachersPage() {
 
       /*
        * ==========================================
-       * مدير الإدارة
+       * الحسابات المركزية
        * ==========================================
        */
       else if (
@@ -259,22 +255,12 @@ export default function TeachersPage() {
         profile.role === "director" ||
         profile.role === "deputy"
       ) {
-        /*
-         * إذا تم اختيار معهد:
-         * عرض مدرسين هذا المعهد فقط.
-         */
         if (selectedInstitute) {
           query = query.eq(
             "institute_id",
             selectedInstitute
           );
-        }
-
-        /*
-         * إذا لم يتم اختيار معهد:
-         * عرض جميع مدرسين معاهد الإدارة.
-         */
-        else {
+        } else {
           if (!profile.directorate_id) {
             setTeachers([]);
             return;
@@ -339,13 +325,16 @@ export default function TeachersPage() {
     setEmail("");
     setSpecialization("");
     setQualification("");
+    setIsActive(true);
+    setEditingTeacher(null);
   }
 
+  /*
+   * ============================================
+   * فتح نافذة إضافة مدرس
+   * ============================================
+   */
   function openAddTeacherModal() {
-    /*
-     * حسابات المعهد:
-     * المعهد معروف تلقائيًا.
-     */
     if (
       profile?.role === "it_admin" ||
       profile?.role === "sheikh" ||
@@ -367,23 +356,101 @@ export default function TeachersPage() {
     setShowAddModal(true);
   }
 
+  /*
+   * ============================================
+   * فتح نافذة تعديل مدرس
+   * ============================================
+   */
+  function openEditTeacherModal(
+    teacher: Teacher
+  ) {
+    /*
+     * مسؤول IT لا يستطيع تعديل مدرس
+     * من معهد آخر.
+     */
+    if (
+      profile?.role === "it_admin" &&
+      teacher.institute_id !== profile.institute_id
+    ) {
+      setMessage(
+        "ليس لديك صلاحية تعديل هذا المدرس."
+      );
+      return;
+    }
+
+    /*
+     * حسابات المعهد لا تعدل إلا داخل معهدها.
+     */
+    if (
+      (
+        profile?.role === "sheikh" ||
+        profile?.role === "institute_deputy" ||
+        profile?.role === "employee"
+      ) &&
+      teacher.institute_id !== profile.institute_id
+    ) {
+      setMessage(
+        "ليس لديك صلاحية تعديل هذا المدرس."
+      );
+      return;
+    }
+
+    /*
+     * الحسابات المركزية:
+     * يجب أن يكون المدرس تابعًا للمعهد
+     * المحدد في الشاشة إذا تم اختيار معهد.
+     */
+    if (
+      (
+        profile?.role === "super_admin" ||
+        profile?.role === "director" ||
+        profile?.role === "deputy"
+      ) &&
+      selectedInstitute &&
+      teacher.institute_id !== selectedInstitute
+    ) {
+      setMessage(
+        "المدرس لا يتبع المعهد المحدد."
+      );
+      return;
+    }
+
+    setEditingTeacher(teacher);
+
+    setFullName(teacher.full_name || "");
+    setTeacherCode(
+      teacher.teacher_code || ""
+    );
+    setPhone(teacher.phone || "");
+    setEmail(teacher.email || "");
+    setSpecialization(
+      teacher.specialization || ""
+    );
+    setQualification(
+      teacher.qualification || ""
+    );
+    setIsActive(teacher.is_active);
+
+    setMessage("");
+    setShowAddModal(true);
+  }
+
+  /*
+   * ============================================
+   * إضافة مدرس جديد
+   * ============================================
+   */
   async function addTeacher() {
     if (!profile) {
       alert("بيانات المستخدم غير متاحة.");
       return;
     }
 
-    /*
-     * ==========================================
-     * تحديد المعهد المسموح للإضافة
-     * ==========================================
-     */
-
     let targetInstituteId = "";
 
     /*
-     * مسؤول IT وحسابات المعهد:
-     * يستخدمون معهد الحساب فقط.
+     * حسابات المعهد:
+     * تستخدم معهد الحساب فقط.
      */
     if (
       profile.role === "it_admin" ||
@@ -396,7 +463,8 @@ export default function TeachersPage() {
         return;
       }
 
-      targetInstituteId = profile.institute_id;
+      targetInstituteId =
+        profile.institute_id;
     }
 
     /*
@@ -409,11 +477,14 @@ export default function TeachersPage() {
       profile.role === "deputy"
     ) {
       if (!selectedInstitute) {
-        alert("من فضلك اختاري المعهد أولًا.");
+        alert(
+          "من فضلك اختاري المعهد أولًا."
+        );
         return;
       }
 
-      targetInstituteId = selectedInstitute;
+      targetInstituteId =
+        selectedInstitute;
     } else {
       alert(
         "ليس لديك صلاحية إضافة مدرس."
@@ -433,12 +504,15 @@ export default function TeachersPage() {
       const { error } = await supabase
         .from("teachers")
         .insert({
-          institute_id: targetInstituteId,
+          institute_id:
+            targetInstituteId,
           full_name: fullName.trim(),
           teacher_code:
             teacherCode.trim() || null,
-          phone: phone.trim() || null,
-          email: email.trim() || null,
+          phone:
+            phone.trim() || null,
+          email:
+            email.trim() || null,
           specialization:
             specialization.trim() || null,
           qualification:
@@ -469,8 +543,143 @@ export default function TeachersPage() {
     }
   }
 
-  const filteredTeachers = teachers.filter(
-    (teacher) => {
+  /*
+   * ============================================
+   * تعديل المدرس
+   * ============================================
+   */
+  async function updateTeacher() {
+    if (!profile) {
+      alert("بيانات المستخدم غير متاحة.");
+      return;
+    }
+
+    if (!editingTeacher) {
+      alert(
+        "لم يتم تحديد المدرس المراد تعديله."
+      );
+      return;
+    }
+
+    if (!fullName.trim()) {
+      alert("اسم المعلم مطلوب.");
+      return;
+    }
+
+    /*
+     * حماية إضافية من الواجهة.
+     */
+    if (
+      profile.role === "it_admin" &&
+      editingTeacher.institute_id !==
+        profile.institute_id
+    ) {
+      alert(
+        "ليس لديك صلاحية تعديل هذا المدرس."
+      );
+      return;
+    }
+
+    if (
+      (
+        profile.role === "sheikh" ||
+        profile.role === "institute_deputy" ||
+        profile.role === "employee"
+      ) &&
+      editingTeacher.institute_id !==
+        profile.institute_id
+    ) {
+      alert(
+        "ليس لديك صلاحية تعديل هذا المدرس."
+      );
+      return;
+    }
+
+    if (
+      (
+        profile.role === "super_admin" ||
+        profile.role === "director" ||
+        profile.role === "deputy"
+      ) &&
+      selectedInstitute &&
+      editingTeacher.institute_id !==
+        selectedInstitute
+    ) {
+      alert(
+        "المدرس لا يتبع المعهد المحدد."
+      );
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      /*
+       * مهم:
+       * لا نسمح من هذه الشاشة بتغيير
+       * institute_id.
+       */
+      const { error } = await supabase
+        .from("teachers")
+        .update({
+          full_name: fullName.trim(),
+          teacher_code:
+            teacherCode.trim() || null,
+          phone:
+            phone.trim() || null,
+          email:
+            email.trim() || null,
+          specialization:
+            specialization.trim() || null,
+          qualification:
+            qualification.trim() || null,
+          is_active: isActive,
+        })
+        .eq("id", editingTeacher.id)
+        .eq(
+          "institute_id",
+          editingTeacher.institute_id
+        );
+
+      if (error) throw error;
+
+      setShowAddModal(false);
+      resetForm();
+
+      await loadTeachers();
+
+      setMessage(
+        "تم تعديل بيانات المدرس بنجاح ✅"
+      );
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "حدث خطأ أثناء تعديل المدرس."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /*
+   * ============================================
+   * حفظ المدرس
+   * ============================================
+   */
+  function handleSaveTeacher() {
+    if (editingTeacher) {
+      updateTeacher();
+    } else {
+      addTeacher();
+    }
+  }
+
+  const filteredTeachers =
+    teachers.filter((teacher) => {
       const search = searchTerm
         .trim()
         .toLowerCase();
@@ -494,8 +703,7 @@ export default function TeachersPage() {
           ?.toLowerCase()
           .includes(search)
       );
-    }
-  );
+    });
 
   const selectedInstituteName =
     institutes.find(
@@ -516,8 +724,20 @@ export default function TeachersPage() {
     profile?.role === "it_admin";
 
   /*
-   * مسؤول IT:
-   * لا نعرض له اختيار المعهد.
+   * هل الحساب يستطيع تعديل المدرسين؟
+   */
+  const canEditTeacher =
+    profile?.role === "super_admin" ||
+    profile?.role === "director" ||
+    profile?.role === "deputy" ||
+    profile?.role === "sheikh" ||
+    profile?.role === "institute_deputy" ||
+    profile?.role === "employee" ||
+    profile?.role === "it_admin";
+
+  /*
+   * مسؤول IT وحسابات المعهد:
+   * لا نعرض لهم اختيار المعهد.
    */
   const isInstituteAccount =
     profile?.role === "it_admin" ||
@@ -613,9 +833,11 @@ export default function TeachersPage() {
           {/* اختيار المعهد للحسابات المركزية */}
           {profile &&
             !isInstituteAccount &&
-            (profile.role === "director" ||
+            (
+              profile.role === "director" ||
               profile.role === "super_admin" ||
-              profile.role === "deputy") && (
+              profile.role === "deputy"
+            ) && (
               <div className="bg-white rounded-2xl border shadow-sm p-6 mb-6">
                 <label className="block font-bold mb-3">
                   المعهد
@@ -634,15 +856,17 @@ export default function TeachersPage() {
                     جميع المعاهد
                   </option>
 
-                  {institutes.map((institute) => (
-                    <option
-                      key={institute.id}
-                      value={institute.id}
-                    >
-                      {institute.name} -{" "}
-                      {institute.code}
-                    </option>
-                  ))}
+                  {institutes.map(
+                    (institute) => (
+                      <option
+                        key={institute.id}
+                        value={institute.id}
+                      >
+                        {institute.name} -{" "}
+                        {institute.code}
+                      </option>
+                    )
+                  )}
                 </select>
 
                 {!selectedInstitute && (
@@ -674,7 +898,7 @@ export default function TeachersPage() {
             </div>
           )}
 
-          {/* إحصائيات */}
+          {/* الإحصائيات */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
 
             <div className="bg-white rounded-2xl border shadow-sm p-6">
@@ -750,7 +974,9 @@ export default function TeachersPage() {
                 type="text"
                 value={searchTerm}
                 onChange={(event) =>
-                  setSearchTerm(event.target.value)
+                  setSearchTerm(
+                    event.target.value
+                  )
                 }
                 placeholder="ابحث باسم المدرس أو الكود أو الهاتف أو التخصص..."
                 className="w-full border border-slate-200 rounded-xl py-3 pr-12 pl-4 outline-none focus:border-slate-400"
@@ -839,6 +1065,12 @@ export default function TeachersPage() {
                       <th className="p-4">
                         الحالة
                       </th>
+
+                      {canEditTeacher && (
+                        <th className="p-4">
+                          الإجراءات
+                        </th>
+                      )}
                     </tr>
                   </thead>
 
@@ -919,6 +1151,24 @@ export default function TeachersPage() {
                               </span>
                             )}
                           </td>
+
+                          {canEditTeacher && (
+                            <td className="p-4">
+                              <button
+                                onClick={() =>
+                                  openEditTeacherModal(
+                                    teacher
+                                  )
+                                }
+                                className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-xl hover:bg-blue-100 transition"
+                              >
+                                <Pencil
+                                  size={16}
+                                />
+                                تعديل
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       )
                     )}
@@ -930,7 +1180,7 @@ export default function TeachersPage() {
         </div>
 
         {/* ============================================
-            نافذة إضافة مدرس
+            نافذة إضافة / تعديل مدرس
             ============================================ */}
         {showAddModal && (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -940,19 +1190,22 @@ export default function TeachersPage() {
               <div className="p-6 border-b flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold">
-                    إضافة مدرس جديد
+                    {editingTeacher
+                      ? "تعديل بيانات المدرس"
+                      : "إضافة مدرس جديد"}
                   </h2>
 
                   <p className="text-sm text-slate-500 mt-1">
                     {selectedInstituteName ||
-                      "اختر المعهد من القائمة أولًا"}
+                      "المعهد الحالي"}
                   </p>
                 </div>
 
                 <button
-                  onClick={() =>
-                    setShowAddModal(false)
-                  }
+                  onClick={() => {
+                    setShowAddModal(false);
+                    resetForm();
+                  }}
                   className="p-2 rounded-xl hover:bg-slate-100 text-xl"
                 >
                   ×
@@ -961,6 +1214,7 @@ export default function TeachersPage() {
 
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
 
+                {/* اسم المدرس */}
                 <div>
                   <label className="block font-semibold mb-2">
                     اسم المعلم *
@@ -978,6 +1232,7 @@ export default function TeachersPage() {
                   />
                 </div>
 
+                {/* كود المدرس */}
                 <div>
                   <label className="block font-semibold mb-2">
                     كود المعلم
@@ -995,6 +1250,7 @@ export default function TeachersPage() {
                   />
                 </div>
 
+                {/* الهاتف */}
                 <div>
                   <label className="block font-semibold mb-2">
                     الهاتف
@@ -1003,13 +1259,16 @@ export default function TeachersPage() {
                   <input
                     value={phone}
                     onChange={(event) =>
-                      setPhone(event.target.value)
+                      setPhone(
+                        event.target.value
+                      )
                     }
                     className="w-full border rounded-xl px-4 py-3"
                     placeholder="01xxxxxxxxx"
                   />
                 </div>
 
+                {/* البريد */}
                 <div>
                   <label className="block font-semibold mb-2">
                     البريد الإلكتروني
@@ -1018,13 +1277,16 @@ export default function TeachersPage() {
                   <input
                     value={email}
                     onChange={(event) =>
-                      setEmail(event.target.value)
+                      setEmail(
+                        event.target.value
+                      )
                     }
                     className="w-full border rounded-xl px-4 py-3"
                     placeholder="teacher@example.com"
                   />
                 </div>
 
+                {/* التخصص */}
                 <div>
                   <label className="block font-semibold mb-2">
                     التخصص
@@ -1042,6 +1304,7 @@ export default function TeachersPage() {
                   />
                 </div>
 
+                {/* المؤهل */}
                 <div>
                   <label className="block font-semibold mb-2">
                     المؤهل
@@ -1059,21 +1322,49 @@ export default function TeachersPage() {
                   />
                 </div>
 
+                {/* الحالة */}
+                {editingTeacher && (
+                  <div className="md:col-span-2">
+                    <label className="block font-semibold mb-2">
+                      حالة المدرس
+                    </label>
+
+                    <label className="flex items-center gap-3 border rounded-xl px-4 py-3 cursor-pointer hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={isActive}
+                        onChange={(event) =>
+                          setIsActive(
+                            event.target.checked
+                          )
+                        }
+                        className="w-5 h-5"
+                      />
+
+                      <span>
+                        المدرس نشط
+                      </span>
+                    </label>
+                  </div>
+                )}
+
               </div>
 
               <div className="p-6 border-t flex justify-end gap-3">
 
                 <button
-                  onClick={() =>
-                    setShowAddModal(false)
-                  }
+                  onClick={() => {
+                    setShowAddModal(false);
+                    resetForm();
+                  }}
                   className="px-5 py-3 rounded-xl border"
+                  disabled={saving}
                 >
                   إلغاء
                 </button>
 
                 <button
-                  onClick={addTeacher}
+                  onClick={handleSaveTeacher}
                   disabled={saving}
                   className="bg-slate-900 text-white px-6 py-3 rounded-xl disabled:opacity-50 flex items-center gap-2"
                 >
@@ -1084,7 +1375,9 @@ export default function TeachersPage() {
                     />
                   )}
 
-                  حفظ المدرس
+                  {editingTeacher
+                    ? "حفظ التعديلات"
+                    : "حفظ المدرس"}
                 </button>
 
               </div>
