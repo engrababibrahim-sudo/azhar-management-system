@@ -1,8 +1,8 @@
+
 "use client";
 
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   ArrowLeft,
@@ -191,19 +191,14 @@ function statusClass(status: RequestStatus) {
   switch (status) {
     case "new":
       return "bg-blue-50 text-blue-700 border border-blue-200";
-
     case "in_progress":
       return "bg-amber-50 text-amber-700 border border-amber-200";
-
     case "needs_director_action":
       return "bg-red-50 text-red-700 border border-red-200";
-
     case "resolved":
       return "bg-emerald-50 text-emerald-700 border border-emerald-200";
-
     case "closed":
       return "bg-slate-100 text-slate-700 border border-slate-200";
-
     default:
       return "bg-slate-100 text-slate-700 border border-slate-200";
   }
@@ -213,27 +208,18 @@ function priorityClass(priority: Priority) {
   switch (priority) {
     case "low":
       return "bg-slate-50 text-slate-600 border border-slate-200";
-
     case "medium":
       return "bg-blue-50 text-blue-700 border border-blue-200";
-
     case "high":
       return "bg-orange-50 text-orange-700 border border-orange-200";
-
     case "urgent":
       return "bg-red-50 text-red-700 border border-red-200";
-
     default:
       return "bg-slate-50 text-slate-600 border border-slate-200";
   }
 }
 
 export default function InstituteRequestsPage() {
-  const searchParams = useSearchParams();
-
-  const requestedInstituteId =
-    searchParams.get("instituteId");
-
   const [profile, setProfile] = useState<Profile | null>(null);
   const [institutes, setInstitutes] = useState<Institute[]>([]);
   const [requests, setRequests] = useState<InstituteRequest[]>([]);
@@ -242,18 +228,19 @@ export default function InstituteRequestsPage() {
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // undefined تعني أن الرابط لم تتم قراءته بعد.
+  // null تعني أن الرابط لا يحتوي على معهد محدد.
+  const [requestedInstituteId, setRequestedInstituteId] =
+    useState<string | null | undefined>(undefined);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<RequestStatus | "all">("all");
-
   const [priorityFilter, setPriorityFilter] =
     useState<Priority | "all">("all");
-
-  const [instituteFilter, setInstituteFilter] =
-    useState("all");
+  const [instituteFilter, setInstituteFilter] = useState("all");
 
   const [showCreate, setShowCreate] = useState(false);
-
   const [selectedRequest, setSelectedRequest] =
     useState<InstituteRequest | null>(null);
 
@@ -280,26 +267,16 @@ export default function InstituteRequestsPage() {
     profile?.role === "deputy" ||
     profile?.role === "employee";
 
-  /*
-   * المدير المركزي:
-   * يستطيع فتح معهد محدد عن طريق instituteId في الرابط.
-   *
-   * المستخدم داخل المعهد:
-   * لا يستطيع تغيير المعهد عن طريق الرابط،
-   * ويظل مقيدًا بالمعهد الموجود في حسابه.
-   */
-  const effectiveInstituteId =
-    isDirector
-      ? requestedInstituteId
-      : profile?.institute_id ?? null;
+  const effectiveInstituteId = isDirector
+    ? requestedInstituteId ?? null
+    : profile?.institute_id ?? null;
 
   const selectedInstitute = useMemo(() => {
     if (!effectiveInstituteId) return null;
 
     return (
       institutes.find(
-        (institute) =>
-          institute.id === effectiveInstituteId
+        (institute) => institute.id === effectiveInstituteId
       ) ?? null
     );
   }, [institutes, effectiveInstituteId]);
@@ -332,14 +309,13 @@ export default function InstituteRequestsPage() {
           .eq("id", user.id)
           .single();
 
-      if (profileError) {
+      if (profileError || !profileData) {
         console.error(profileError);
         alert("تعذر تحميل بيانات المستخدم.");
         return;
       }
 
       const currentProfile = profileData as Profile;
-
       setProfile(currentProfile);
 
       const currentIsDirector =
@@ -347,16 +323,13 @@ export default function InstituteRequestsPage() {
         currentProfile.role === "super_admin";
 
       /*
-       * تحميل المعاهد
+       * تحميل معاهد المديرية فقط.
        */
       let institutesQuery = supabase
         .from("institutes")
         .select("id, name, code, directorate_id")
         .order("name");
 
-      /*
-       * كل المستخدمين المركزيين يشاهدون معاهد مديريتهم فقط.
-       */
       if (currentProfile.directorate_id) {
         institutesQuery = institutesQuery.eq(
           "directorate_id",
@@ -365,8 +338,7 @@ export default function InstituteRequestsPage() {
       }
 
       /*
-       * المستخدم داخل معهد:
-       * نعرض معهده فقط.
+       * المستخدم داخل المعهد يشاهد معهده فقط.
        */
       if (
         !currentIsDirector &&
@@ -389,12 +361,36 @@ export default function InstituteRequestsPage() {
         return;
       }
 
-      setInstitutes(
-        (institutesData ?? []) as Institute[]
-      );
+      const availableInstitutes =
+        (institutesData ?? []) as Institute[];
+
+      setInstitutes(availableInstitutes);
 
       /*
-       * تحميل الطلبات
+       * تحديد المعهد المطلوب:
+       * المدير يحدد المعهد من الرابط.
+       * باقي المستخدمين مقيدون بمعهد حسابهم.
+       */
+      let effectiveId: string | null = null;
+
+      if (currentIsDirector) {
+        if (requestedInstituteId) {
+          const instituteBelongsToDirectorate =
+            availableInstitutes.some(
+              (institute) =>
+                institute.id === requestedInstituteId
+            );
+
+          effectiveId = instituteBelongsToDirectorate
+            ? requestedInstituteId
+            : null;
+        }
+      } else {
+        effectiveId = currentProfile.institute_id ?? null;
+      }
+
+      /*
+       * تحميل الطلبات.
        */
       let requestsQuery = supabase
         .from("institute_requests")
@@ -424,43 +420,50 @@ export default function InstituteRequestsPage() {
           ascending: false,
         });
 
-      /*
-       * المستخدم داخل المعهد:
-       * يشاهد معهد حسابه فقط.
-       */
-      if (!currentIsDirector) {
-        if (!currentProfile.institute_id) {
+      if (currentIsDirector) {
+        if (requestedInstituteId) {
+          /*
+           * لا نعرض إلا طلبات المعهد المحدد،
+           * بشرط أن يكون تابعًا لمديرية المستخدم.
+           */
+          if (!effectiveId) {
+            requestsQuery = requestsQuery.eq(
+              "institute_id",
+              "__NO_MATCHING_INSTITUTE__"
+            );
+          } else {
+            requestsQuery = requestsQuery.eq(
+              "institute_id",
+              effectiveId
+            );
+          }
+        } else if (currentProfile.directorate_id) {
+          /*
+           * الدخول بدون instituteId يعرض كل معاهد المديرية.
+           */
           requestsQuery = requestsQuery.eq(
-            "institute_id",
-            "__NO_INSTITUTE__"
+            "directorate_id",
+            currentProfile.directorate_id
           );
         } else {
           requestsQuery = requestsQuery.eq(
             "institute_id",
-            currentProfile.institute_id
+            "__NO_MATCHING_INSTITUTE__"
           );
         }
       } else {
         /*
-         * المدير:
-         *
-         * إذا فتح الصفحة من بطاقة معهد:
-         * /institute-requests?instituteId=XXXX
-         *
-         * نعرض هذا المعهد فقط.
-         *
-         * وإذا فتح الصفحة بدون instituteId:
-         * نعرض جميع معاهد مديريتة.
+         * باقي الأدوار لا تستطيع تغيير المعهد من الرابط.
          */
-        if (requestedInstituteId) {
+        if (currentProfile.institute_id) {
           requestsQuery = requestsQuery.eq(
             "institute_id",
-            requestedInstituteId
+            currentProfile.institute_id
           );
-        } else if (currentProfile.directorate_id) {
+        } else {
           requestsQuery = requestsQuery.eq(
-            "directorate_id",
-            currentProfile.directorate_id
+            "institute_id",
+            "__NO_MATCHING_INSTITUTE__"
           );
         }
       }
@@ -487,19 +490,8 @@ export default function InstituteRequestsPage() {
 
       setRequests(normalizedRequests);
 
-      /*
-       * عند فتح معهد محدد من بطاقة المدير:
-       * نضبط فلتر المعهد تلقائيًا على هذا المعهد.
-       */
-      if (
-        currentIsDirector &&
-        requestedInstituteId
-      ) {
-        setInstituteFilter(requestedInstituteId);
-      } else if (!currentIsDirector) {
-        setInstituteFilter(
-          currentProfile.institute_id ?? "all"
-        );
+      if (effectiveId) {
+        setInstituteFilter(effectiveId);
       } else {
         setInstituteFilter("all");
       }
@@ -512,8 +504,26 @@ export default function InstituteRequestsPage() {
     }
   }
 
+  /*
+   * قراءة المعهد من الرابط بدون useSearchParams،
+   * لتجنب خطأ Suspense أثناء Vercel build.
+   */
   useEffect(() => {
-    loadData();
+    const params = new URLSearchParams(
+      window.location.search
+    );
+
+    setRequestedInstituteId(
+      params.get("instituteId")
+    );
+  }, []);
+
+  useEffect(() => {
+    if (requestedInstituteId !== undefined) {
+      loadData();
+    }
+    // نعيد التحميل عندما يتغير المعهد المحدد في الرابط.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedInstituteId]);
 
   function openRequest(request: InstituteRequest) {
@@ -521,8 +531,7 @@ export default function InstituteRequestsPage() {
 
     setDirectorForm({
       status: request.status,
-      director_response:
-        request.director_response ?? "",
+      director_response: request.director_response ?? "",
       due_date: request.due_date ?? "",
     });
   }
@@ -548,14 +557,14 @@ export default function InstituteRequestsPage() {
   }
 
   async function createRequest() {
-    if (!canCreate) return;
+    if (!canCreate || !profile) return;
 
-    if (!profile?.institute_id) {
+    if (!profile.institute_id) {
       alert("لا يوجد معهد مرتبط بحساب المستخدم.");
       return;
     }
 
-    if (!profile?.directorate_id) {
+    if (!profile.directorate_id) {
       alert("لا توجد مديرية مرتبطة بحساب المستخدم.");
       return;
     }
@@ -589,11 +598,7 @@ export default function InstituteRequestsPage() {
 
       if (error) {
         console.error(error);
-
-        alert(
-          `تعذر إنشاء الطلب:\n${error.message}`
-        );
-
+        alert(`تعذر إنشاء الطلب:\n${error.message}`);
         return;
       }
 
@@ -612,11 +617,7 @@ export default function InstituteRequestsPage() {
   }
 
   async function updateRequest() {
-    if (
-      !isDirector ||
-      !selectedRequest ||
-      !profile
-    ) {
+    if (!isDirector || !selectedRequest || !profile) {
       return;
     }
 
@@ -624,13 +625,9 @@ export default function InstituteRequestsPage() {
       setSaving(true);
 
       const newStatus = directorForm.status;
-
       const newResponse =
-        directorForm.director_response.trim() ||
-        null;
-
-      const newDueDate =
-        directorForm.due_date || null;
+        directorForm.director_response.trim() || null;
+      const newDueDate = directorForm.due_date || null;
 
       const isNowResolved =
         newStatus === "resolved" ||
@@ -654,47 +651,37 @@ export default function InstituteRequestsPage() {
 
       const hasChanges =
         newStatus !== selectedRequest.status ||
-        newResponse !==
-          selectedRequest.director_response ||
+        newResponse !== selectedRequest.director_response ||
         newDueDate !== selectedRequest.due_date ||
-        newResolvedAt !==
-          selectedRequest.resolved_at ||
-        newResolvedBy !==
-          selectedRequest.resolved_by;
+        newResolvedAt !== selectedRequest.resolved_at ||
+        newResolvedBy !== selectedRequest.resolved_by;
 
       if (!hasChanges) {
         alert("لا توجد تغييرات جديدة لحفظها.");
         return;
       }
 
-      const updateData = {
-        status: newStatus,
-        director_response: newResponse,
-        due_date: newDueDate,
-        updated_at: new Date().toISOString(),
-        resolved_at: newResolvedAt,
-        resolved_by: newResolvedBy,
-      };
-
       const { error } = await supabase
         .from("institute_requests")
-        .update(updateData)
+        .update({
+          status: newStatus,
+          director_response: newResponse,
+          due_date: newDueDate,
+          updated_at: new Date().toISOString(),
+          resolved_at: newResolvedAt,
+          resolved_by: newResolvedBy,
+        })
         .eq("id", selectedRequest.id);
 
       if (error) {
         console.error(error);
-
-        alert(
-          `تعذر حفظ التحديث:\n${error.message}`
-        );
-
+        alert(`تعذر حفظ التحديث:\n${error.message}`);
         return;
       }
 
       alert("تم حفظ تحديث الطلب بنجاح ✅");
 
       closeRequest();
-
       await loadData(true);
     } catch (error) {
       console.error(error);
@@ -705,18 +692,13 @@ export default function InstituteRequestsPage() {
   }
 
   const filteredRequests = useMemo(() => {
-    const search =
-      searchTerm.trim().toLowerCase();
+    const search = searchTerm.trim().toLowerCase();
 
     return requests.filter((request) => {
       const matchesSearch =
         !search ||
-        request.title
-          .toLowerCase()
-          .includes(search) ||
-        request.description
-          .toLowerCase()
-          .includes(search) ||
+        request.title.toLowerCase().includes(search) ||
+        request.description.toLowerCase().includes(search) ||
         (request.institute?.name ?? "")
           .toLowerCase()
           .includes(search);
@@ -748,37 +730,27 @@ export default function InstituteRequestsPage() {
     instituteFilter,
   ]);
 
-  const stats = useMemo(() => {
-    return {
-      total: requests.length,
-
-      newCount: requests.filter(
-        (request) =>
-          request.status === "new"
-      ).length,
-
-      inProgress: requests.filter(
-        (request) =>
-          request.status === "in_progress"
-      ).length,
-
-      needsDirector: requests.filter(
-        (request) =>
-          request.status ===
-          "needs_director_action"
-      ).length,
-
-      overdue: requests.filter((request) =>
-        isOverdue(request)
-      ).length,
-
-      resolved: requests.filter(
-        (request) =>
-          request.status === "resolved" ||
-          request.status === "closed"
-      ).length,
-    };
-  }, [requests]);
+  const stats = useMemo(() => ({
+    total: requests.length,
+    newCount: requests.filter(
+      (request) => request.status === "new"
+    ).length,
+    inProgress: requests.filter(
+      (request) => request.status === "in_progress"
+    ).length,
+    needsDirector: requests.filter(
+      (request) =>
+        request.status === "needs_director_action"
+    ).length,
+    overdue: requests.filter((request) =>
+      isOverdue(request)
+    ).length,
+    resolved: requests.filter(
+      (request) =>
+        request.status === "resolved" ||
+        request.status === "closed"
+    ).length,
+  }), [requests]);
 
   const pageTitle = isDirector
     ? "مدير الإدارة التعليمية الأزهرية"
@@ -795,7 +767,6 @@ export default function InstituteRequestsPage() {
         >
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-
             <p className="font-bold text-slate-600">
               جارٍ تحميل طلبات المعاهد...
             </p>
@@ -807,21 +778,14 @@ export default function InstituteRequestsPage() {
 
   return (
     <AppShell>
-      <div
-        dir="rtl"
-        className="min-h-screen bg-slate-50"
-      >
-        {/* Header */}
+      <div dir="rtl" className="min-h-screen bg-slate-50">
         <div className="border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="mb-2 flex items-center gap-2 text-sm font-bold text-indigo-600">
                   <Building2 className="h-4 w-4" />
-
-                  <span>
-                    منصة الإدارة والمتابعة المركزية
-                  </span>
+                  <span>منصة الإدارة والمتابعة المركزية</span>
                 </div>
 
                 <h1 className="text-2xl font-black text-slate-900">
@@ -831,18 +795,14 @@ export default function InstituteRequestsPage() {
                 {selectedInstitute && (
                   <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-black text-indigo-700">
                     <Building2 className="h-4 w-4" />
-
                     المعهد المحدد:
-                    <span>
-                      {selectedInstitute.name}
-                    </span>
+                    <span>{selectedInstitute.name}</span>
                   </div>
                 )}
 
                 <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">
-                  قناة مباشرة ومنظمة بين المعاهد ومدير
-                  الإدارة للطلبات والمشكلات والاحتياجات
-                  والمتابعة حتى الحل والإغلاق.
+                  قناة مباشرة ومنظمة بين المعاهد ومدير الإدارة
+                  للطلبات والمشكلات والاحتياجات والمتابعة حتى الحل.
                 </p>
               </div>
 
@@ -851,40 +811,30 @@ export default function InstituteRequestsPage() {
                   <div className="text-xs font-bold text-slate-500">
                     {pageTitle}
                   </div>
-
                   <div className="mt-1 text-sm font-black text-slate-900">
                     {profile?.full_name ||
-                      (isDirector
-                        ? "مدير الإدارة"
-                        : "المستخدم")}
+                      (isDirector ? "مدير الإدارة" : "المستخدم")}
                   </div>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() =>
-                    loadData(true)
-                  }
+                  onClick={() => loadData(true)}
                   disabled={refreshing}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <RefreshCw
                     className={`h-4 w-4 ${
-                      refreshing
-                        ? "animate-spin"
-                        : ""
+                      refreshing ? "animate-spin" : ""
                     }`}
                   />
-
                   تحديث
                 </button>
 
                 {canCreate && (
                   <button
                     type="button"
-                    onClick={() =>
-                      setShowCreate(true)
-                    }
+                    onClick={() => setShowCreate(true)}
                     className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700"
                   >
                     <Plus className="h-4 w-4" />
@@ -897,19 +847,16 @@ export default function InstituteRequestsPage() {
         </div>
 
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          {/* Selected Institute Notice */}
           {isDirector &&
-            effectiveInstituteId &&
+            requestedInstituteId &&
             selectedInstitute && (
               <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <Building2 className="h-5 w-5 text-indigo-600" />
-
                   <div>
                     <div className="text-xs font-bold text-indigo-600">
                       عرض خاص بالمعهد
                     </div>
-
                     <div className="font-black text-indigo-900">
                       {selectedInstitute.name}
                     </div>
@@ -925,17 +872,14 @@ export default function InstituteRequestsPage() {
               </div>
             )}
 
-          {/* Stats */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-500">
                   إجمالي الطلبات
                 </span>
-
                 <FileText className="h-5 w-5 text-indigo-600" />
               </div>
-
               <div className="text-3xl font-black text-slate-900">
                 {stats.total}
               </div>
@@ -946,10 +890,8 @@ export default function InstituteRequestsPage() {
                 <span className="text-sm font-bold text-blue-700">
                   جديدة
                 </span>
-
                 <Bell className="h-5 w-5 text-blue-600" />
               </div>
-
               <div className="text-3xl font-black text-blue-900">
                 {stats.newCount}
               </div>
@@ -960,10 +902,8 @@ export default function InstituteRequestsPage() {
                 <span className="text-sm font-bold text-amber-700">
                   قيد المعالجة
                 </span>
-
                 <Clock3 className="h-5 w-5 text-amber-600" />
               </div>
-
               <div className="text-3xl font-black text-amber-900">
                 {stats.inProgress}
               </div>
@@ -974,10 +914,8 @@ export default function InstituteRequestsPage() {
                 <span className="text-sm font-bold text-red-700">
                   تحتاج تدخل المدير
                 </span>
-
                 <AlertCircle className="h-5 w-5 text-red-600" />
               </div>
-
               <div className="text-3xl font-black text-red-900">
                 {stats.needsDirector}
               </div>
@@ -988,10 +926,8 @@ export default function InstituteRequestsPage() {
                 <span className="text-sm font-bold text-orange-700">
                   متأخرة
                 </span>
-
                 <Clock3 className="h-5 w-5 text-orange-600" />
               </div>
-
               <div className="text-3xl font-black text-orange-900">
                 {stats.overdue}
               </div>
@@ -1002,21 +938,17 @@ export default function InstituteRequestsPage() {
                 <span className="text-sm font-bold text-emerald-700">
                   تم الحل
                 </span>
-
                 <CheckCircle2 className="h-5 w-5 text-emerald-600" />
               </div>
-
               <div className="text-3xl font-black text-emerald-900">
                 {stats.resolved}
               </div>
             </div>
           </div>
 
-          {/* Filters */}
           <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-5 flex items-center gap-2">
               <Filter className="h-5 w-5 text-indigo-600" />
-
               <h2 className="text-lg font-black text-slate-900">
                 البحث والتصفية
               </h2>
@@ -1025,14 +957,11 @@ export default function InstituteRequestsPage() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className="relative">
                 <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(event) =>
-                    setSearchTerm(
-                      event.target.value
-                    )
+                    setSearchTerm(event.target.value)
                   }
                   placeholder="ابحث في الطلبات..."
                   className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-4 pr-10 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
@@ -1043,80 +972,50 @@ export default function InstituteRequestsPage() {
                 value={statusFilter}
                 onChange={(event) =>
                   setStatusFilter(
-                    event.target.value as
-                      | RequestStatus
-                      | "all"
+                    event.target.value as RequestStatus | "all"
                   )
                 }
                 className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
               >
-                <option value="all">
-                  كل الحالات
-                </option>
-
-                {statusOptions.map(
-                  (option) => (
-                    <option
-                      key={option.value}
-                      value={option.value}
-                    >
-                      {option.label}
-                    </option>
-                  )
-                )}
+                <option value="all">كل الحالات</option>
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
 
               <select
                 value={priorityFilter}
                 onChange={(event) =>
                   setPriorityFilter(
-                    event.target.value as
-                      | Priority
-                      | "all"
+                    event.target.value as Priority | "all"
                   )
                 }
                 className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
               >
-                <option value="all">
-                  كل الأولويات
-                </option>
-
-                {priorityOptions.map(
-                  (option) => (
-                    <option
-                      key={option.value}
-                      value={option.value}
-                    >
-                      {option.label}
-                    </option>
-                  )
-                )}
+                <option value="all">كل الأولويات</option>
+                {priorityOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
 
               {isDirector ? (
                 <select
                   value={instituteFilter}
                   onChange={(event) =>
-                    setInstituteFilter(
-                      event.target.value
-                    )
+                    setInstituteFilter(event.target.value)
                   }
                   className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 >
-                  <option value="all">
-                    كل المعاهد
-                  </option>
-
-                  {institutes.map(
-                    (institute) => (
-                      <option
-                        key={institute.id}
-                        value={institute.id}
-                      >
-                        {institute.name}
-                      </option>
-                    )
-                  )}
+                  <option value="all">كل المعاهد</option>
+                  {institutes.map((institute) => (
+                    <option key={institute.id} value={institute.id}>
+                      {institute.name}
+                    </option>
+                  ))}
                 </select>
               ) : (
                 <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-600">
@@ -1126,18 +1025,14 @@ export default function InstituteRequestsPage() {
             </div>
           </section>
 
-          {/* Requests */}
           <section className="mt-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-black text-slate-900">
                   قائمة الطلبات
                 </h2>
-
                 <p className="mt-1 text-sm text-slate-500">
-                  عرض{" "}
-                  {filteredRequests.length}{" "}
-                  من أصل {requests.length} طلب
+                  عرض {filteredRequests.length} من أصل {requests.length} طلب
                 </p>
               </div>
             </div>
@@ -1145,172 +1040,124 @@ export default function InstituteRequestsPage() {
             {filteredRequests.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center">
                 <FileText className="mx-auto h-12 w-12 text-slate-300" />
-
                 <h3 className="mt-4 text-lg font-black text-slate-800">
                   لا توجد طلبات
                 </h3>
-
                 <p className="mt-2 text-sm text-slate-500">
-                  لا توجد طلبات مطابقة للبحث
-                  والتصفية الحالية.
+                  لا توجد طلبات مطابقة للبحث والتصفية الحالية.
                 </p>
               </div>
             ) : (
               <div className="grid gap-4">
-                {filteredRequests.map(
-                  (request) => {
-                    const overdue =
-                      isOverdue(request);
+                {filteredRequests.map((request) => {
+                  const overdue = isOverdue(request);
 
-                    return (
-                      <article
-                        key={request.id}
-                        className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow-md"
-                      >
-                        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-lg font-black text-slate-900">
-                                {request.title}
-                              </h3>
-
-                              <span
-                                className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(
-                                  request.status
-                                )}`}
-                              >
-                                {statusLabel(
-                                  request.status
-                                )}
-                              </span>
-
-                              <span
-                                className={`rounded-full px-3 py-1 text-xs font-bold ${priorityClass(
-                                  request.priority
-                                )}`}
-                              >
-                                {priorityLabel(
-                                  request.priority
-                                )}
-                              </span>
-                            </div>
-
-                            <p className="mt-3 line-clamp-2 text-sm leading-7 text-slate-600">
-                              {request.description}
-                            </p>
-
-                            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3 text-xs font-semibold text-slate-500">
-                              <span className="inline-flex items-center gap-1.5">
-                                <Building2 className="h-4 w-4" />
-
-                                {request.institute
-                                  ?.name ??
-                                  "غير محدد"}
-                              </span>
-
-                              <span className="inline-flex items-center gap-1.5">
-                                <FileText className="h-4 w-4" />
-
-                                {typeLabel(
-                                  request.request_type
-                                )}
-                              </span>
-
-                              <span className="inline-flex items-center gap-1.5">
-                                <CalendarDays className="h-4 w-4" />
-
-                                {formatDateTime(
-                                  request.created_at
-                                )}
-                              </span>
-
-                              <span
-                                className={`inline-flex items-center gap-1.5 ${
-                                  overdue
-                                    ? "font-black text-red-600"
-                                    : ""
-                                }`}
-                              >
-                                <Clock3 className="h-4 w-4" />
-
-                                المتابعة:{" "}
-                                {request.due_date
-                                  ? formatDate(
-                                      request.due_date
-                                    )
-                                  : "غير محدد"}
-
-                                {overdue && (
-                                  <AlertCircle className="h-4 w-4" />
-                                )}
-                              </span>
-                            </div>
+                  return (
+                    <article
+                      key={request.id}
+                      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow-md"
+                    >
+                      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-lg font-black text-slate-900">
+                              {request.title}
+                            </h3>
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(
+                                request.status
+                              )}`}
+                            >
+                              {statusLabel(request.status)}
+                            </span>
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-bold ${priorityClass(
+                                request.priority
+                              )}`}
+                            >
+                              {priorityLabel(request.priority)}
+                            </span>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openRequest(
-                                request
-                              )
-                            }
-                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
-                          >
-                            التفاصيل
+                          <p className="mt-3 line-clamp-2 text-sm leading-7 text-slate-600">
+                            {request.description}
+                          </p>
 
-                            <ArrowLeft className="h-4 w-4" />
-                          </button>
+                          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3 text-xs font-semibold text-slate-500">
+                            <span className="inline-flex items-center gap-1.5">
+                              <Building2 className="h-4 w-4" />
+                              {request.institute?.name ?? "غير محدد"}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <FileText className="h-4 w-4" />
+                              {typeLabel(request.request_type)}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <CalendarDays className="h-4 w-4" />
+                              {formatDateTime(request.created_at)}
+                            </span>
+                            <span
+                              className={`inline-flex items-center gap-1.5 ${
+                                overdue ? "font-black text-red-600" : ""
+                              }`}
+                            >
+                              <Clock3 className="h-4 w-4" />
+                              المتابعة:{" "}
+                              {request.due_date
+                                ? formatDate(request.due_date)
+                                : "غير محدد"}
+                              {overdue && (
+                                <AlertCircle className="h-4 w-4" />
+                              )}
+                            </span>
+                          </div>
                         </div>
-                      </article>
-                    );
-                  }
-                )}
+
+                        <button
+                          type="button"
+                          onClick={() => openRequest(request)}
+                          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                        >
+                          التفاصيل
+                          <ArrowLeft className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>
         </main>
 
-        {/* Create Request Modal */}
         {showCreate &&
           typeof document !== "undefined" &&
           createPortal(
-            <div
-              dir="rtl"
-              className="fixed inset-0 z-[9999] overflow-y-auto"
-            >
+            <div dir="rtl" className="fixed inset-0 z-[9999] overflow-y-auto">
               <div
                 className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
                 onClick={() => {
-                  if (!saving) {
-                    setShowCreate(false);
-                  }
+                  if (!saving) setShowCreate(false);
                 }}
               />
 
               <div className="relative flex min-h-full items-center justify-center p-4 sm:p-6">
                 <div
                   className="relative z-[10000] w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
-                  onClick={(event) =>
-                    event.stopPropagation()
-                  }
+                  onClick={(event) => event.stopPropagation()}
                 >
                   <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
                     <div>
                       <h2 className="text-xl font-black text-slate-900">
                         إنشاء طلب جديد
                       </h2>
-
                       <p className="mt-1 text-sm text-slate-500">
-                        أرسل طلبك إلى مدير الإدارة التعليمية
-                        الأزهرية.
+                        أرسل طلبك إلى مدير الإدارة التعليمية الأزهرية.
                       </p>
                     </div>
-
                     <button
                       type="button"
-                      onClick={() =>
-                        setShowCreate(false)
-                      }
+                      onClick={() => setShowCreate(false)}
                       disabled={saving}
                       className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-100"
                     >
@@ -1323,18 +1170,14 @@ export default function InstituteRequestsPage() {
                       <label className="mb-2 block text-sm font-bold text-slate-700">
                         عنوان الطلب
                       </label>
-
                       <input
                         type="text"
                         value={form.title}
                         onChange={(event) =>
-                          setForm(
-                            (current) => ({
-                              ...current,
-                              title: event.target
-                                .value,
-                            })
-                          )
+                          setForm((current) => ({
+                            ...current,
+                            title: event.target.value,
+                          }))
                         }
                         placeholder="مثال: طلب صيانة جهاز كمبيوتر"
                         className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
@@ -1346,37 +1189,21 @@ export default function InstituteRequestsPage() {
                         <label className="mb-2 block text-sm font-bold text-slate-700">
                           نوع الطلب
                         </label>
-
                         <select
-                          value={
-                            form.request_type
-                          }
+                          value={form.request_type}
                           onChange={(event) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                request_type:
-                                  event.target
-                                    .value as RequestType,
-                              })
-                            )
+                            setForm((current) => ({
+                              ...current,
+                              request_type: event.target.value as RequestType,
+                            }))
                           }
                           className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                         >
-                          {requestTypeOptions.map(
-                            (option) => (
-                              <option
-                                key={
-                                  option.value
-                                }
-                                value={
-                                  option.value
-                                }
-                              >
-                                {option.label}
-                              </option>
-                            )
-                          )}
+                          {requestTypeOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
 
@@ -1384,35 +1211,21 @@ export default function InstituteRequestsPage() {
                         <label className="mb-2 block text-sm font-bold text-slate-700">
                           الأولوية
                         </label>
-
                         <select
                           value={form.priority}
                           onChange={(event) =>
-                            setForm(
-                              (current) => ({
-                                ...current,
-                                priority:
-                                  event.target
-                                    .value as Priority,
-                              })
-                            )
+                            setForm((current) => ({
+                              ...current,
+                              priority: event.target.value as Priority,
+                            }))
                           }
                           className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                         >
-                          {priorityOptions.map(
-                            (option) => (
-                              <option
-                                key={
-                                  option.value
-                                }
-                                value={
-                                  option.value
-                                }
-                              >
-                                {option.label}
-                              </option>
-                            )
-                          )}
+                          {priorityOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -1421,20 +1234,13 @@ export default function InstituteRequestsPage() {
                       <label className="mb-2 block text-sm font-bold text-slate-700">
                         تفاصيل الطلب
                       </label>
-
                       <textarea
-                        value={
-                          form.description
-                        }
+                        value={form.description}
                         onChange={(event) =>
-                          setForm(
-                            (current) => ({
-                              ...current,
-                              description:
-                                event.target
-                                  .value,
-                            })
-                          )
+                          setForm((current) => ({
+                            ...current,
+                            description: event.target.value,
+                          }))
                         }
                         rows={5}
                         placeholder="اكتب تفاصيل المشكلة أو الاحتياج..."
@@ -1446,19 +1252,14 @@ export default function InstituteRequestsPage() {
                       <label className="mb-2 block text-sm font-bold text-slate-700">
                         تاريخ المتابعة المطلوب
                       </label>
-
                       <input
                         type="date"
                         value={form.due_date}
                         onChange={(event) =>
-                          setForm(
-                            (current) => ({
-                              ...current,
-                              due_date:
-                                event.target
-                                  .value,
-                            })
-                          )
+                          setForm((current) => ({
+                            ...current,
+                            due_date: event.target.value,
+                          }))
                         }
                         className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                       />
@@ -1467,9 +1268,7 @@ export default function InstituteRequestsPage() {
                     <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
                       <button
                         type="button"
-                        onClick={() =>
-                          setShowCreate(false)
-                        }
+                        onClick={() => setShowCreate(false)}
                         disabled={saving}
                         className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                       >
@@ -1503,14 +1302,10 @@ export default function InstituteRequestsPage() {
             document.body
           )}
 
-        {/* Details Modal */}
         {selectedRequest &&
           typeof document !== "undefined" &&
           createPortal(
-            <div
-              dir="rtl"
-              className="fixed inset-0 z-[9999] overflow-y-auto"
-            >
+            <div dir="rtl" className="fixed inset-0 z-[9999] overflow-y-auto">
               <div
                 className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
                 onClick={closeRequest}
@@ -1519,9 +1314,7 @@ export default function InstituteRequestsPage() {
               <div className="relative flex min-h-full items-center justify-center p-4 sm:p-6">
                 <div
                   className="relative z-[10000] flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
-                  onClick={(event) =>
-                    event.stopPropagation()
-                  }
+                  onClick={(event) => event.stopPropagation()}
                 >
                   <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-5">
                     <div>
@@ -1531,22 +1324,16 @@ export default function InstituteRequestsPage() {
                             selectedRequest.status
                           )}`}
                         >
-                          {statusLabel(
-                            selectedRequest.status
-                          )}
+                          {statusLabel(selectedRequest.status)}
                         </span>
-
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-bold ${priorityClass(
                             selectedRequest.priority
                           )}`}
                         >
-                          {priorityLabel(
-                            selectedRequest.priority
-                          )}
+                          {priorityLabel(selectedRequest.priority)}
                         </span>
                       </div>
-
                       <h2 className="text-xl font-black text-slate-900">
                         {selectedRequest.title}
                       </h2>
@@ -1569,11 +1356,8 @@ export default function InstituteRequestsPage() {
                           <Building2 className="h-4 w-4" />
                           المعهد
                         </div>
-
                         <div className="font-bold text-slate-900">
-                          {selectedRequest.institute
-                            ?.name ??
-                            "غير محدد"}
+                          {selectedRequest.institute?.name ?? "غير محدد"}
                         </div>
                       </div>
 
@@ -1582,11 +1366,8 @@ export default function InstituteRequestsPage() {
                           <FileText className="h-4 w-4" />
                           نوع الطلب
                         </div>
-
                         <div className="font-bold text-slate-900">
-                          {typeLabel(
-                            selectedRequest.request_type
-                          )}
+                          {typeLabel(selectedRequest.request_type)}
                         </div>
                       </div>
 
@@ -1595,11 +1376,8 @@ export default function InstituteRequestsPage() {
                           <CalendarDays className="h-4 w-4" />
                           تاريخ الإنشاء
                         </div>
-
                         <div className="font-bold text-slate-900">
-                          {formatDateTime(
-                            selectedRequest.created_at
-                          )}
+                          {formatDateTime(selectedRequest.created_at)}
                         </div>
                       </div>
 
@@ -1608,12 +1386,9 @@ export default function InstituteRequestsPage() {
                           <Clock3 className="h-4 w-4" />
                           تاريخ المتابعة
                         </div>
-
                         <div className="font-bold text-slate-900">
                           {selectedRequest.due_date
-                            ? formatDate(
-                                selectedRequest.due_date
-                              )
+                            ? formatDate(selectedRequest.due_date)
                             : "غير محدد"}
                         </div>
                       </div>
@@ -1625,12 +1400,9 @@ export default function InstituteRequestsPage() {
                           تفاصيل الطلب
                         </h3>
                       </div>
-
                       <div className="p-5">
                         <p className="whitespace-pre-wrap leading-8 text-slate-700">
-                          {
-                            selectedRequest.description
-                          }
+                          {selectedRequest.description}
                         </p>
                       </div>
                     </div>
@@ -1642,18 +1414,14 @@ export default function InstituteRequestsPage() {
                           رد الإدارة
                         </h3>
                       </div>
-
                       <div className="p-5">
                         {selectedRequest.director_response ? (
                           <p className="whitespace-pre-wrap leading-8 text-slate-700">
-                            {
-                              selectedRequest.director_response
-                            }
+                            {selectedRequest.director_response}
                           </p>
                         ) : (
                           <p className="text-sm text-slate-400">
-                            لم يتم إضافة رد من الإدارة حتى
-                            الآن.
+                            لم يتم إضافة رد من الإدارة حتى الآن.
                           </p>
                         )}
                       </div>
@@ -1673,37 +1441,21 @@ export default function InstituteRequestsPage() {
                               <label className="mb-2 block text-sm font-bold text-slate-700">
                                 حالة الطلب
                               </label>
-
                               <select
-                                value={
-                                  directorForm.status
-                                }
+                                value={directorForm.status}
                                 onChange={(event) =>
-                                  setDirectorForm(
-                                    (current) => ({
-                                      ...current,
-                                      status:
-                                        event.target
-                                          .value as RequestStatus,
-                                    })
-                                  )
+                                  setDirectorForm((current) => ({
+                                    ...current,
+                                    status: event.target.value as RequestStatus,
+                                  }))
                                 }
                                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                               >
-                                {statusOptions.map(
-                                  (option) => (
-                                    <option
-                                      key={
-                                        option.value
-                                      }
-                                      value={
-                                        option.value
-                                      }
-                                    >
-                                      {option.label}
-                                    </option>
-                                  )
-                                )}
+                                {statusOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
                               </select>
                             </div>
 
@@ -1711,21 +1463,14 @@ export default function InstituteRequestsPage() {
                               <label className="mb-2 block text-sm font-bold text-slate-700">
                                 تاريخ المتابعة
                               </label>
-
                               <input
                                 type="date"
-                                value={
-                                  directorForm.due_date
-                                }
+                                value={directorForm.due_date}
                                 onChange={(event) =>
-                                  setDirectorForm(
-                                    (current) => ({
-                                      ...current,
-                                      due_date:
-                                        event.target
-                                          .value,
-                                    })
-                                  )
+                                  setDirectorForm((current) => ({
+                                    ...current,
+                                    due_date: event.target.value,
+                                  }))
                                 }
                                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                               />
@@ -1735,20 +1480,13 @@ export default function InstituteRequestsPage() {
                               <label className="mb-2 block text-sm font-bold text-slate-700">
                                 رد الإدارة
                               </label>
-
                               <textarea
-                                value={
-                                  directorForm.director_response
-                                }
+                                value={directorForm.director_response}
                                 onChange={(event) =>
-                                  setDirectorForm(
-                                    (current) => ({
-                                      ...current,
-                                      director_response:
-                                        event.target
-                                          .value,
-                                    })
-                                  )
+                                  setDirectorForm((current) => ({
+                                    ...current,
+                                    director_response: event.target.value,
+                                  }))
                                 }
                                 rows={4}
                                 placeholder="اكتب رد الإدارة أو الإجراء الذي تم اتخاذه..."
@@ -1759,9 +1497,7 @@ export default function InstituteRequestsPage() {
                             <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
                               <button
                                 type="button"
-                                onClick={
-                                  closeRequest
-                                }
+                                onClick={closeRequest}
                                 disabled={saving}
                                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                               >
@@ -1771,9 +1507,7 @@ export default function InstituteRequestsPage() {
 
                               <button
                                 type="button"
-                                onClick={
-                                  updateRequest
-                                }
+                                onClick={updateRequest}
                                 disabled={saving}
                                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                               >
@@ -1796,18 +1530,14 @@ export default function InstituteRequestsPage() {
                             <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
                               <div className="flex items-start gap-3">
                                 <Bell className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
-
                                 <div>
                                   <p className="font-bold text-blue-900">
                                     متابعة الطلب
                                   </p>
-
                                   <p className="mt-1 text-sm leading-7 text-blue-800">
-                                    يمكنك متابعة حالة الطلب
-                                    ورد الإدارة من خلال
-                                    هذه الصفحة. يتم تحديث
-                                    حالة الطلب من خلال مدير
-                                    الإدارة التعليمية.
+                                    يمكنك متابعة حالة الطلب ورد الإدارة من خلال
+                                    هذه الصفحة. يتم تحديث حالة الطلب من خلال
+                                    مدير الإدارة التعليمية.
                                   </p>
                                 </div>
                               </div>
@@ -1816,9 +1546,7 @@ export default function InstituteRequestsPage() {
                             <div className="mt-5 flex justify-end border-t border-slate-200 pt-5">
                               <button
                                 type="button"
-                                onClick={
-                                  closeRequest
-                                }
+                                onClick={closeRequest}
                                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                               >
                                 <X className="h-4 w-4" />
