@@ -12,9 +12,6 @@ import {
   Clock3,
   ShieldCheck,
   Building2,
-  ClipboardList,
-  MessageSquareWarning,
-  ListChecks,
   TrendingUp,
 } from "lucide-react";
 
@@ -74,12 +71,6 @@ type ReportRow = {
   percentage: number;
 };
 
-type OperationalStats = {
-  complaints: number;
-  requests: number;
-  tasks: number;
-};
-
 export default function AttendanceReportPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
 
@@ -104,13 +95,6 @@ export default function AttendanceReportPage() {
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
   const [message, setMessage] = useState("");
-
-  const [operationalStats, setOperationalStats] =
-    useState<OperationalStats>({
-      complaints: 0,
-      requests: 0,
-      tasks: 0,
-    });
 
   useEffect(() => {
     loadInitialData();
@@ -147,15 +131,20 @@ export default function AttendanceReportPage() {
 
       /*
        * الصلاحيات:
+       *
        * super_admin = مدير الإدارة التعليمية الأزهرية
        * director   = مدير قديم للتوافق مع الحسابات السابقة
        * sheikh     = شيخ المعهد
+       * it_admin   = مسؤول تكنولوجيا المعلومات للمعهد
        */
-      if (
-        profileData.role !== "sheikh" &&
-        profileData.role !== "director" &&
-        profileData.role !== "super_admin"
-      ) {
+      const allowedRoles = [
+        "sheikh",
+        "director",
+        "super_admin",
+        "it_admin",
+      ];
+
+      if (!allowedRoles.includes(profileData.role)) {
         setMessage("ليس لديك صلاحية لعرض تقارير الحضور");
         setLoading(false);
         return;
@@ -164,12 +153,15 @@ export default function AttendanceReportPage() {
       setProfile(profileData);
 
       /*
-       * شيخ المعهد:
-       * يرى معهده فقط.
+       * شيخ المعهد + مسؤول IT:
+       * كل واحد يرى معهده فقط.
        */
-      if (profileData.role === "sheikh") {
+      if (
+        profileData.role === "sheikh" ||
+        profileData.role === "it_admin"
+      ) {
         if (!profileData.institute_id) {
-          setMessage("لم يتم ربط الشيخ بمعهد");
+          setMessage("لم يتم ربط الحساب بمعهد");
           setLoading(false);
           return;
         }
@@ -240,7 +232,11 @@ export default function AttendanceReportPage() {
   }
 
   useEffect(() => {
-    if (profile?.role === "sheikh" && selectedInstitute) {
+    if (
+      (profile?.role === "sheikh" ||
+        profile?.role === "it_admin") &&
+      selectedInstitute
+    ) {
       loadInstituteData(selectedInstitute);
       return;
     }
@@ -297,7 +293,6 @@ export default function AttendanceReportPage() {
       setStudents(studentsData || []);
 
       await loadAttendance(instituteId);
-      await loadOperationalStats(instituteId);
     } catch (error) {
       console.error(error);
       setMessage("حدث خطأ غير متوقع");
@@ -311,6 +306,10 @@ export default function AttendanceReportPage() {
     setMessage("");
 
     try {
+      /*
+       * إذا اختار مدير الإدارة معهداً معيناً،
+       * يتم تحميل بيانات هذا المعهد فقط.
+       */
       if (selectedInstitute) {
         await loadInstituteData(selectedInstitute);
         return;
@@ -324,12 +323,6 @@ export default function AttendanceReportPage() {
         setClasses([]);
         setStudents([]);
         setAttendance([]);
-
-        setOperationalStats({
-          complaints: 0,
-          requests: 0,
-          tasks: 0,
-        });
 
         setReportLoading(false);
         return;
@@ -347,6 +340,7 @@ export default function AttendanceReportPage() {
 
       if (classesError) {
         console.error(classesError);
+        setMessage("حدث خطأ أثناء تحميل الفصول");
       }
 
       setClasses(classesData || []);
@@ -370,9 +364,7 @@ export default function AttendanceReportPage() {
         })
       );
 
-      const studentsData = studentResults.flat();
-
-      setStudents(studentsData);
+      setStudents(studentResults.flat());
 
       const {
         data: attendanceData,
@@ -388,16 +380,14 @@ export default function AttendanceReportPage() {
 
       if (attendanceError) {
         console.error(attendanceError);
-        setMessage("حدث خطأ أثناء تحميل سجلات الحضور");
+        setMessage(
+          "حدث خطأ أثناء تحميل سجلات الحضور"
+        );
         setReportLoading(false);
         return;
       }
 
       setAttendance(attendanceData || []);
-
-      await loadDirectorateOperationalStats(
-        instituteIds
-      );
     } catch (error) {
       console.error(error);
       setMessage("حدث خطأ غير متوقع");
@@ -418,153 +408,13 @@ export default function AttendanceReportPage() {
 
     if (error) {
       console.error(error);
-      setMessage("حدث خطأ أثناء تحميل سجلات الحضور");
+      setMessage(
+        "حدث خطأ أثناء تحميل سجلات الحضور"
+      );
       return;
     }
 
     setAttendance(data || []);
-  }
-
-  async function loadOperationalStats(
-    instituteId: string
-  ) {
-    let complaints = 0;
-    let requests = 0;
-    let tasks = 0;
-
-    try {
-      const result = await supabase
-        .from("complaints")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .eq("institute_id", instituteId)
-        .neq("status", "resolved");
-
-      if (!result.error) {
-        complaints = result.count || 0;
-      } else {
-        console.error(result.error);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-
-    try {
-      const result = await supabase
-        .from("institute_requests")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .eq("institute_id", instituteId)
-        .eq("status", "new");
-
-      if (!result.error) {
-        requests = result.count || 0;
-      } else {
-        console.error(result.error);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-
-    try {
-      const result = await supabase
-        .from("institute_tasks")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .eq("institute_id", instituteId)
-        .neq("status", "completed");
-
-      if (!result.error) {
-        tasks = result.count || 0;
-      } else {
-        console.error(result.error);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-
-    setOperationalStats({
-      complaints,
-      requests,
-      tasks,
-    });
-  }
-
-  async function loadDirectorateOperationalStats(
-    instituteIds: string[]
-  ) {
-    let complaints = 0;
-    let requests = 0;
-    let tasks = 0;
-
-    try {
-      const result = await supabase
-        .from("complaints")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .in("institute_id", instituteIds)
-        .neq("status", "resolved");
-
-      if (!result.error) {
-        complaints = result.count || 0;
-      } else {
-        console.error(result.error);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-
-    try {
-      const result = await supabase
-        .from("institute_requests")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .in("institute_id", instituteIds)
-        .eq("status", "new");
-
-      if (!result.error) {
-        requests = result.count || 0;
-      } else {
-        console.error(result.error);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-
-    try {
-      const result = await supabase
-        .from("institute_tasks")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .in("institute_id", instituteIds)
-        .neq("status", "completed");
-
-      if (!result.error) {
-        tasks = result.count || 0;
-      } else {
-        console.error(result.error);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-
-    setOperationalStats({
-      complaints,
-      requests,
-      tasks,
-    });
   }
 
   async function refreshReport() {
@@ -579,7 +429,10 @@ export default function AttendanceReportPage() {
 
     setReportLoading(true);
 
-    if (profile.role === "sheikh") {
+    if (
+      profile.role === "sheikh" ||
+      profile.role === "it_admin"
+    ) {
       if (selectedInstitute) {
         await loadInstituteData(selectedInstitute);
       }
@@ -604,16 +457,13 @@ export default function AttendanceReportPage() {
       const search = searchTerm.toLowerCase();
 
       filteredStudents = filteredStudents.filter(
-        (student) => {
-          return (
-            student.full_name
-              .toLowerCase()
-              .includes(search) ||
-            (student.student_code || "")
-              .toLowerCase()
-              .includes(search)
-          );
-        }
+        (student) =>
+          student.full_name
+            .toLowerCase()
+            .includes(search) ||
+          (student.student_code || "")
+            .toLowerCase()
+            .includes(search)
       );
     }
 
@@ -804,13 +654,19 @@ export default function AttendanceReportPage() {
     );
   }
 
+  /*
+   * الحماية النهائية للصفحة.
+   */
+  const allowedPageRoles = [
+    "sheikh",
+    "director",
+    "super_admin",
+    "it_admin",
+  ];
+
   if (
     !profile ||
-    (
-      profile.role !== "sheikh" &&
-      profile.role !== "director" &&
-      profile.role !== "super_admin"
-    )
+    !allowedPageRoles.includes(profile.role)
   ) {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
@@ -835,6 +691,10 @@ export default function AttendanceReportPage() {
   const isDirector =
     profile.role === "director" ||
     profile.role === "super_admin";
+
+  const isInstituteUser =
+    profile.role === "sheikh" ||
+    profile.role === "it_admin";
 
   const isAllInstitutes =
     isDirector &&
@@ -864,7 +724,9 @@ export default function AttendanceReportPage() {
                 <p className="text-gray-500 mt-1">
                   {isDirector
                     ? "لوحة المتابعة المركزية للإدارة التعليمية الأزهرية"
-                    : "متابعة وتحليل حضور الطلاب خلال الفترة المحددة"}
+                    : profile.role === "it_admin"
+                      ? "تقارير وإحصائيات معهدك"
+                      : "متابعة وتحليل حضور الطلاب خلال الفترة المحددة"}
                 </p>
               </div>
             </div>
@@ -919,14 +781,18 @@ export default function AttendanceReportPage() {
               <select
                 value={selectedInstitute}
                 onChange={(e) => {
+                  /*
+                   * مسؤول IT وشيخ المعهد لا يستطيعان
+                   * تغيير المعهد.
+                   */
+                  if (isInstituteUser) return;
+
                   setSelectedInstitute(
                     e.target.value
                   );
                   setSelectedClass("");
                 }}
-                disabled={
-                  profile.role === "sheikh"
-                }
+                disabled={isInstituteUser}
                 className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
               >
                 {isDirector && (
@@ -1154,70 +1020,6 @@ export default function AttendanceReportPage() {
           </div>
         </div>
 
-        {/* Operational Statistics */}
-        {isDirector && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-
-            <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-orange-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm">
-                    الشكاوى المفتوحة
-                  </p>
-
-                  <p className="text-3xl font-bold text-gray-800 mt-1">
-                    {operationalStats.complaints}
-                  </p>
-                </div>
-
-                <MessageSquareWarning
-                  size={30}
-                  className="text-orange-500"
-                />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-blue-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm">
-                    الطلبات الجديدة
-                  </p>
-
-                  <p className="text-3xl font-bold text-gray-800 mt-1">
-                    {operationalStats.requests}
-                  </p>
-                </div>
-
-                <ClipboardList
-                  size={30}
-                  className="text-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm p-5 border-r-4 border-purple-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm">
-                    المهام غير المكتملة
-                  </p>
-
-                  <p className="text-3xl font-bold text-gray-800 mt-1">
-                    {operationalStats.tasks}
-                  </p>
-                </div>
-
-                <ListChecks
-                  size={30}
-                  className="text-purple-500"
-                />
-              </div>
-            </div>
-
-          </div>
-        )}
-
         {/* Directorate Institute Summary */}
         {isDirector && isAllInstitutes && (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
@@ -1362,7 +1164,9 @@ export default function AttendanceReportPage() {
                 <p className="text-gray-500 text-sm mt-1">
                   {isAllInstitutes
                     ? "تفاصيل الطلاب في جميع المعاهد التابعة للإدارة"
-                    : "التقرير حسب الفترة والفصل المحددين"}
+                    : profile.role === "it_admin"
+                      ? "تفاصيل طلاب المعهد التابع للحساب"
+                      : "التقرير حسب الفترة والفصل المحددين"}
                 </p>
               </div>
 
