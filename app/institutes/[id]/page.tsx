@@ -42,14 +42,87 @@ type Institute = {
   is_active: boolean;
 };
 
+type AttendanceSummary = {
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+  totalRecorded: number;
+  attendanceRate: number;
+};
+
 export default function InstituteDashboard() {
   const params = useParams();
   const router = useRouter();
   const instituteId = params.id as string;
 
   const [institute, setInstitute] = useState<Institute | null>(null);
+  const [attendanceSummary, setAttendanceSummary] =
+    useState<AttendanceSummary>({
+      present: 0,
+      absent: 0,
+      late: 0,
+      excused: 0,
+      totalRecorded: 0,
+      attendanceRate: 0,
+    });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  async function loadAttendanceSummary() {
+    if (!instituteId) return;
+
+    const now = new Date();
+    const attendanceDate = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
+
+    const { data, error } = await supabase
+      .from("attendance")
+      .select(`
+        status,
+        students!inner (
+          institute_id
+        )
+      `)
+      .eq("attendance_date", attendanceDate)
+      .eq("students.institute_id", instituteId);
+
+    if (error) {
+      console.error("ATTENDANCE SUMMARY ERROR:", error);
+      setAttendanceSummary({
+        present: 0,
+        absent: 0,
+        late: 0,
+        excused: 0,
+        totalRecorded: 0,
+        attendanceRate: 0,
+      });
+      return;
+    }
+
+    const rows = data || [];
+    const present = rows.filter((r: any) => r.status === "present").length;
+    const absent = rows.filter((r: any) => r.status === "absent").length;
+    const late = rows.filter((r: any) => r.status === "late").length;
+    const excused = rows.filter((r: any) => r.status === "excused").length;
+    const totalRecorded = rows.length;
+
+    const base = present + absent + late;
+    const attendanceRate =
+      base > 0 ? Math.round(((present + late) / base) * 100) : 0;
+
+    setAttendanceSummary({
+      present,
+      absent,
+      late,
+      excused,
+      totalRecorded,
+      attendanceRate,
+    });
+  }
 
   async function loadInstitute() {
     if (!instituteId) {
@@ -90,6 +163,7 @@ export default function InstituteDashboard() {
 
   useEffect(() => {
     loadInstitute();
+    loadAttendanceSummary();
   }, [instituteId]);
 
   async function handleLogout() {
@@ -410,9 +484,13 @@ export default function InstituteDashboard() {
             <StatCard
               icon={ClipboardCheck}
               title="الحضور اليوم"
-              value="96%"
-              description="معدل الحضور"
-              positive
+              value={`${attendanceSummary.attendanceRate}%`}
+              description={
+                attendanceSummary.totalRecorded > 0
+                  ? `${attendanceSummary.totalRecorded} سجل حضور اليوم`
+                  : "لا توجد سجلات حضور اليوم"
+              }
+              positive={attendanceSummary.totalRecorded > 0}
             />
 
             <StatCard
@@ -619,19 +697,19 @@ export default function InstituteDashboard() {
 
               <div className="grid grid-cols-3 gap-3">
                 <AttendanceBox
-                  value="816"
+                  value={attendanceSummary.present.toLocaleString("ar-EG")}
                   label="حاضر"
                   type="success"
                 />
 
                 <AttendanceBox
-                  value="24"
+                  value={attendanceSummary.absent.toLocaleString("ar-EG")}
                   label="غائب"
                   type="danger"
                 />
 
                 <AttendanceBox
-                  value="10"
+                  value={attendanceSummary.late.toLocaleString("ar-EG")}
                   label="متأخر"
                   type="warning"
                 />
@@ -640,13 +718,13 @@ export default function InstituteDashboard() {
               <div className="mt-5 rounded-2xl bg-slate-50 p-4">
                 <div className="flex justify-between text-sm">
                   <span>نسبة الحضور</span>
-                  <strong>96%</strong>
+                  <strong>{attendanceSummary.attendanceRate}%</strong>
                 </div>
 
                 <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200">
                   <div
                     className="h-full rounded-full bg-emerald-500"
-                    style={{ width: "96%" }}
+                    style={{ width: `${attendanceSummary.attendanceRate}%` }}
                   />
                 </div>
               </div>
@@ -664,25 +742,16 @@ export default function InstituteDashboard() {
               </div>
 
               <div className="space-y-4">
-                <Activity
-                  text="تم تسجيل حضور الطلاب"
-                  time="منذ 15 دقيقة"
-                />
-
-                <Activity
-                  text="تم إرسال تقرير إلى الإدارة التعليمية"
-                  time="منذ ساعة"
-                />
-
-                <Activity
-                  text="تم تحديث بيانات أحد الطلاب"
-                  time="منذ ساعتين"
-                />
-
-                <Activity
-                  text="تم استلام تكليف جديد من الإدارة"
-                  time="منذ 3 ساعات"
-                />
+                {attendanceSummary.totalRecorded > 0 ? (
+                  <Activity
+                    text={`تم تسجيل ${attendanceSummary.totalRecorded.toLocaleString("ar-EG")} سجل حضور اليوم`}
+                    time="اليوم"
+                  />
+                ) : (
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                    لا توجد عمليات حضور مسجلة لهذا المعهد اليوم.
+                  </div>
+                )}
               </div>
             </div>
           </section>
