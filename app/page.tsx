@@ -35,8 +35,11 @@ type Institute = {
   code: string | null;
   institute_type: string | null;
   director_name: string | null;
+
+  // يتم تحديث هذه القيم من البيانات الحقيقية
   student_count: number | null;
   teacher_count: number | null;
+
   is_active: boolean | null;
   directorate_id?: string | null;
 };
@@ -277,6 +280,12 @@ export default function HomePage() {
       .toLowerCase();
   }
 
+  /*
+   * =========================================================
+   * الحضور
+   * =========================================================
+   */
+
   async function loadAttendanceData(
     instituteIds: string[]
   ) {
@@ -337,6 +346,10 @@ export default function HomePage() {
       const instituteId =
         row.institute_id;
 
+      if (!instituteId) {
+        continue;
+      }
+
       if (!grouped[instituteId]) {
         grouped[instituteId] =
           getEmptyAttendanceSummary();
@@ -380,6 +393,12 @@ export default function HomePage() {
     );
   }
 
+  /*
+   * =========================================================
+   * الطلبات + الشكاوى + المهام
+   * =========================================================
+   */
+
   async function loadFollowUpData(
     instituteIds: string[]
   ) {
@@ -410,12 +429,15 @@ export default function HomePage() {
           "id, institute_id, status"
         );
 
-      if (
-        profile?.role !==
-          "super_admin" &&
-        profile?.role !== "director" &&
-        profile?.role !== "deputy"
-      ) {
+      const isCentralManager =
+        profile?.role ===
+          "super_admin" ||
+        profile?.role ===
+          "director" ||
+        profile?.role ===
+          "deputy";
+
+      if (!isCentralManager) {
         if (instituteIds.length) {
           requestQuery =
             requestQuery.eq(
@@ -423,6 +445,12 @@ export default function HomePage() {
               instituteIds[0]
             );
         }
+      } else if (instituteIds.length) {
+        requestQuery =
+          requestQuery.in(
+            "institute_id",
+            instituteIds
+          );
       }
 
       const {
@@ -447,7 +475,8 @@ export default function HomePage() {
             status === "new" ||
             status === "open" ||
             status === "قيد المراجعة" ||
-            status === "معلق";
+            status === "معلق" ||
+            status === "معلقة";
 
           if (!isPending) {
             continue;
@@ -485,12 +514,15 @@ export default function HomePage() {
           "id, institute_id, status"
         );
 
-      if (
-        profile?.role !==
-          "super_admin" &&
-        profile?.role !== "director" &&
-        profile?.role !== "deputy"
-      ) {
+      const isCentralManager =
+        profile?.role ===
+          "super_admin" ||
+        profile?.role ===
+          "director" ||
+        profile?.role ===
+          "deputy";
+
+      if (!isCentralManager) {
         if (instituteIds.length) {
           complaintQuery =
             complaintQuery.eq(
@@ -498,6 +530,12 @@ export default function HomePage() {
               instituteIds[0]
             );
         }
+      } else if (instituteIds.length) {
+        complaintQuery =
+          complaintQuery.in(
+            "institute_id",
+            instituteIds
+          );
       }
 
       const {
@@ -525,7 +563,8 @@ export default function HomePage() {
             status === "in progress" ||
             status === "جديدة" ||
             status === "مفتوحة" ||
-            status === "قيد المتابعة";
+            status === "قيد المتابعة" ||
+            status === "قيد المراجعة";
 
           if (!isOpen) {
             continue;
@@ -563,14 +602,15 @@ export default function HomePage() {
           "id, institute_id, status"
         );
 
-      if (
-        profile?.role !==
-          "super_admin" &&
-        profile?.role !==
-          "director" &&
-        profile?.role !==
-          "deputy"
-      ) {
+      const isCentralManager =
+        profile?.role ===
+          "super_admin" ||
+        profile?.role ===
+          "director" ||
+        profile?.role ===
+          "deputy";
+
+      if (!isCentralManager) {
         if (instituteIds.length) {
           taskQuery =
             taskQuery.eq(
@@ -578,6 +618,12 @@ export default function HomePage() {
               instituteIds[0]
             );
         }
+      } else if (instituteIds.length) {
+        taskQuery =
+          taskQuery.in(
+            "institute_id",
+            instituteIds
+          );
       }
 
       const {
@@ -590,58 +636,6 @@ export default function HomePage() {
           "Tasks dashboard error:",
           error
         );
-
-        try {
-          let fallbackQuery =
-            supabase
-              .from("institute_tasks")
-              .select(
-                "id, institute_id"
-              );
-
-          if (
-            profile?.role !==
-              "super_admin" &&
-            profile?.role !==
-              "director" &&
-            profile?.role !==
-              "deputy"
-          ) {
-            if (instituteIds.length) {
-              fallbackQuery =
-                fallbackQuery.eq(
-                  "institute_id",
-                  instituteIds[0]
-                );
-            }
-          }
-
-          const {
-            data: fallbackData,
-          } =
-            await fallbackQuery;
-
-          for (
-            const row of
-              fallbackData || []
-          ) {
-            if (
-              row.institute_id &&
-              grouped[
-                row.institute_id
-              ]
-            ) {
-              grouped[
-                row.institute_id
-              ].pendingTasks += 1;
-            }
-          }
-        } catch (fallbackError) {
-          console.error(
-            "Tasks fallback error:",
-            fallbackError
-          );
-        }
       } else {
         for (const row of data || []) {
           const status =
@@ -658,7 +652,8 @@ export default function HomePage() {
             status === "in progress" ||
             status === "قيد التنفيذ" ||
             status === "معلقة" ||
-            status === "معلق";
+            status === "معلق" ||
+            status === "قيد المتابعة";
 
           if (!isPending) {
             continue;
@@ -696,6 +691,239 @@ export default function HomePage() {
     );
   }
 
+  /*
+   * =========================================================
+   * تحميل الأعداد الحقيقية
+   * =========================================================
+   */
+
+  async function loadRealInstituteCounts(
+    instituteList: Institute[]
+  ) {
+    if (!instituteList.length) {
+      return instituteList;
+    }
+
+    const instituteIds =
+      instituteList.map(
+        (institute) =>
+          institute.id
+      );
+
+    /*
+     * ---------------------------------------------------------
+     * الطلاب
+     * ---------------------------------------------------------
+     */
+
+    const studentCounts: Record<
+      string,
+      number
+    > = {};
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("students")
+        .select(
+          "id, institute_id"
+        )
+        .in(
+          "institute_id",
+          instituteIds
+        );
+
+      if (error) {
+        console.error(
+          "Students dashboard count error:",
+          error
+        );
+      } else {
+        for (const student of data || []) {
+          if (
+            !student.institute_id
+          ) {
+            continue;
+          }
+
+          studentCounts[
+            student.institute_id
+          ] =
+            (studentCounts[
+              student.institute_id
+            ] || 0) + 1;
+        }
+      }
+    } catch (error) {
+      console.error(
+        "Students count exception:",
+        error
+      );
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * المدرسون
+     * ---------------------------------------------------------
+     */
+
+    const teacherCounts: Record<
+      string,
+      number
+    > = {};
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("teachers")
+        .select(
+          "id, institute_id"
+        )
+        .in(
+          "institute_id",
+          instituteIds
+        );
+
+      if (error) {
+        console.error(
+          "Teachers dashboard count error:",
+          error
+        );
+      } else {
+        for (const teacher of data || []) {
+          if (
+            !teacher.institute_id
+          ) {
+            continue;
+          }
+
+          teacherCounts[
+            teacher.institute_id
+          ] =
+            (teacherCounts[
+              teacher.institute_id
+            ] || 0) + 1;
+        }
+      }
+    } catch (error) {
+      console.error(
+        "Teachers count exception:",
+        error
+      );
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * شيوخ المعاهد
+     * ---------------------------------------------------------
+     */
+
+    const sheikhNames: Record<
+      string,
+      string
+    > = {};
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("profiles")
+        .select(
+          "id, full_name, institute_id, role"
+        )
+        .in(
+          "institute_id",
+          instituteIds
+        )
+        .eq(
+          "role",
+          "sheikh"
+        );
+
+      if (error) {
+        console.error(
+          "Sheikh dashboard data error:",
+          error
+        );
+      } else {
+        for (const sheikh of data || []) {
+          if (
+            !sheikh.institute_id
+          ) {
+            continue;
+          }
+
+          if (
+            !sheikhNames[
+              sheikh.institute_id
+            ]
+          ) {
+            sheikhNames[
+              sheikh.institute_id
+            ] =
+              sheikh.full_name ||
+              "";
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        "Sheikh data exception:",
+        error
+      );
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * تركيب البيانات النهائية
+     * ---------------------------------------------------------
+     */
+
+    return instituteList.map(
+      (institute) => ({
+        ...institute,
+
+        /*
+         * مهم:
+         * الأعداد هنا من الجداول الفعلية
+         * وليس من student_count / teacher_count
+         */
+
+        student_count:
+          studentCounts[
+            institute.id
+          ] || 0,
+
+        teacher_count:
+          teacherCounts[
+            institute.id
+          ] || 0,
+
+        /*
+         * اسم شيخ المعهد الحقيقي
+         */
+
+        director_name:
+          sheikhNames[
+            institute.id
+          ] ||
+          institute.director_name ||
+          null,
+      })
+    );
+  }
+
+  /*
+   * =========================================================
+   * تحميل لوحة التحكم
+   * =========================================================
+   */
+
   async function loadDashboard(
     showRefresh = false
   ) {
@@ -723,6 +951,12 @@ export default function HomePage() {
           "لم يتم العثور على المستخدم الحالي"
         );
       }
+
+      /*
+       * -------------------------------------------------------
+       * بيانات المستخدم الحالي
+       * -------------------------------------------------------
+       */
 
       const {
         data: profileData,
@@ -753,6 +987,32 @@ export default function HomePage() {
         currentProfile
       );
 
+      /*
+       * -------------------------------------------------------
+       * تحديد نطاق المعاهد
+       * -------------------------------------------------------
+       */
+
+      const isCentralManager =
+        currentProfile.role ===
+          "super_admin" ||
+        currentProfile.role ===
+          "director" ||
+        currentProfile.role ===
+          "deputy";
+
+      const isInstituteUser =
+        currentProfile.role ===
+          "sheikh" ||
+        currentProfile.role ===
+          "institute_deputy" ||
+        currentProfile.role ===
+          "teacher" ||
+        currentProfile.role ===
+          "employee" ||
+        currentProfile.role ===
+          "it_admin";
+
       let query = supabase
         .from("institutes")
         .select(
@@ -762,14 +1022,7 @@ export default function HomePage() {
           ascending: true,
         });
 
-      if (
-        currentProfile.role ===
-          "super_admin" ||
-        currentProfile.role ===
-          "director" ||
-        currentProfile.role ===
-          "deputy"
-      ) {
+      if (isCentralManager) {
         if (
           !currentProfile.directorate_id
         ) {
@@ -782,18 +1035,7 @@ export default function HomePage() {
           "directorate_id",
           currentProfile.directorate_id
         );
-      } else if (
-        currentProfile.role ===
-          "sheikh" ||
-        currentProfile.role ===
-          "institute_deputy" ||
-        currentProfile.role ===
-          "teacher" ||
-        currentProfile.role ===
-          "employee" ||
-        currentProfile.role ===
-          "it_admin"
-      ) {
+      } else if (isInstituteUser) {
         if (
           !currentProfile.institute_id
         ) {
@@ -826,14 +1068,36 @@ export default function HomePage() {
         (instituteData ||
           []) as Institute[];
 
+      /*
+       * -------------------------------------------------------
+       * هنا التصحيح الأساسي:
+       *
+       * لا نعتمد على student_count / teacher_count
+       * الموجودة في جدول institutes.
+       *
+       * نحسب الأعداد الحقيقية من الجداول.
+       * -------------------------------------------------------
+       */
+
+      const correctedInstitutes =
+        await loadRealInstituteCounts(
+          loadedInstitutes
+        );
+
       setInstitutes(
-        loadedInstitutes
+        correctedInstitutes
       );
 
       const instituteIds =
-        loadedInstitutes.map(
+        correctedInstitutes.map(
           (item) => item.id
         );
+
+      /*
+       * -------------------------------------------------------
+       * تحميل الحضور + المتابعة
+       * -------------------------------------------------------
+       */
 
       await Promise.all([
         loadAttendanceData(
@@ -873,6 +1137,12 @@ export default function HomePage() {
     loadDashboard();
   }, []);
 
+  /*
+   * =========================================================
+   * المؤشرات العامة
+   * =========================================================
+   */
+
   const totalInstitutes =
     institutes.length;
 
@@ -887,6 +1157,11 @@ export default function HomePage() {
       (item) =>
         item.is_active === false
     ).length;
+
+  /*
+   * الآن هذه الأرقام مبنية على القيم الحقيقية
+   * التي تم تحميلها من students / teachers.
+   */
 
   const totalStudents =
     institutes.reduce(
@@ -907,6 +1182,12 @@ export default function HomePage() {
         ),
       0
     );
+
+  /*
+   * =========================================================
+   * بيانات المستخدم
+   * =========================================================
+   */
 
   const roleTitle =
     profile?.role === "it_admin"
@@ -952,6 +1233,12 @@ export default function HomePage() {
       ? `/institutes/${currentInstitute.id}`
       : "/";
 
+  /*
+   * =========================================================
+   * Helpers
+   * =========================================================
+   */
+
   function getInstituteAttendance(
     instituteId: string
   ) {
@@ -983,6 +1270,12 @@ export default function HomePage() {
       }
     );
   }
+
+  /*
+   * =========================================================
+   * البحث
+   * =========================================================
+   */
 
   const filteredInstitutes =
     useMemo(() => {
@@ -1020,6 +1313,12 @@ export default function HomePage() {
       institutes,
       searchTerm,
     ]);
+
+  /*
+   * =========================================================
+   * Render
+   * =========================================================
+   */
 
   return (
     <AppShell>
@@ -1180,7 +1479,7 @@ export default function HomePage() {
               <StatCard
                 title="إجمالي الطلاب"
                 value={totalStudents}
-                subtitle="طالب مسجل"
+                subtitle="طالب مسجل فعليًا"
                 href="/students"
                 icon={
                   <GraduationCap size={22} />
@@ -1190,7 +1489,7 @@ export default function HomePage() {
               <StatCard
                 title="إجمالي المدرسين"
                 value={totalTeachers}
-                subtitle="مدرس وعضو هيئة تعليمية"
+                subtitle="مدرس مسجل فعليًا"
                 href="/teachers"
                 icon={
                   <Users size={22} />
@@ -1497,6 +1796,12 @@ export default function HomePage() {
                                     {institute.code}
                                   </p>
                                 )}
+
+                                {institute.institute_type && (
+                                  <p className="mt-1 text-[11px] font-medium text-slate-400">
+                                    {institute.institute_type}
+                                  </p>
+                                )}
                               </div>
                             </div>
 
@@ -1532,6 +1837,10 @@ export default function HomePage() {
                                   "ar-EG"
                                 )}
                               </div>
+
+                              <div className="mt-1 text-[10px] text-slate-400">
+                                العدد الفعلي
+                              </div>
                             </div>
 
                             <div className="rounded-xl bg-slate-50 p-3">
@@ -1547,6 +1856,10 @@ export default function HomePage() {
                                 ).toLocaleString(
                                   "ar-EG"
                                 )}
+                              </div>
+
+                              <div className="mt-1 text-[10px] text-slate-400">
+                                العدد الفعلي
                               </div>
                             </div>
                           </div>
