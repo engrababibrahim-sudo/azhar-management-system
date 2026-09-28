@@ -129,6 +129,28 @@ export default function AppShell({
 
   const role = profile?.role;
 
+  /*
+   * ============================================================
+   * صلاحيات القائمة
+   * ============================================================
+   *
+   * super_admin
+   * مدير الإدارة التعليمية الأزهرية:
+   * يرى كل الوظائف المركزية.
+   *
+   * it_admin
+   * مسؤول تكنولوجيا المعلومات للمعهد:
+   * لا يدير المعاهد المركزية.
+   * يدير مستخدمي معهده فقط.
+   * يدخل ويعدل الحضور والغياب.
+   *
+   * sheikh
+   * شيخ المعهد:
+   * اطلاع على الحضور والغياب.
+   *
+   * ============================================================
+   */
+
   const navItems: NavItem[] = [
     {
       href: "/",
@@ -137,6 +159,11 @@ export default function AppShell({
       roles: ALL_MANAGEMENT_ROLES,
     },
 
+    /*
+     * إدارة المعاهد
+     *
+     * مسؤول IT ليس من صلاحياته إدارة المعاهد.
+     */
     {
       href: "/institutes",
       label: "إدارة المعاهد",
@@ -145,14 +172,17 @@ export default function AppShell({
         "super_admin",
         "director",
         "deputy",
-        "it_admin",
       ],
     },
 
     /*
      * إدارة المستخدمين
-     * مدير الإدارة: إدارة جميع المستخدمين
-     * مسؤول IT: إدارة مستخدمي معهده فقط
+     *
+     * مدير الإدارة:
+     * إدارة جميع المستخدمين.
+     *
+     * مسؤول IT:
+     * إدارة مستخدمي معهده فقط.
      */
     {
       href: "/users",
@@ -165,6 +195,9 @@ export default function AppShell({
       ],
     },
 
+    /*
+     * الطلاب
+     */
     {
       href: "/students",
       label: "الطلاب",
@@ -181,6 +214,9 @@ export default function AppShell({
       ],
     },
 
+    /*
+     * المدرسون
+     */
     {
       href: "/teachers",
       label: "المدرسون",
@@ -196,6 +232,13 @@ export default function AppShell({
       ],
     },
 
+    /*
+     * الحضور والغياب
+     *
+     * المدير: اطلاع فقط
+     * الشيخ: اطلاع فقط
+     * مسؤول IT: إدخال وتعديل
+     */
     {
       href: "/attendance",
       label: "الحضور والغياب",
@@ -203,13 +246,14 @@ export default function AppShell({
       roles: [
         "super_admin",
         "director",
-        "deputy",
         "sheikh",
-        "institute_deputy",
-        "teacher",
+        "it_admin",
       ],
     },
 
+    /*
+     * التقارير والإحصائيات
+     */
     {
       href: "/attendance-report",
       label: "التقارير والإحصائيات",
@@ -224,6 +268,9 @@ export default function AppShell({
       ],
     },
 
+    /*
+     * المهام والمتابعة
+     */
     {
       href: "/institute-tasks",
       label: "المهام والمتابعة",
@@ -239,6 +286,9 @@ export default function AppShell({
       ],
     },
 
+    /*
+     * طلبات المعاهد
+     */
     {
       href: "/institute-requests",
       label: "طلبات المعاهد",
@@ -254,6 +304,9 @@ export default function AppShell({
       ],
     },
 
+    /*
+     * الإعلانات
+     */
     {
       href: "/announcements",
       label: "الإعلانات",
@@ -261,6 +314,9 @@ export default function AppShell({
       roles: ALL_MANAGEMENT_ROLES,
     },
 
+    /*
+     * الشكاوى والبلاغات
+     */
     {
       href: "/complaints",
       label: "الشكاوى والبلاغات",
@@ -276,6 +332,9 @@ export default function AppShell({
       ],
     },
 
+    /*
+     * شكاوى أولياء الأمور
+     */
     {
       href: "/parent-complaints",
       label: "شكاوى أولياء الأمور",
@@ -290,6 +349,9 @@ export default function AppShell({
       ],
     },
 
+    /*
+     * استيراد البيانات
+     */
     {
       href: "/import",
       label: "استيراد البيانات",
@@ -304,6 +366,9 @@ export default function AppShell({
       ],
     },
 
+    /*
+     * الإعدادات
+     */
     {
       href: "/settings",
       label: "الإعدادات",
