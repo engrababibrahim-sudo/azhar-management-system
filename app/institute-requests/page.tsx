@@ -1,3 +1,4 @@
+```tsx
 "use client";
 
 import { createPortal } from "react-dom";
@@ -264,6 +265,27 @@ export default function InstituteRequestsPage() {
   const [needsActionFilter, setNeedsActionFilter] =
     useState(false);
 
+  /*
+   * فلتر Dashboard:
+   *
+   * الطلبات المعلقة
+   *
+   * يتم تشغيله عند فتح الصفحة بالرابط:
+   *
+   * /institute-requests?filter=pending&instituteId=...
+   *
+   * ويعرض فقط:
+   * - جديد
+   * - قيد المعالجة
+   * - تحتاج تدخل المدير
+   *
+   * ولا يعرض:
+   * - تم الحل
+   * - مغلق
+   */
+  const [pendingFilter, setPendingFilter] =
+    useState(false);
+
   const [showCreate, setShowCreate] = useState(false);
 
   const [selectedRequest, setSelectedRequest] =
@@ -331,6 +353,16 @@ export default function InstituteRequestsPage() {
       setRequestedInstituteId(urlInstituteId);
 
       /*
+       * فلتر الطلبات المعلقة القادم من Dashboard
+       *
+       * /institute-requests?filter=pending&instituteId=...
+       */
+      const shouldUsePendingFilter =
+        urlFilter === "pending";
+
+      setPendingFilter(shouldUsePendingFilter);
+
+      /*
        * ============================================
        * المستخدم الحالي
        * ============================================
@@ -383,7 +415,7 @@ export default function InstituteRequestsPage() {
 
       /*
        * ============================================
-       * فلتر المدير القادم من Dashboard
+       * فلاتر المدير القادمة من Dashboard
        * ============================================
        */
 
@@ -396,12 +428,31 @@ export default function InstituteRequestsPage() {
       );
 
       /*
+       * إذا كان الرابط يطلب الطلبات المعلقة
+       * فلا نستخدم فلتر needs_action في نفس الوقت.
+       */
+
+      if (shouldUsePendingFilter) {
+        setNeedsActionFilter(false);
+      }
+
+      /*
        * إذا دخل المدير من بطاقة
        * "يحتاج إجراء من المدير"
        * نلغي أي فلتر حالة سابق.
        */
 
       if (shouldUseNeedsActionFilter) {
+        setStatusFilter("all");
+      }
+
+      /*
+       * عند فتح الطلبات المعلقة من Dashboard
+       * نلغي فلتر الحالة اليدوي حتى لا يمنع
+       * ظهور باقي الطلبات المعلقة.
+       */
+
+      if (shouldUsePendingFilter) {
         setStatusFilter("all");
       }
 
@@ -915,6 +966,38 @@ export default function InstituteRequestsPage() {
     return requests.filter((request) => {
       /*
        * ==========================================
+       * فلتر Dashboard:
+       * الطلبات المعلقة فقط
+       * ==========================================
+       *
+       * يتم تفعيله عند:
+       *
+       * /institute-requests?filter=pending&instituteId=...
+       *
+       * الطلب المعلق هو:
+       * - جديد
+       * - قيد المعالجة
+       * - تحتاج تدخل المدير
+       *
+       * ويتم استبعاد:
+       * - تم الحل
+       * - مغلق
+       */
+
+      if (pendingFilter) {
+        const isPending =
+          request.status === "new" ||
+          request.status === "in_progress" ||
+          request.status ===
+            "needs_director_action";
+
+        if (!isPending) {
+          return false;
+        }
+      }
+
+      /*
+       * ==========================================
        * فلتر "يحتاج إجراء من المدير"
        * ==========================================
        *
@@ -1030,6 +1113,7 @@ export default function InstituteRequestsPage() {
     priorityFilter,
     instituteFilter,
     needsActionFilter,
+    pendingFilter,
   ]);
 
   /*
@@ -1244,6 +1328,41 @@ export default function InstituteRequestsPage() {
                 <a
                   href="/institute-requests"
                   className="inline-flex items-center justify-center rounded-xl border border-indigo-300 bg-white px-4 py-2 text-sm font-bold text-indigo-700 transition hover:bg-indigo-100"
+                >
+                  عرض كل الطلبات
+                </a>
+              </div>
+            )}
+
+          {/* ==================================== */}
+          {/* Pending notice                        */}
+          {/* ==================================== */}
+
+          {isDirector &&
+            pendingFilter && (
+              <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+
+                  <div>
+                    <div className="font-black text-amber-900">
+                      الطلبات المعلقة
+                    </div>
+
+                    <div className="mt-1 text-sm leading-7 text-amber-700">
+                      يتم عرض الطلبات غير المحلولة وغير المغلقة
+                      فقط لهذا المعهد.
+                    </div>
+                  </div>
+                </div>
+
+                <a
+                  href={
+                    requestedInstituteId
+                      ? `/institute-requests?instituteId=${requestedInstituteId}`
+                      : "/institute-requests"
+                  }
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-bold text-amber-700 transition hover:bg-amber-100"
                 >
                   عرض كل الطلبات
                 </a>
@@ -1590,6 +1709,15 @@ export default function InstituteRequestsPage() {
                 <h2 className="text-xl font-black text-slate-900">
                   قائمة الطلبات
                 </h2>
+
+                {pendingFilter &&
+                  isDirector && (
+                    <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">
+                      <Clock3 className="h-4 w-4" />
+
+                      الطلبات المعلقة فقط
+                    </span>
+                  )}
 
                 {needsActionFilter &&
                   isDirector && (
@@ -2444,3 +2572,4 @@ export default function InstituteRequestsPage() {
     </AppShell>
   );
 }
+```
