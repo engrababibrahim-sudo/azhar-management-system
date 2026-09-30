@@ -57,16 +57,17 @@ export default async function proxy(request: NextRequest) {
    * المسارات العامة
    * ============================================================
    *
-   * هذه الصفحات لا تعتمد على Supabase Auth:
+   * هذه الصفحات لا تحتاج إلى تسجيل دخول:
    *
-   * 1. login
-   * 2. parent-login
-   * 3. parent dashboard
-   * 4. صفحات ولي الأمر الداخلية
-   * 5. شكاوى أولياء الأمور
+   * 1. /login
+   * 2. /parent-login
+   * 3. /parent
+   * 4. /parent/*
+   * 5. /parent-complaints
+   * 6. /demo
    *
-   * ولي الأمر الحالي يعتمد على sessionStorage + RPC
-   * وليس على Supabase Auth.
+   * /demo صفحة عرض عامة للـ Portfolio
+   * ولا تعتمد على Supabase Auth.
    */
 
   const isPublicPath =
@@ -74,7 +75,8 @@ export default async function proxy(request: NextRequest) {
     pathname === "/parent-login" ||
     pathname === "/parent" ||
     pathname.startsWith("/parent/") ||
-    pathname === "/parent-complaints";
+    pathname === "/parent-complaints" ||
+    pathname === "/demo";
 
   if (isPublicPath) {
     return response;
@@ -85,7 +87,7 @@ export default async function proxy(request: NextRequest) {
    * باقي النظام
    * ============================================================
    *
-   * كل مستخدم آخر يجب أن يكون مسجل دخول
+   * كل المسارات الأخرى تحتاج إلى تسجيل دخول
    * عن طريق Supabase Auth.
    */
 
