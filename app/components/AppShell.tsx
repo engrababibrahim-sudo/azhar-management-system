@@ -5,6 +5,7 @@ import {
   Building2,
   CheckSquare,
   ClipboardList,
+  ClipboardCheck,
   FileBarChart,
   GraduationCap,
   LayoutDashboard,
@@ -114,6 +115,21 @@ const allMenuItems = [
     title: "المهام والمتابعة",
     href: "/institute-tasks",
     icon: CheckSquare,
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "super_admin",
+    ],
+  },
+
+  // =========================================================
+  // الزيارات والتفتيش
+  // =========================================================
+  {
+    title: "الزيارات والتفتيش",
+    href: "/visits",
+    icon: ClipboardCheck,
     roles: [
       "director",
       "sheikh",
