@@ -3,22 +3,32 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Ban,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   ClipboardList,
   Clock3,
+  Eye,
   FileText,
+  ListChecks,
+  Pencil,
   Plus,
   Printer,
+  RefreshCw,
   Search,
   ShieldAlert,
-  Target,
-  UserCheck,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
+
 import { supabase } from "../../lib/supabase/client";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 type VisitStatus =
   | "planned"
@@ -38,24 +48,11 @@ type Institute = {
 };
 
 type InspectionResult = {
-  status?: InspectionStatus;
-  note?: string;
+  status: InspectionStatus;
+  note: string;
 };
 
-type FollowUpTask = {
-  id: string;
-  title: string;
-  responsible: string;
-  dueDate: string;
-  priority: "low" | "medium" | "high";
-  status: "open" | "completed";
-  sourceItem?: string;
-};
-
-type InspectionResults = Record<
-  string,
-  InspectionResult | boolean
->;
+type InspectionResults = Record<string, InspectionResult>;
 
 type Visit = {
   id: string;
@@ -71,16 +68,20 @@ type Visit = {
   recommendations: number;
   tasks: number;
   inspectionResults: InspectionResults;
-  followUpTasks: FollowUpTask[];
+  followUpTasks: string[];
 };
 
-type DraftInspection = Record<
-  string,
-  {
-    status: InspectionStatus | "";
-    note: string;
-  }
->;
+type VisitForm = {
+  institute: string;
+  visitor: string;
+  type: string;
+  date: string;
+  notes: string;
+};
+
+/* =========================================================
+   INSPECTION FRAMEWORK
+========================================================= */
 
 const inspectionItems = [
   "انتظام الحضور والانصراف",
@@ -93,32 +94,40 @@ const inspectionItems = [
   "الأنشطة الطلابية",
 ];
 
+/* =========================================================
+   CONFIG
+========================================================= */
+
 const statusConfig: Record<
   VisitStatus,
   {
     label: string;
     className: string;
-    icon: typeof Clock3;
+    icon: typeof CheckCircle2;
   }
 > = {
   planned: {
     label: "مجدولة",
-    className: "bg-blue-50 text-blue-700 border-blue-200",
+    className:
+      "bg-blue-50 text-blue-700 border-blue-200",
     icon: Clock3,
   },
   completed: {
     label: "مكتملة",
-    className: "bg-green-50 text-green-700 border-green-200",
+    className:
+      "bg-emerald-50 text-emerald-700 border-emerald-200",
     icon: CheckCircle2,
   },
   follow_up: {
     label: "تحتاج متابعة",
-    className: "bg-amber-50 text-amber-700 border-amber-200",
-    icon: ClipboardList,
+    className:
+      "bg-amber-50 text-amber-700 border-amber-200",
+    icon: AlertTriangle,
   },
   cancelled: {
     label: "ملغاة",
-    className: "bg-red-50 text-red-700 border-red-200",
+    className:
+      "bg-gray-100 text-gray-600 border-gray-200",
     icon: XCircle,
   },
 };
@@ -135,112 +144,172 @@ const inspectionStatusConfig: Record<
   compliant: {
     label: "مطابق",
     shortLabel: "مطابق",
-    className: "border-green-200 bg-green-50 text-green-700",
+    className:
+      "bg-emerald-50 text-emerald-700 border-emerald-200",
     icon: CheckCircle2,
   },
   needs_improvement: {
     label: "يحتاج تحسين",
     shortLabel: "تحسين",
-    className: "border-amber-200 bg-amber-50 text-amber-700",
+    className:
+      "bg-amber-50 text-amber-700 border-amber-200",
     icon: AlertTriangle,
   },
   non_compliant: {
     label: "غير مطابق",
-    shortLabel: "غير مطابق",
-    className: "border-red-200 bg-red-50 text-red-700",
+    shortLabel: "مخالفة",
+    className:
+      "bg-red-50 text-red-700 border-red-200",
     icon: XCircle,
   },
 };
 
-function getInspectionResult(
-  results: InspectionResults | undefined,
-  item: string
-): InspectionResult {
-  const value = results?.[item];
+/* =========================================================
+   HELPERS
+========================================================= */
 
-  if (typeof value === "boolean") {
-    return {
-      status: value ? "compliant" : "non_compliant",
-      note: "",
-    };
-  }
-
-  if (value && typeof value === "object") {
-    return {
-      status: value.status,
-      note: value.note || "",
-    };
-  }
-
-  return {
-    status: undefined,
-    note: "",
-  };
+function emptyInspectionResults(): InspectionResults {
+  return {};
 }
 
-function getFollowUpTasks(
-  results: InspectionResults | undefined
-): FollowUpTask[] {
-  const raw = results?.__followUpTasks;
-
-  if (Array.isArray(raw)) {
-    return raw as unknown as FollowUpTask[];
+function normalizeVisitStatus(value: unknown): VisitStatus {
+  if (
+    value === "planned" ||
+    value === "completed" ||
+    value === "follow_up" ||
+    value === "cancelled"
+  ) {
+    return value;
   }
 
-  return [];
+  return "planned";
 }
 
-function buildInspectionResults(
-  draft: DraftInspection,
-  tasks: FollowUpTask[]
+function normalizeInspectionResults(
+  raw: unknown
 ): InspectionResults {
-  const results: InspectionResults = {};
+  if (!raw || typeof raw !== "object") {
+    return {};
+  }
 
-  Object.entries(draft).forEach(([item, value]) => {
-    if (value.status) {
-      results[item] = {
-        status: value.status,
-        note: value.note.trim(),
+  const source = raw as Record<string, unknown>;
+
+  /*
+    النسخة الجديدة تخزن:
+    {
+      items: {...},
+      followUpTasks: [...]
+    }
+
+    أما البيانات القديمة فكانت تخزن البنود مباشرة.
+  */
+  const itemsSource =
+    source.items &&
+    typeof source.items === "object"
+      ? (source.items as Record<string, unknown>)
+      : source;
+
+  const result: InspectionResults = {};
+
+  for (const item of inspectionItems) {
+    const value = itemsSource[item];
+
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      const current =
+        value as Record<string, unknown>;
+
+      if (
+        current.status === "compliant" ||
+        current.status === "needs_improvement" ||
+        current.status === "non_compliant"
+      ) {
+        result[item] = {
+          status: current.status,
+          note:
+            typeof current.note === "string"
+              ? current.note
+              : "",
+        };
+      }
+
+      continue;
+    }
+
+    /*
+      توافق مع البيانات القديمة:
+      true = تم الفحص ومطابق
+      false = لم يتم تحديده
+    */
+    if (typeof value === "boolean" && value) {
+      result[item] = {
+        status: "compliant",
+        note: "",
       };
     }
-  });
-
-  if (tasks.length > 0) {
-    results.__followUpTasks = tasks as unknown as InspectionResult;
   }
 
-  return results;
+  return result;
 }
 
-function calculateInspectionStats(
-  results: InspectionResults | undefined
+function extractFollowUpTasks(
+  raw: unknown
+): string[] {
+  if (!raw || typeof raw !== "object") {
+    return [];
+  }
+
+  const source = raw as Record<string, unknown>;
+
+  if (!Array.isArray(source.followUpTasks)) {
+    return [];
+  }
+
+  return source.followUpTasks.filter(
+    (item): item is string =>
+      typeof item === "string" &&
+      item.trim().length > 0
+  );
+}
+
+function calculateInspectionSummary(
+  results: InspectionResults
 ) {
   let inspected = 0;
   let compliant = 0;
   let needsImprovement = 0;
   let nonCompliant = 0;
 
-  inspectionItems.forEach((item) => {
-    const result = getInspectionResult(results, item);
+  for (const item of inspectionItems) {
+    const result = results[item];
 
-    if (!result.status) return;
+    if (!result) {
+      continue;
+    }
 
-    inspected += 1;
+    inspected++;
 
     if (result.status === "compliant") {
-      compliant += 1;
+      compliant++;
     }
 
     if (result.status === "needs_improvement") {
-      needsImprovement += 1;
+      needsImprovement++;
     }
 
     if (result.status === "non_compliant") {
-      nonCompliant += 1;
+      nonCompliant++;
     }
-  });
+  }
 
-  const percentage =
+  const inspectionPercentage = Math.round(
+    (inspected / inspectionItems.length) * 100
+  );
+
+  const compliancePercentage =
     inspected === 0
       ? 0
       : Math.round((compliant / inspected) * 100);
@@ -250,416 +319,443 @@ function calculateInspectionStats(
     compliant,
     needsImprovement,
     nonCompliant,
-    percentage,
+    inspectionPercentage,
+    compliancePercentage,
   };
 }
 
-function calculateVisitStatus(
-  results: InspectionResults | undefined,
-  currentStatus?: VisitStatus
+function deriveVisitStatus(
+  results: InspectionResults
 ): VisitStatus {
-  if (currentStatus === "cancelled") {
-    return "cancelled";
-  }
+  const summary =
+    calculateInspectionSummary(results);
 
-  const stats = calculateInspectionStats(results);
-
-  if (stats.inspected === 0) {
-    return "planned";
-  }
-
-  if (
-    stats.nonCompliant > 0 ||
-    stats.needsImprovement > 0
-  ) {
+  if (summary.nonCompliant > 0) {
     return "follow_up";
   }
 
-  if (stats.inspected === inspectionItems.length) {
+  if (summary.needsImprovement > 0) {
+    return "follow_up";
+  }
+
+  if (
+    summary.inspected === inspectionItems.length
+  ) {
     return "completed";
   }
 
   return "planned";
 }
 
-function makeEmptyDraft(): DraftInspection {
-  const draft: DraftInspection = {};
+function formatDate(date: string) {
+  if (!date) {
+    return "-";
+  }
 
-  inspectionItems.forEach((item) => {
-    draft[item] = {
-      status: "",
-      note: "",
-    };
-  });
-
-  return draft;
+  try {
+    return new Intl.DateTimeFormat("ar-EG", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(`${date}T00:00:00`));
+  } catch {
+    return date;
+  }
 }
 
-function createDraftFromVisit(
-  visit: Visit
-): DraftInspection {
-  const draft = makeEmptyDraft();
+function todayString() {
+  const date = new Date();
 
-  inspectionItems.forEach((item) => {
-    const result = getInspectionResult(
-      visit.inspectionResults,
-      item
-    );
+  const year = date.getFullYear();
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
+  const day = String(date.getDate()).padStart(
+    2,
+    "0"
+  );
 
-    draft[item] = {
-      status: result.status || "",
-      note: result.note || "",
-    };
-  });
-
-  return draft;
+  return `${year}-${month}-${day}`;
 }
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/* =========================================================
+   COMPONENT
+========================================================= */
 
 export default function VisitsPage() {
-  const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [institutes, setInstitutes] = useState<
+    Institute[]
+  >([]);
+
   const [visits, setVisits] = useState<Visit[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | VisitStatus
-  >("all");
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
-  const [inspectionFilter, setInspectionFilter] =
+  const [successMessage, setSuccessMessage] =
+    useState("");
+
+  const [searchTerm, setSearchTerm] =
+    useState("");
+
+  const [statusFilter, setStatusFilter] =
+    useState<"all" | VisitStatus>("all");
+
+  const [resultFilter, setResultFilter] =
     useState<
       "all" | "violations" | "follow_up"
     >("all");
 
-  const [showForm, setShowForm] = useState(false);
+  const [instituteFilter, setInstituteFilter] =
+    useState("all");
+
+  const [typeFilter, setTypeFilter] =
+    useState("all");
+
+  const [showForm, setShowForm] =
+    useState(false);
+
+  const [showDetails, setShowDetails] =
+    useState(false);
+
   const [selectedVisit, setSelectedVisit] =
     useState<Visit | null>(null);
 
-  const [editingVisitId, setEditingVisitId] =
-    useState<string | null>(null);
+  const [editingVisit, setEditingVisit] =
+    useState<Visit | null>(null);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<VisitForm>({
     institute: "",
     visitor: "",
     type: "زيارة متابعة دورية",
-    date: "",
+    date: todayString(),
     notes: "",
   });
 
-  const [draftInspection, setDraftInspection] =
-    useState<DraftInspection>(makeEmptyDraft());
+  const [inspection, setInspection] =
+    useState<InspectionResults>(
+      emptyInspectionResults()
+    );
 
   const [followUpTasks, setFollowUpTasks] =
-    useState<FollowUpTask[]>([]);
+    useState<string[]>([]);
 
-  const [taskForm, setTaskForm] = useState({
-    title: "",
-    responsible: "",
-    dueDate: "",
-    priority: "medium" as
-      | "low"
-      | "medium"
-      | "high",
-  });
+  const [taskInput, setTaskInput] =
+    useState("");
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  /* =======================================================
+     LOAD DATA
+  ======================================================= */
 
   async function loadData() {
-    try {
-      setLoading(true);
-      setErrorMessage("");
+    setLoading(true);
+    setErrorMessage("");
 
+    try {
       const [
-        institutesResult,
-        visitsResult,
+        { data: instituteData, error: instituteError },
+        { data: visitData, error: visitError },
       ] = await Promise.all([
         supabase
           .from("institutes")
           .select("id,name,code")
-          .order("name", { ascending: true }),
+          .order("name"),
 
         supabase
           .from("visits")
           .select(
             `
-              id,
-              institute_id,
-              visitor,
-              type,
-              visit_date,
-              status,
-              notes,
-              violations,
-              recommendations,
-              tasks,
-              inspection_results
-            `
+            id,
+            institute_id,
+            visitor,
+            type,
+            visit_date,
+            status,
+            notes,
+            violations,
+            recommendations,
+            tasks,
+            inspection_results,
+            created_at
+          `
           )
           .order("visit_date", {
             ascending: false,
           }),
       ]);
 
-      if (institutesResult.error) {
-        throw new Error(
-          `تعذر تحميل المعاهد: ${institutesResult.error.message}`
-        );
+      if (instituteError) {
+        throw instituteError;
       }
 
-      if (visitsResult.error) {
-        throw new Error(
-          `تعذر تحميل الزيارات: ${visitsResult.error.message}`
-        );
+      if (visitError) {
+        throw visitError;
       }
 
-      const loadedInstitutes =
-        (institutesResult.data ?? []) as Institute[];
+      const instituteList =
+        (instituteData || []) as Institute[];
 
-      setInstitutes(loadedInstitutes);
-
-      if (loadedInstitutes.length > 0) {
-        setForm((previous) => ({
-          ...previous,
-          institute:
-            previous.institute ||
-            loadedInstitutes[0].id,
-        }));
-      }
+      setInstitutes(instituteList);
 
       const instituteMap = new Map(
-        loadedInstitutes.map((institute) => [
+        instituteList.map((institute) => [
           institute.id,
           institute,
         ])
       );
 
       const mappedVisits: Visit[] = (
-        visitsResult.data ?? []
+        visitData || []
       ).map((item: any) => {
-        const institute = instituteMap.get(
-          item.institute_id
-        );
+        const institute =
+          instituteMap.get(item.institute_id);
 
         const inspectionResults =
-          (item.inspection_results ||
-            {}) as InspectionResults;
+          normalizeInspectionResults(
+            item.inspection_results
+          );
 
-        const storedTasks =
-          getFollowUpTasks(inspectionResults);
+        const followTasks =
+          extractFollowUpTasks(
+            item.inspection_results
+          );
 
         return {
           id: item.id,
           instituteId: item.institute_id,
           institute:
-            institute?.name || "معهد غير معروف",
+            institute?.name ||
+            "معهد غير معروف",
           code: institute?.code || "-",
           visitor: item.visitor || "",
           type: item.type || "",
           date: item.visit_date || "",
-          status:
-            (item.status as VisitStatus) ||
-            calculateVisitStatus(
-              inspectionResults
-            ),
+          status: normalizeVisitStatus(
+            item.status
+          ),
           notes: item.notes || "",
-          violations: Number(
-            item.violations || 0
-          ),
-          recommendations: Number(
-            item.recommendations || 0
-          ),
-          tasks: Number(
-            item.tasks || storedTasks.length || 0
-          ),
+          violations:
+            Number(item.violations) || 0,
+          recommendations:
+            Number(item.recommendations) || 0,
+          tasks:
+            followTasks.length > 0
+              ? followTasks.length
+              : Number(item.tasks) || 0,
           inspectionResults,
-          followUpTasks: storedTasks,
+          followUpTasks: followTasks,
         };
       });
 
       setVisits(mappedVisits);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
 
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "حدث خطأ أثناء تحميل البيانات"
+        error?.message ||
+          "حدث خطأ أثناء تحميل بيانات الزيارات"
       );
     } finally {
       setLoading(false);
     }
   }
 
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  /* =======================================================
+     STATS
+  ======================================================= */
+
   const statistics = useMemo(() => {
-    const completed =
-      visits.filter(
-        (visit) => visit.status === "completed"
-      ).length;
+    const total = visits.length;
 
-    const followUp =
-      visits.filter(
-        (visit) => visit.status === "follow_up"
-      ).length;
+    const planned = visits.filter(
+      (visit) => visit.status === "planned"
+    ).length;
 
-    const planned =
-      visits.filter(
-        (visit) => visit.status === "planned"
-      ).length;
+    const completed = visits.filter(
+      (visit) => visit.status === "completed"
+    ).length;
 
-    const cancelled =
-      visits.filter(
-        (visit) => visit.status === "cancelled"
-      ).length;
+    const followUp = visits.filter(
+      (visit) => visit.status === "follow_up"
+    ).length;
+
+    const cancelled = visits.filter(
+      (visit) => visit.status === "cancelled"
+    ).length;
 
     const violations = visits.reduce(
-      (sum, visit) =>
-        sum + Number(visit.violations || 0),
+      (sum, visit) => sum + visit.violations,
       0
     );
 
     const recommendations = visits.reduce(
       (sum, visit) =>
-        sum +
-        Number(visit.recommendations || 0),
+        sum + visit.recommendations,
       0
     );
 
-    const totalTasks = visits.reduce(
-      (sum, visit) =>
-        sum + Number(visit.tasks || 0),
+    const tasks = visits.reduce(
+      (sum, visit) => sum + visit.tasks,
       0
     );
 
-    const inspectedItems = visits.reduce(
-      (sum, visit) =>
-        sum +
-        calculateInspectionStats(
+    let complianceSum = 0;
+    let complianceCount = 0;
+
+    visits.forEach((visit) => {
+      const summary =
+        calculateInspectionSummary(
           visit.inspectionResults
-        ).inspected,
-      0
-    );
+        );
 
-    const compliantItems = visits.reduce(
-      (sum, visit) =>
-        sum +
-        calculateInspectionStats(
-          visit.inspectionResults
-        ).compliant,
-      0
-    );
+      if (summary.inspected > 0) {
+        complianceSum +=
+          summary.compliancePercentage;
+        complianceCount++;
+      }
+    });
 
-    const compliancePercentage =
-      inspectedItems === 0
+    const averageCompliance =
+      complianceCount === 0
         ? 0
         : Math.round(
-            (compliantItems /
-              inspectedItems) *
-              100
+            complianceSum / complianceCount
           );
 
     return {
-      total: visits.length,
+      total,
       planned,
       completed,
       followUp,
       cancelled,
       violations,
       recommendations,
-      totalTasks,
-      compliancePercentage,
+      tasks,
+      averageCompliance,
     };
   }, [visits]);
 
+  /* =======================================================
+     FILTERS
+  ======================================================= */
+
+  const visitTypes = useMemo(() => {
+    return Array.from(
+      new Set(
+        visits
+          .map((visit) => visit.type)
+          .filter(Boolean)
+      )
+    );
+  }, [visits]);
+
   const filteredVisits = useMemo(() => {
-    const searchValue = search
-      .trim()
-      .toLowerCase();
+    const query =
+      searchTerm.trim().toLowerCase();
 
     return visits.filter((visit) => {
       const matchesSearch =
-        !searchValue ||
+        !query ||
         visit.institute
           .toLowerCase()
-          .includes(searchValue) ||
-        visit.code
-          .toLowerCase()
-          .includes(searchValue) ||
+          .includes(query) ||
         visit.visitor
           .toLowerCase()
-          .includes(searchValue) ||
+          .includes(query) ||
         visit.type
           .toLowerCase()
-          .includes(searchValue) ||
-        visit.notes
-          .toLowerCase()
-          .includes(searchValue);
+          .includes(query);
 
       const matchesStatus =
         statusFilter === "all" ||
         visit.status === statusFilter;
 
-      const matchesInspection =
-        inspectionFilter === "all" ||
-        (inspectionFilter === "violations" &&
-          visit.violations > 0) ||
-        (inspectionFilter === "follow_up" &&
-          visit.status === "follow_up");
+      const matchesInstitute =
+        instituteFilter === "all" ||
+        visit.instituteId === instituteFilter;
+
+      const matchesType =
+        typeFilter === "all" ||
+        visit.type === typeFilter;
+
+      const summary =
+        calculateInspectionSummary(
+          visit.inspectionResults
+        );
+
+      const matchesResult =
+        resultFilter === "all" ||
+        (resultFilter === "violations" &&
+          summary.nonCompliant > 0) ||
+        (resultFilter === "follow_up" &&
+          (summary.nonCompliant > 0 ||
+            summary.needsImprovement > 0));
 
       return (
         matchesSearch &&
         matchesStatus &&
-        matchesInspection
+        matchesInstitute &&
+        matchesType &&
+        matchesResult
       );
     });
   }, [
     visits,
-    search,
+    searchTerm,
     statusFilter,
-    inspectionFilter,
+    resultFilter,
+    instituteFilter,
+    typeFilter,
   ]);
 
-  const formInspectionStats = useMemo(() => {
-    const results =
-      buildInspectionResults(
-        draftInspection,
-        followUpTasks
-      );
+  /* =======================================================
+     FORM
+  ======================================================= */
 
-    return calculateInspectionStats(results);
-  }, [draftInspection, followUpTasks]);
-
-  function openNewVisitForm() {
-    setErrorMessage("");
-    setEditingVisitId(null);
-
+  function resetForm() {
     setForm({
-      institute: institutes[0]?.id || "",
+      institute: "",
       visitor: "",
       type: "زيارة متابعة دورية",
-      date: "",
+      date: todayString(),
       notes: "",
     });
 
-    setDraftInspection(makeEmptyDraft());
+    setInspection(
+      emptyInspectionResults()
+    );
+
     setFollowUpTasks([]);
-
-    setTaskForm({
-      title: "",
-      responsible: "",
-      dueDate: "",
-      priority: "medium",
-    });
-
-    setShowForm(true);
+    setTaskInput("");
+    setEditingVisit(null);
   }
 
-  function openEditVisitForm(visit: Visit) {
+  function openNewVisitForm() {
+    resetForm();
+    setShowForm(true);
+    setShowDetails(false);
     setErrorMessage("");
-    setEditingVisitId(visit.id);
+  }
+
+  function openEditVisitForm(
+    visit: Visit
+  ) {
+    setEditingVisit(visit);
 
     setForm({
       institute: visit.instituteId,
@@ -669,41 +765,42 @@ export default function VisitsPage() {
       notes: visit.notes,
     });
 
-    setDraftInspection(
-      createDraftFromVisit(visit)
+    setInspection(
+      normalizeInspectionResults(
+        visit.inspectionResults
+      )
     );
 
-    setFollowUpTasks(
-      visit.followUpTasks || []
-    );
+    setFollowUpTasks([
+      ...visit.followUpTasks,
+    ]);
 
-    setTaskForm({
-      title: "",
-      responsible: "",
-      dueDate: "",
-      priority: "medium",
-    });
+    setTaskInput("");
 
-    setSelectedVisit(null);
+    setShowDetails(false);
     setShowForm(true);
+    setErrorMessage("");
   }
 
-  function closeForm() {
-    if (saving) return;
-
-    setShowForm(false);
-    setEditingVisitId(null);
+  function updateForm(
+    field: keyof VisitForm,
+    value: string
+  ) {
+    setForm((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
   }
 
   function setInspectionStatus(
     item: string,
     status: InspectionStatus
   ) {
-    setDraftInspection((previous) => ({
+    setInspection((previous) => ({
       ...previous,
       [item]: {
-        ...previous[item],
         status,
+        note: previous[item]?.note || "",
       },
     }));
   }
@@ -712,74 +809,96 @@ export default function VisitsPage() {
     item: string,
     note: string
   ) {
-    setDraftInspection((previous) => ({
+    setInspection((previous) => ({
       ...previous,
       [item]: {
-        ...previous[item],
+        status:
+          previous[item]?.status ||
+          "compliant",
         note,
       },
     }));
   }
 
-  function addFollowUpTask() {
-    if (!taskForm.title.trim()) {
-      setErrorMessage(
-        "اكتب اسم مهمة المتابعة أولًا."
-      );
+  function clearInspectionItem(
+    item: string
+  ) {
+    setInspection((previous) => {
+      const copy = { ...previous };
+      delete copy[item];
+      return copy;
+    });
+  }
+
+  /* =======================================================
+     TASKS
+  ======================================================= */
+
+  function addTask() {
+    const task = taskInput.trim();
+
+    if (!task) {
       return;
     }
-
-    const task: FollowUpTask = {
-      id: crypto.randomUUID(),
-      title: taskForm.title.trim(),
-      responsible:
-        taskForm.responsible.trim() ||
-        "يحدد لاحقًا",
-      dueDate: taskForm.dueDate,
-      priority: taskForm.priority,
-      status: "open",
-    };
 
     setFollowUpTasks((previous) => [
       ...previous,
       task,
     ]);
 
-    setTaskForm({
-      title: "",
-      responsible: "",
-      dueDate: "",
-      priority: "medium",
-    });
-
-    setErrorMessage("");
+    setTaskInput("");
   }
 
-  function removeFollowUpTask(id: string) {
+  function removeTask(index: number) {
     setFollowUpTasks((previous) =>
-      previous.filter((task) => task.id !== id)
-    );
-  }
-
-  function toggleTaskStatus(id: string) {
-    setFollowUpTasks((previous) =>
-      previous.map((task) =>
-        task.id === id
-          ? {
-              ...task,
-              status:
-                task.status === "open"
-                  ? "completed"
-                  : "open",
-            }
-          : task
+      previous.filter(
+        (_, currentIndex) =>
+          currentIndex !== index
       )
     );
   }
 
-  async function createVisit() {
+  function generateTasksFromInspection() {
+    const generated = inspectionItems
+      .filter((item) => {
+        const result = inspection[item];
+
+        return (
+          result?.status ===
+            "needs_improvement" ||
+          result?.status ===
+            "non_compliant"
+        );
+      })
+      .map(
+        (item) =>
+          `متابعة ومعالجة بند: ${item}`
+      );
+
+    setFollowUpTasks((previous) => {
+      const combined = [
+        ...previous,
+        ...generated,
+      ];
+
+      return Array.from(
+        new Set(combined)
+      );
+    });
+  }
+
+  /* =======================================================
+     SAVE
+  ======================================================= */
+
+  async function saveVisit() {
+    setErrorMessage("");
+    setSuccessMessage("");
+
     if (!form.institute) {
-      setErrorMessage("من فضلك اختر المعهد.");
+      setErrorMessage(
+        "من فضلك اختر المعهد."
+      );
       return;
     }
 
@@ -797,1044 +916,1201 @@ export default function VisitsPage() {
       return;
     }
 
-    const inspected =
-      formInspectionStats.inspected;
-
-    if (inspected === 0) {
-      setErrorMessage(
-        "من فضلك قيّم بندًا واحدًا على الأقل من بنود التفتيش."
+    const summary =
+      calculateInspectionSummary(
+        inspection
       );
-      return;
-    }
+
+    const calculatedStatus =
+      deriveVisitStatus(inspection);
+
+    const payloadInspection = {
+      items: inspection,
+      followUpTasks,
+    };
 
     try {
-      setSaving(true);
-      setErrorMessage("");
-
-      const inspectionResults =
-        buildInspectionResults(
-          draftInspection,
-          followUpTasks
-        );
-
-      const stats =
-        calculateInspectionStats(
-          inspectionResults
-        );
-
-      const calculatedStatus =
-        calculateVisitStatus(
-          inspectionResults
-        );
-
-      const violations =
-        stats.nonCompliant;
-
-      const recommendations =
-        stats.needsImprovement;
-
-      const tasks =
-        followUpTasks.length;
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (editingVisitId) {
+      if (editingVisit) {
         const { data, error } =
           await supabase
             .from("visits")
             .update({
-              institute_id: form.institute,
-              visitor: form.visitor.trim(),
+              institute_id:
+                form.institute,
+              visitor:
+                form.visitor.trim(),
               type: form.type,
               visit_date: form.date,
               status: calculatedStatus,
               notes:
                 form.notes.trim() || null,
-              violations,
-              recommendations,
-              tasks,
+              violations:
+                summary.nonCompliant,
+              recommendations:
+                summary.needsImprovement,
+              tasks:
+                followUpTasks.length,
               inspection_results:
-                inspectionResults,
+                payloadInspection,
               updated_at:
                 new Date().toISOString(),
             })
-            .eq("id", editingVisitId)
-            .select(
-              `
-                id,
-                institute_id,
-                visitor,
-                type,
-                visit_date,
-                status,
-                notes,
-                violations,
-                recommendations,
-                tasks,
-                inspection_results
-              `
-            )
+            .eq("id", editingVisit.id)
+            .select()
             .single();
 
         if (error) {
-          throw new Error(
-            `تعذر تحديث الزيارة: ${error.message}`
-          );
+          throw error;
         }
 
-        const institute = institutes.find(
-          (item) =>
-            item.id === data.institute_id
-        );
+        const selectedInstitute =
+          institutes.find(
+            (institute) =>
+              institute.id ===
+              form.institute
+          );
 
         const updatedVisit: Visit = {
-          id: data.id,
-          instituteId: data.institute_id,
+          ...editingVisit,
+          instituteId:
+            form.institute,
           institute:
-            institute?.name ||
-            "معهد غير معروف",
-          code: institute?.code || "-",
-          visitor: data.visitor,
-          type: data.type,
-          date: data.visit_date,
-          status:
-            data.status as VisitStatus,
-          notes: data.notes || "",
-          violations: Number(
-            data.violations || 0
-          ),
-          recommendations: Number(
-            data.recommendations || 0
-          ),
-          tasks: Number(data.tasks || 0),
+            selectedInstitute?.name ||
+            editingVisit.institute,
+          code:
+            selectedInstitute?.code ||
+            editingVisit.code,
+          visitor:
+            form.visitor.trim(),
+          type: form.type,
+          date: form.date,
+          status: calculatedStatus,
+          notes: form.notes.trim(),
+          violations:
+            summary.nonCompliant,
+          recommendations:
+            summary.needsImprovement,
+          tasks: followUpTasks.length,
           inspectionResults:
-            data.inspection_results || {},
-          followUpTasks,
+            inspection,
+          followUpTasks: [
+            ...followUpTasks,
+          ],
         };
 
         setVisits((previous) =>
           previous.map((visit) =>
-            visit.id === updatedVisit.id
+            visit.id === editingVisit.id
               ? updatedVisit
               : visit
           )
         );
+
+        setSelectedVisit(updatedVisit);
+
+        setSuccessMessage(
+          "تم تحديث الزيارة ونتائج التفتيش بنجاح ✅"
+        );
       } else {
+        const {
+          data: {
+            user,
+          },
+        } = await supabase.auth.getUser();
+
         const { data, error } =
           await supabase
             .from("visits")
             .insert({
-              institute_id: form.institute,
-              visitor: form.visitor.trim(),
+              institute_id:
+                form.institute,
+              visitor:
+                form.visitor.trim(),
               type: form.type,
               visit_date: form.date,
               status: calculatedStatus,
               notes:
                 form.notes.trim() || null,
-              violations,
-              recommendations,
-              tasks,
+              violations:
+                summary.nonCompliant,
+              recommendations:
+                summary.needsImprovement,
+              tasks:
+                followUpTasks.length,
               inspection_results:
-                inspectionResults,
-              created_by: user?.id || null,
+                payloadInspection,
+              created_by:
+                user?.id || null,
             })
-            .select(
-              `
-                id,
-                institute_id,
-                visitor,
-                type,
-                visit_date,
-                status,
-                notes,
-                violations,
-                recommendations,
-                tasks,
-                inspection_results
-              `
-            )
+            .select()
             .single();
 
         if (error) {
-          throw new Error(
-            `تعذر حفظ الزيارة: ${error.message}`
-          );
+          throw error;
         }
 
-        const institute = institutes.find(
-          (item) =>
-            item.id === data.institute_id
-        );
+        const selectedInstitute =
+          institutes.find(
+            (institute) =>
+              institute.id ===
+              form.institute
+          );
 
         const newVisit: Visit = {
           id: data.id,
-          instituteId: data.institute_id,
+          instituteId:
+            form.institute,
           institute:
-            institute?.name ||
+            selectedInstitute?.name ||
             "معهد غير معروف",
-          code: institute?.code || "-",
-          visitor: data.visitor,
-          type: data.type,
-          date: data.visit_date,
-          status:
-            data.status as VisitStatus,
-          notes: data.notes || "",
-          violations: Number(
-            data.violations || 0
-          ),
-          recommendations: Number(
-            data.recommendations || 0
-          ),
-          tasks: Number(data.tasks || 0),
+          code:
+            selectedInstitute?.code ||
+            "-",
+          visitor:
+            form.visitor.trim(),
+          type: form.type,
+          date: form.date,
+          status: calculatedStatus,
+          notes: form.notes.trim(),
+          violations:
+            summary.nonCompliant,
+          recommendations:
+            summary.needsImprovement,
+          tasks: followUpTasks.length,
           inspectionResults:
-            data.inspection_results || {},
-          followUpTasks,
+            inspection,
+          followUpTasks: [
+            ...followUpTasks,
+          ],
         };
 
         setVisits((previous) => [
           newVisit,
           ...previous,
         ]);
+
+        setSelectedVisit(newVisit);
+
+        setSuccessMessage(
+          "تم تسجيل الزيارة بنجاح ✅"
+        );
       }
 
       setShowForm(false);
-      setEditingVisitId(null);
-      setDraftInspection(makeEmptyDraft());
-      setFollowUpTasks([]);
-    } catch (error) {
+      setEditingVisit(null);
+
+      setTimeout(() => {
+        setSuccessMessage("");
+      }, 4000);
+    } catch (error: any) {
       console.error(error);
 
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "حدث خطأ أثناء حفظ الزيارة"
+        error?.message ||
+          "حدث خطأ أثناء حفظ الزيارة"
       );
-    } finally {
-      setSaving(false);
     }
   }
 
-  function formatDate(date: string) {
-    if (!date) return "-";
+  /* =======================================================
+     CANCEL
+  ======================================================= */
+
+  async function cancelVisit(
+    visit: Visit
+  ) {
+    const confirmed = window.confirm(
+      `هل أنت متأكد من إلغاء زيارة ${visit.institute}؟`
+    );
+
+    if (!confirmed) {
+      return;
+    }
 
     try {
-      return new Intl.DateTimeFormat(
-        "ar-EG",
-        {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }
-      ).format(
-        new Date(`${date}T00:00:00`)
+      const { error } =
+        await supabase
+          .from("visits")
+          .update({
+            status: "cancelled",
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq("id", visit.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setVisits((previous) =>
+        previous.map((current) =>
+          current.id === visit.id
+            ? {
+                ...current,
+                status: "cancelled",
+              }
+            : current
+        )
       );
-    } catch {
-      return date;
+
+      if (
+        selectedVisit?.id === visit.id
+      ) {
+        setSelectedVisit({
+          ...visit,
+          status: "cancelled",
+        });
+      }
+
+      setSuccessMessage(
+        "تم إلغاء الزيارة بنجاح."
+      );
+
+      setTimeout(() => {
+        setSuccessMessage("");
+      }, 3500);
+    } catch (error: any) {
+      console.error(error);
+
+      setErrorMessage(
+        error?.message ||
+          "تعذر إلغاء الزيارة"
+      );
     }
   }
 
-  function formatShortDate(date: string) {
-    if (!date) return "غير محدد";
+  /* =======================================================
+     DETAILS
+  ======================================================= */
 
-    try {
-      return new Intl.DateTimeFormat(
-        "ar-EG",
-        {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        }
-      ).format(
-        new Date(`${date}T00:00:00`)
-      );
-    } catch {
-      return date;
-    }
+  function openDetails(visit: Visit) {
+    setSelectedVisit(visit);
+    setShowDetails(true);
+    setShowForm(false);
   }
 
-  function printVisitReport(visit: Visit) {
-    const stats =
-      calculateInspectionStats(
+  /* =======================================================
+     PRINT
+  ======================================================= */
+
+  function printVisitReport(
+    visit: Visit
+  ) {
+    const summary =
+      calculateInspectionSummary(
         visit.inspectionResults
       );
 
-    const taskRows =
-      visit.followUpTasks
-        .map(
-          (task) => `
-            <tr>
-              <td>${escapeHtml(task.title)}</td>
-              <td>${escapeHtml(task.responsible)}</td>
-              <td>${escapeHtml(
-                task.dueDate
-                  ? formatShortDate(
-                      task.dueDate
-                    )
-                  : "غير محدد"
-              )}</td>
-              <td>${
-                task.status === "completed"
-                  ? "مكتملة"
-                  : "مفتوحة"
-              }</td>
-            </tr>
-          `
-        )
-        .join("");
+    const popup = window.open(
+      "",
+      "_blank",
+      "width=1100,height=850"
+    );
+
+    if (!popup) {
+      setErrorMessage(
+        "تعذر فتح نافذة الطباعة. تأكد من السماح بالنوافذ المنبثقة."
+      );
+      return;
+    }
 
     const inspectionRows =
       inspectionItems
-        .map((item) => {
+        .map((item, index) => {
           const result =
-            getInspectionResult(
-              visit.inspectionResults,
-              item
-            );
+            visit.inspectionResults[item];
 
-          const statusText = result.status
+          const status = result
             ? inspectionStatusConfig[
                 result.status
-              ].label
-            : "لم يتم التقييم";
+              ]
+            : null;
 
           return `
             <tr>
+              <td>${index + 1}</td>
               <td>${escapeHtml(item)}</td>
-              <td>${escapeHtml(
-                statusText
-              )}</td>
-              <td>${escapeHtml(
-                result.note || "-"
-              )}</td>
+              <td>
+                ${
+                  status
+                    ? escapeHtml(
+                        status.label
+                      )
+                    : "لم يتم الفحص"
+                }
+              </td>
+              <td>
+                ${
+                  result?.note
+                    ? escapeHtml(
+                        result.note
+                      )
+                    : "-"
+                }
+              </td>
             </tr>
           `;
         })
         .join("");
 
-    const reportWindow =
-      window.open(
-        "",
-        "_blank",
-        "width=1000,height=800"
-      );
+    const tasksHtml =
+      visit.followUpTasks.length > 0
+        ? `
+          <ul>
+            ${visit.followUpTasks
+              .map(
+                (task) =>
+                  `<li>${escapeHtml(
+                    task
+                  )}</li>`
+              )
+              .join("")}
+          </ul>
+        `
+        : "<p>لا توجد مهام متابعة.</p>";
 
-    if (!reportWindow) {
-      setErrorMessage(
-        "تعذر فتح نافذة التقرير. يرجى السماح بالنوافذ المنبثقة."
-      );
-      return;
-    }
-
-    reportWindow.document.write(`
-      <!DOCTYPE html>
+    popup.document.write(`
+      <!doctype html>
       <html lang="ar" dir="rtl">
-        <head>
-          <meta charset="UTF-8" />
-          <title>تقرير زيارة - ${escapeHtml(
-            visit.institute
-          )}</title>
-          <style>
-            body {
-              font-family: Arial, Tahoma, sans-serif;
-              direction: rtl;
-              margin: 0;
-              padding: 30px;
-              color: #1e293b;
-              background: white;
-            }
+      <head>
+        <meta charset="utf-8" />
+        <title>تقرير زيارة - ${escapeHtml(
+          visit.institute
+        )}</title>
 
-            .header {
-              border-bottom: 3px solid #4f46e5;
-              padding-bottom: 18px;
-              margin-bottom: 25px;
-            }
-
-            h1 {
-              margin: 0 0 8px;
-              font-size: 25px;
-            }
-
-            h2 {
-              margin: 25px 0 12px;
-              font-size: 18px;
-            }
-
-            .muted {
-              color: #64748b;
-              font-size: 13px;
-            }
-
-            .grid {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 10px;
-              margin: 20px 0;
-            }
-
-            .card {
-              border: 1px solid #e2e8f0;
-              border-radius: 10px;
-              padding: 12px;
-              text-align: center;
-            }
-
-            .number {
-              font-size: 23px;
-              font-weight: bold;
-              margin-bottom: 5px;
-            }
-
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 10px;
-            }
-
-            th, td {
-              border: 1px solid #e2e8f0;
-              padding: 9px;
-              text-align: right;
-              font-size: 12px;
-            }
-
-            th {
-              background: #f8fafc;
-            }
-
-            .notes {
-              border: 1px solid #e2e8f0;
-              background: #f8fafc;
-              border-radius: 10px;
-              padding: 15px;
-              line-height: 1.9;
-              white-space: pre-wrap;
-            }
-
-            .footer {
-              margin-top: 35px;
-              border-top: 1px solid #e2e8f0;
-              padding-top: 15px;
-              color: #64748b;
-              font-size: 11px;
-              text-align: center;
-            }
-
-            @media print {
-              body {
-                padding: 10mm;
-              }
-
-              .no-print {
-                display: none;
-              }
-            }
-          </style>
-        </head>
-
-        <body>
-          <div class="header">
-            <h1>تقرير زيارة وتفتيش</h1>
-            <div class="muted">
-              منصة إدارة ومتابعة المعاهد الأزهرية
-            </div>
-          </div>
-
-          <table>
-            <tr>
-              <th>المعهد</th>
-              <td>${escapeHtml(
-                visit.institute
-              )}</td>
-              <th>الكود</th>
-              <td>${escapeHtml(
-                visit.code
-              )}</td>
-            </tr>
-            <tr>
-              <th>الزائر</th>
-              <td>${escapeHtml(
-                visit.visitor
-              )}</td>
-              <th>نوع الزيارة</th>
-              <td>${escapeHtml(
-                visit.type
-              )}</td>
-            </tr>
-            <tr>
-              <th>التاريخ</th>
-              <td>${escapeHtml(
-                formatDate(visit.date)
-              )}</td>
-              <th>الحالة</th>
-              <td>${escapeHtml(
-                statusConfig[visit.status]
-                  .label
-              )}</td>
-            </tr>
-          </table>
-
-          <h2>ملخص نتيجة التفتيش</h2>
-
-          <div class="grid">
-            <div class="card">
-              <div class="number">${
-                stats.percentage
-              }%</div>
-              <div class="muted">
-                نسبة الالتزام
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="number">${
-                stats.compliant
-              }</div>
-              <div class="muted">
-                مطابق
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="number">${
-                stats.needsImprovement
-              }</div>
-              <div class="muted">
-                يحتاج تحسين
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="number">${
-                stats.nonCompliant
-              }</div>
-              <div class="muted">
-                غير مطابق
-              </div>
-            </div>
-          </div>
-
-          <h2>تفاصيل التفتيش</h2>
-
-          <table>
-            <thead>
-              <tr>
-                <th>بند التفتيش</th>
-                <th>النتيجة</th>
-                <th>الملاحظات</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${inspectionRows}
-            </tbody>
-          </table>
-
-          <h2>الملاحظات العامة</h2>
-
-          <div class="notes">
-            ${escapeHtml(
-              visit.notes ||
-                "لا توجد ملاحظات عامة."
-            )}
-          </div>
-
-          <h2>مهام المتابعة</h2>
-
-          ${
-            taskRows
-              ? `
-                <table>
-                  <thead>
-                    <tr>
-                      <th>المهمة</th>
-                      <th>المسؤول</th>
-                      <th>الاستحقاق</th>
-                      <th>الحالة</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${taskRows}
-                  </tbody>
-                </table>
-              `
-              : `<div class="notes">لا توجد مهام متابعة.</div>`
+        <style>
+          * {
+            box-sizing: border-box;
           }
 
-          <div class="footer">
-            تم إنشاء التقرير من نظام إدارة ومتابعة المعاهد الأزهرية
+          body {
+            font-family:
+              Arial,
+              Tahoma,
+              sans-serif;
+
+            margin: 0;
+            padding: 35px;
+
+            color: #172033;
+            background: white;
+            direction: rtl;
+          }
+
+          .header {
+            border-bottom: 3px solid #172033;
+            padding-bottom: 18px;
+            margin-bottom: 25px;
+          }
+
+          h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+          }
+
+          h2 {
+            margin-top: 30px;
+            font-size: 20px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 8px;
+          }
+
+          .subtitle {
+            color: #64748b;
+          }
+
+          .grid {
+            display: grid;
+            grid-template-columns:
+              repeat(4, 1fr);
+
+            gap: 12px;
+            margin: 20px 0;
+          }
+
+          .card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 15px;
+            background: #fafafa;
+          }
+
+          .label {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 5px;
+          }
+
+          .value {
+            font-weight: bold;
+            font-size: 17px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+          }
+
+          th,
+          td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: right;
+          }
+
+          th {
+            background: #f1f5f9;
+          }
+
+          .notes {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 10px;
+            min-height: 80px;
+          }
+
+          li {
+            margin: 8px 0;
+          }
+
+          .footer {
+            margin-top: 45px;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+            color: #64748b;
+            font-size: 12px;
+          }
+
+          @media print {
+            body {
+              padding: 15px;
+            }
+
+            button {
+              display: none;
+            }
+          }
+        </style>
+      </head>
+
+      <body>
+
+        <div class="header">
+          <h1>تقرير زيارة وتفتيش</h1>
+          <div class="subtitle">
+            منصة الإدارة والمتابعة التعليمية الأزهرية
+          </div>
+        </div>
+
+        <div class="grid">
+
+          <div class="card">
+            <div class="label">المعهد</div>
+            <div class="value">
+              ${escapeHtml(
+                visit.institute
+              )}
+            </div>
           </div>
 
-          <script>
-            window.onload = function () {
-              setTimeout(function () {
-                window.print();
-              }, 300);
-            };
-          </script>
-        </body>
+          <div class="card">
+            <div class="label">كود المعهد</div>
+            <div class="value">
+              ${escapeHtml(
+                visit.code
+              )}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">الزائر</div>
+            <div class="value">
+              ${escapeHtml(
+                visit.visitor
+              )}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">نوع الزيارة</div>
+            <div class="value">
+              ${escapeHtml(
+                visit.type
+              )}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">التاريخ</div>
+            <div class="value">
+              ${escapeHtml(
+                formatDate(
+                  visit.date
+                )
+              )}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">الحالة</div>
+            <div class="value">
+              ${escapeHtml(
+                statusConfig[
+                  visit.status
+                ].label
+              )}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">نسبة الالتزام</div>
+            <div class="value">
+              ${
+                summary.compliancePercentage
+              }%
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">نسبة الفحص</div>
+            <div class="value">
+              ${
+                summary.inspected
+              } / ${
+                inspectionItems.length
+              }
+            </div>
+          </div>
+
+        </div>
+
+        <h2>نتائج التفتيش</h2>
+
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>محور التفتيش</th>
+              <th>النتيجة</th>
+              <th>الملاحظات</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${inspectionRows}
+          </tbody>
+        </table>
+
+        <h2>ملخص النتائج</h2>
+
+        <div class="grid">
+
+          <div class="card">
+            <div class="label">
+              مطابق
+            </div>
+            <div class="value">
+              ${
+                summary.compliant
+              }
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">
+              يحتاج تحسين
+            </div>
+            <div class="value">
+              ${
+                summary.needsImprovement
+              }
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">
+              مخالفات
+            </div>
+            <div class="value">
+              ${
+                summary.nonCompliant
+              }
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">
+              مهام المتابعة
+            </div>
+            <div class="value">
+              ${
+                visit.followUpTasks
+                  .length
+              }
+            </div>
+          </div>
+
+        </div>
+
+        <h2>مهام المتابعة</h2>
+
+        ${tasksHtml}
+
+        <h2>ملاحظات الزيارة</h2>
+
+        <div class="notes">
+          ${
+            visit.notes
+              ? escapeHtml(
+                  visit.notes
+                )
+              : "لا توجد ملاحظات."
+          }
+        </div>
+
+        <div class="footer">
+          تم إنشاء التقرير من نظام إدارة المعاهد الأزهرية.
+        </div>
+
+      </body>
       </html>
     `);
 
-    reportWindow.document.close();
+    popup.document.close();
+
+    setTimeout(() => {
+      popup.focus();
+      popup.print();
+    }, 400);
   }
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
 
   return (
     <div
       dir="rtl"
-      className="min-h-screen bg-slate-50 p-4 md:p-6"
+      className="space-y-6 pb-10"
     >
-      {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+
+      {/* ===================================================
+          HEADER
+      =================================================== */}
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+
         <div>
-          <div className="mb-2 flex items-center gap-2">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm">
-              <ClipboardCheck size={23} />
-            </div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            الزيارات والتفتيش
+          </h1>
 
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                الزيارات والتفتيش
-              </h1>
-
-              <p className="text-sm text-slate-500">
-                إدارة الزيارات وتقييم المعاهد ومتابعة نتائج التفتيش
-              </p>
-            </div>
-          </div>
+          <p className="mt-1 text-sm text-gray-500">
+            إدارة الزيارات وتقييم المعاهد
+            ومتابعة نتائج التفتيش
+          </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openNewVisitForm}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
-        >
-          <Plus size={19} />
-          تسجيل زيارة جديدة
-        </button>
+        <div className="flex flex-wrap gap-2">
+
+          <button
+            type="button"
+            onClick={loadData}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          >
+            <RefreshCw
+              size={17}
+            />
+            تحديث
+          </button>
+
+          <button
+            type="button"
+            onClick={openNewVisitForm}
+            className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-gray-800"
+          >
+            <Plus size={18} />
+            تسجيل زيارة جديدة
+          </button>
+
+        </div>
+
       </div>
 
-      {/* Error */}
+      {/* ===================================================
+          MESSAGES
+      =================================================== */}
+
       {errorMessage && (
-        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <ShieldAlert
             size={20}
             className="mt-0.5 shrink-0"
           />
 
           <div className="flex-1">
-            <p className="font-semibold">
-              حدث خطأ
-            </p>
-
-            <p className="mt-1 text-sm">
-              {errorMessage}
-            </p>
+            {errorMessage}
           </div>
 
           <button
             type="button"
-            onClick={() => setErrorMessage("")}
-            className="rounded-lg p-1 hover:bg-red-100"
+            onClick={() =>
+              setErrorMessage("")
+            }
           >
             <X size={18} />
           </button>
         </div>
       )}
 
-      {/* Statistics */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+      {successMessage && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          <CheckCircle2
+            size={20}
+          />
+          {successMessage}
+        </div>
+      )}
+
+      {/* ===================================================
+          STATISTICS
+      =================================================== */}
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-8">
+
         <StatCard
           title="إجمالي الزيارات"
           value={statistics.total}
-          icon={<ClipboardList size={22} />}
-          className="bg-white"
+          icon={ClipboardList}
+          iconClass="bg-gray-100 text-gray-700"
         />
 
         <StatCard
           title="مجدولة"
           value={statistics.planned}
-          icon={<Clock3 size={22} />}
-          className="bg-blue-50"
+          icon={Clock3}
+          iconClass="bg-blue-50 text-blue-700"
         />
 
         <StatCard
           title="مكتملة"
           value={statistics.completed}
-          icon={<CheckCircle2 size={22} />}
-          className="bg-green-50"
+          icon={CheckCircle2}
+          iconClass="bg-emerald-50 text-emerald-700"
         />
 
         <StatCard
           title="تحتاج متابعة"
           value={statistics.followUp}
-          icon={<ClipboardCheck size={22} />}
-          className="bg-amber-50"
+          icon={AlertTriangle}
+          iconClass="bg-amber-50 text-amber-700"
         />
 
         <StatCard
           title="المخالفات"
           value={statistics.violations}
-          icon={<ShieldAlert size={22} />}
-          className="bg-red-50"
+          icon={XCircle}
+          iconClass="bg-red-50 text-red-700"
         />
 
         <StatCard
           title="نسبة الالتزام"
-          value={statistics.compliancePercentage}
-          suffix="%"
-          icon={<Target size={22} />}
-          className="bg-indigo-50"
+          value={`${statistics.averageCompliance}%`}
+          icon={ClipboardCheck}
+          iconClass="bg-indigo-50 text-indigo-700"
         />
-      </div>
 
-      {/* Secondary Statistics */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <InfoCard
+        <StatCard
           title="التوصيات"
           value={statistics.recommendations}
-          icon={<FileText size={20} />}
+          icon={FileText}
+          iconClass="bg-purple-50 text-purple-700"
         />
 
-        <InfoCard
+        <StatCard
           title="مهام المتابعة"
-          value={statistics.totalTasks}
-          icon={<ClipboardList size={20} />}
+          value={statistics.tasks}
+          icon={ListChecks}
+          iconClass="bg-orange-50 text-orange-700"
         />
 
-        <InfoCard
-          title="الزيارات الملغاة"
-          value={statistics.cancelled}
-          icon={<XCircle size={20} />}
-        />
       </div>
 
-      {/* Filters */}
-      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex items-center gap-2">
-          <Search
-            size={18}
-            className="text-indigo-600"
-          />
+      {/* ===================================================
+          FILTERS
+      =================================================== */}
 
-          <div>
-            <h2 className="font-bold text-slate-800">
-              البحث والتصفية
-            </h2>
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
 
-            <p className="text-xs text-slate-400">
-              ابحث عن الزيارات حسب المعهد أو الزائر أو النتيجة
-            </p>
-          </div>
+        <div className="mb-4">
+          <h2 className="text-base font-bold text-gray-900">
+            البحث والتصفية
+          </h2>
+
+          <p className="mt-1 text-xs text-gray-500">
+            ابحث عن الزيارات حسب المعهد
+            أو الزائر أو نوع الزيارة والنتيجة
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_200px_200px]">
-          <div className="relative">
+        <div className="grid gap-3 lg:grid-cols-5">
+
+          <div className="relative lg:col-span-2">
+
             <Search
-              size={19}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+              size={18}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
             />
 
             <input
-              value={search}
+              value={searchTerm}
               onChange={(event) =>
-                setSearch(event.target.value)
+                setSearchTerm(
+                  event.target.value
+                )
               }
-              placeholder="ابحث باسم المعهد أو الكود أو اسم الزائر أو نوع الزيارة..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-10 pl-4 text-sm outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+              placeholder="ابحث عن المعهد أو الزائر..."
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pr-10 pl-4 text-sm outline-none transition focus:border-gray-400 focus:bg-white"
             />
+
           </div>
 
-          <select
+          <SelectField
             value={statusFilter}
-            onChange={(event) =>
+            onChange={(value) =>
               setStatusFilter(
-                event.target.value as
+                value as
                   | "all"
                   | VisitStatus
               )
             }
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-          >
-            <option value="all">
-              كل حالات الزيارة
-            </option>
+            options={[
+              {
+                value: "all",
+                label: "كل حالات الزيارة",
+              },
+              {
+                value: "planned",
+                label: "مجدولة",
+              },
+              {
+                value: "completed",
+                label: "مكتملة",
+              },
+              {
+                value: "follow_up",
+                label: "تحتاج متابعة",
+              },
+              {
+                value: "cancelled",
+                label: "ملغاة",
+              },
+            ]}
+          />
 
-            <option value="planned">
-              مجدولة
-            </option>
+          <SelectField
+            value={instituteFilter}
+            onChange={setInstituteFilter}
+            options={[
+              {
+                value: "all",
+                label: "كل المعاهد",
+              },
+              ...institutes.map(
+                (institute) => ({
+                  value: institute.id,
+                  label: institute.name,
+                })
+              ),
+            ]}
+          />
 
-            <option value="completed">
-              مكتملة
-            </option>
+          <SelectField
+            value={typeFilter}
+            onChange={setTypeFilter}
+            options={[
+              {
+                value: "all",
+                label: "كل أنواع الزيارات",
+              },
+              ...visitTypes.map(
+                (type) => ({
+                  value: type,
+                  label: type,
+                })
+              ),
+            ]}
+          />
 
-            <option value="follow_up">
-              تحتاج متابعة
-            </option>
-
-            <option value="cancelled">
-              ملغاة
-            </option>
-          </select>
-
-          <select
-            value={inspectionFilter}
-            onChange={(event) =>
-              setInspectionFilter(
-                event.target.value as
-                  | "all"
-                  | "violations"
-                  | "follow_up"
-              )
-            }
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-          >
-            <option value="all">
-              كل نتائج التفتيش
-            </option>
-
-            <option value="violations">
-              بها مخالفات
-            </option>
-
-            <option value="follow_up">
-              تحتاج متابعة
-            </option>
-          </select>
         </div>
 
-        {(search ||
-          statusFilter !== "all" ||
-          inspectionFilter !== "all") && (
-          <div className="mt-3 flex items-center justify-between rounded-xl bg-indigo-50 px-4 py-2.5">
-            <span className="text-xs font-medium text-indigo-700">
-              تم تطبيق فلاتر البحث
-            </span>
+        <div className="mt-3 flex flex-wrap gap-2">
 
+          {[
+            {
+              value: "all",
+              label: "كل نتائج التفتيش",
+            },
+            {
+              value: "violations",
+              label: "بها مخالفات",
+            },
+            {
+              value: "follow_up",
+              label: "تحتاج متابعة",
+            },
+          ].map((item) => (
             <button
+              key={item.value}
               type="button"
-              onClick={() => {
-                setSearch("");
-                setStatusFilter("all");
-                setInspectionFilter("all");
-              }}
-              className="text-xs font-bold text-indigo-700 hover:text-indigo-900"
+              onClick={() =>
+                setResultFilter(
+                  item.value as
+                    | "all"
+                    | "violations"
+                    | "follow_up"
+                )
+              }
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                resultFilter ===
+                item.value
+                  ? "border-gray-900 bg-gray-900 text-white"
+                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              }`}
             >
-              مسح الفلاتر
+              {item.label}
             </button>
-          </div>
-        )}
+          ))}
+
+        </div>
+
       </div>
 
-      {/* Visits */}
-      <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* ===================================================
+          VISITS TABLE
+      =================================================== */}
+
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+
+        <div className="flex flex-col gap-2 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+
           <div>
-            <h2 className="font-bold text-slate-900">
+            <h2 className="font-bold text-gray-900">
               سجل الزيارات
             </h2>
 
-            <p className="mt-1 text-sm text-slate-500">
-              {filteredVisits.length} زيارة معروضة من أصل{" "}
-              {visits.length}
+            <p className="mt-1 text-xs text-gray-500">
+              {filteredVisits.length} زيارة
+              معروضة من أصل {visits.length}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span className="flex h-2 w-2 rounded-full bg-green-500" />
-            التفتيش والتقييم مرتبطان بالزيارة
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <ClipboardCheck size={15} />
+            التفتيش والتقييم مرتبطان
+            بالزيارة
           </div>
+
         </div>
 
         {loading ? (
-          <div className="flex min-h-[260px] items-center justify-center">
-            <div className="text-center">
-              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600" />
-
-              <p className="text-sm text-slate-500">
-                جاري تحميل الزيارات...
-              </p>
+          <div className="flex min-h-60 items-center justify-center">
+            <div className="flex items-center gap-3 text-sm text-gray-500">
+              <RefreshCw
+                size={20}
+                className="animate-spin"
+              />
+              جاري تحميل الزيارات...
             </div>
           </div>
-        ) : filteredVisits.length === 0 ? (
-          <div className="flex min-h-[260px] flex-col items-center justify-center px-5 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-              <ClipboardCheck size={30} />
+        ) : filteredVisits.length ===
+          0 ? (
+          <div className="flex min-h-60 flex-col items-center justify-center p-6 text-center">
+
+            <div className="mb-4 rounded-full bg-gray-100 p-4">
+              <ClipboardList
+                size={28}
+                className="text-gray-500"
+              />
             </div>
 
-            <h3 className="font-bold text-slate-800">
-              لا توجد زيارات
+            <h3 className="font-semibold text-gray-900">
+              لا توجد زيارات مطابقة
             </h3>
 
-            <p className="mt-2 max-w-md text-sm text-slate-500">
-              {visits.length === 0
-                ? "لم يتم تسجيل أي زيارة حتى الآن."
-                : "لا توجد نتائج مطابقة للبحث أو الفلاتر الحالية."}
+            <p className="mt-1 text-sm text-gray-500">
+              جرّب تغيير خيارات البحث
+              والتصفية.
             </p>
 
-            {visits.length === 0 && (
-              <button
-                type="button"
-                onClick={openNewVisitForm}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
-              >
-                <Plus size={18} />
-                تسجيل أول زيارة
-              </button>
-            )}
           </div>
         ) : (
           <>
-            {/* Desktop */}
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[1200px] text-right">
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
-                  <tr>
-                    <th className="px-5 py-4">
+
+            {/* DESKTOP */}
+
+            <div className="hidden overflow-x-auto lg:block">
+
+              <table className="w-full min-w-[1150px] text-right">
+
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/70 text-xs text-gray-500">
+
+                    <th className="px-5 py-4 font-semibold">
                       المعهد
                     </th>
 
-                    <th className="px-5 py-4">
+                    <th className="px-5 py-4 font-semibold">
                       الزائر
                     </th>
 
-                    <th className="px-5 py-4">
+                    <th className="px-5 py-4 font-semibold">
                       نوع الزيارة
                     </th>
 
-                    <th className="px-5 py-4">
+                    <th className="px-5 py-4 font-semibold">
                       التاريخ
                     </th>
 
-                    <th className="px-5 py-4">
+                    <th className="px-5 py-4 font-semibold">
                       التفتيش
                     </th>
 
-                    <th className="px-5 py-4">
+                    <th className="px-5 py-4 font-semibold">
                       الحالة
                     </th>
 
-                    <th className="px-5 py-4">
+                    <th className="px-5 py-4 font-semibold">
                       الإجراءات
                     </th>
+
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-gray-100">
+
                   {filteredVisits.map(
                     (visit) => {
+                      const summary =
+                        calculateInspectionSummary(
+                          visit.inspectionResults
+                        );
+
                       const StatusIcon =
                         statusConfig[
                           visit.status
                         ].icon;
 
-                      const stats =
-                        calculateInspectionStats(
-                          visit.inspectionResults
-                        );
-
                       return (
                         <tr
                           key={visit.id}
-                          className="transition hover:bg-slate-50"
+                          className="transition hover:bg-gray-50/70"
                         >
-                          <td className="px-5 py-4">
-                            <div>
-                              <p className="font-semibold text-slate-800">
-                                {visit.institute}
-                              </p>
 
-                              <p className="mt-1 text-xs text-slate-400">
-                                {visit.code}
-                              </p>
+                          <td className="px-5 py-4">
+
+                            <div className="font-semibold text-gray-900">
+                              {
+                                visit.institute
+                              }
                             </div>
+
+                            <div className="mt-1 text-xs text-gray-400">
+                              {visit.code}
+                            </div>
+
                           </td>
 
-                          <td className="px-5 py-4 text-sm text-slate-700">
+                          <td className="px-5 py-4 text-sm text-gray-700">
                             {visit.visitor}
                           </td>
 
-                          <td className="px-5 py-4 text-sm text-slate-600">
+                          <td className="px-5 py-4 text-sm text-gray-700">
                             {visit.type}
                           </td>
 
-                          <td className="px-5 py-4 text-sm text-slate-600">
+                          <td className="px-5 py-4 text-sm text-gray-600">
                             {formatDate(
                               visit.date
                             )}
                           </td>
 
                           <td className="px-5 py-4">
-                            {stats.inspected >
-                            0 ? (
-                              <div className="min-w-[125px]">
-                                <div className="mb-1 flex items-center justify-between">
-                                  <span className="text-xs font-bold text-slate-700">
-                                    {
-                                      stats.percentage
-                                    }
-                                    %
-                                  </span>
 
-                                  <span className="text-[10px] text-slate-400">
-                                    {
-                                      stats.inspected
-                                    }{" "}
-                                    /{" "}
-                                    {
-                                      inspectionItems.length
-                                    }
-                                  </span>
-                                </div>
+                            <div className="min-w-[150px]">
 
-                                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                                  <div
-                                    className={`h-full rounded-full ${
-                                      stats.percentage >=
-                                      80
-                                        ? "bg-green-500"
-                                        : stats.percentage >=
-                                            60
-                                          ? "bg-amber-500"
-                                          : "bg-red-500"
-                                    }`}
-                                    style={{
-                                      width: `${stats.percentage}%`,
-                                    }}
-                                  />
-                                </div>
+                              <div className="mb-1 flex items-center justify-between">
 
-                                <div className="mt-1 flex gap-2 text-[10px]">
-                                  <span className="text-green-600">
-                                    ✓{" "}
-                                    {
-                                      stats.compliant
-                                    }
-                                  </span>
+                                <span className="font-bold text-gray-900">
+                                  {
+                                    summary.compliancePercentage
+                                  }
+                                  %
+                                </span>
 
-                                  <span className="text-amber-600">
-                                    ⚠{" "}
-                                    {
-                                      stats.needsImprovement
-                                    }
-                                  </span>
+                                <span className="text-xs text-gray-400">
+                                  {
+                                    summary.inspected
+                                  }{" "}
+                                  /{" "}
+                                  {
+                                    inspectionItems.length
+                                  }
+                                </span>
 
-                                  <span className="text-red-600">
-                                    ✕{" "}
-                                    {
-                                      stats.nonCompliant
-                                    }
-                                  </span>
-                                </div>
                               </div>
-                            ) : (
-                              <span className="text-xs text-slate-400">
-                                لم يبدأ التفتيش
-                              </span>
-                            )}
+
+                              <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+
+                                <div
+                                  className={`h-full rounded-full ${
+                                    summary.compliancePercentage >=
+                                    80
+                                      ? "bg-emerald-500"
+                                      : summary.compliancePercentage >=
+                                        60
+                                      ? "bg-amber-500"
+                                      : "bg-red-500"
+                                  }`}
+                                  style={{
+                                    width: `${summary.compliancePercentage}%`,
+                                  }}
+                                />
+
+                              </div>
+
+                              <div className="mt-2 flex items-center gap-2 text-[11px]">
+
+                                <span className="text-emerald-600">
+                                  ✓{" "}
+                                  {
+                                    summary.compliant
+                                  }
+                                </span>
+
+                                <span className="text-amber-600">
+                                  ⚠{" "}
+                                  {
+                                    summary.needsImprovement
+                                  }
+                                </span>
+
+                                <span className="text-red-600">
+                                  ✕{" "}
+                                  {
+                                    summary.nonCompliant
+                                  }
+                                </span>
+
+                              </div>
+
+                            </div>
+
                           </td>
 
                           <td className="px-5 py-4">
+
                             <span
                               className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusConfig[visit.status].className}`}
                             >
@@ -1848,169 +2124,242 @@ export default function VisitsPage() {
                                 ].label
                               }
                             </span>
+
                           </td>
 
                           <td className="px-5 py-4">
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
+
+                            <div className="flex items-center gap-1.5">
+
+                              <ActionButton
+                                title="التفاصيل"
                                 onClick={() =>
-                                  setSelectedVisit(
+                                  openDetails(
                                     visit
                                   )
                                 }
-                                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                               >
-                                التفاصيل
-                              </button>
+                                <Eye
+                                  size={16}
+                                />
+                              </ActionButton>
 
-                              <button
-                                type="button"
+                              <ActionButton
+                                title="تعديل واستكمال"
                                 onClick={() =>
                                   openEditVisitForm(
                                     visit
                                   )
                                 }
-                                className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
                               >
-                                استكمال
-                              </button>
+                                <Pencil
+                                  size={16}
+                                />
+                              </ActionButton>
+
+                              <ActionButton
+                                title="طباعة التقرير"
+                                onClick={() =>
+                                  printVisitReport(
+                                    visit
+                                  )
+                                }
+                              >
+                                <Printer
+                                  size={16}
+                                />
+                              </ActionButton>
+
+                              {visit.status !==
+                                "cancelled" && (
+                                <ActionButton
+                                  title="إلغاء الزيارة"
+                                  danger
+                                  onClick={() =>
+                                    cancelVisit(
+                                      visit
+                                    )
+                                  }
+                                >
+                                  <Ban
+                                    size={16}
+                                  />
+                                </ActionButton>
+                              )}
+
                             </div>
+
                           </td>
+
                         </tr>
                       );
                     }
                   )}
+
                 </tbody>
+
               </table>
+
             </div>
 
-            {/* Mobile */}
-            <div className="divide-y divide-slate-100 md:hidden">
+            {/* MOBILE */}
+
+            <div className="divide-y divide-gray-100 lg:hidden">
+
               {filteredVisits.map(
                 (visit) => {
+                  const summary =
+                    calculateInspectionSummary(
+                      visit.inspectionResults
+                    );
+
                   const StatusIcon =
                     statusConfig[
                       visit.status
                     ].icon;
 
-                  const stats =
-                    calculateInspectionStats(
-                      visit.inspectionResults
-                    );
-
                   return (
                     <div
                       key={visit.id}
-                      className="p-4"
+                      className="p-5"
                     >
-                      <div className="mb-3 flex items-start justify-between gap-3">
+
+                      <div className="flex items-start justify-between gap-3">
+
                         <div>
-                          <h3 className="font-bold text-slate-800">
-                            {visit.institute}
+
+                          <h3 className="font-bold text-gray-900">
+                            {
+                              visit.institute
+                            }
                           </h3>
 
-                          <p className="mt-1 text-xs text-slate-400">
+                          <p className="mt-1 text-xs text-gray-400">
                             {visit.code}
                           </p>
+
                         </div>
 
                         <span
-                          className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusConfig[visit.status].className}`}
+                          className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusConfig[visit.status].className}`}
                         >
                           <StatusIcon
-                            size={13}
+                            size={12}
                           />
-
                           {
                             statusConfig[
                               visit.status
                             ].label
                           }
                         </span>
+
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <p className="text-xs text-slate-400">
-                            الزائر
-                          </p>
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
 
-                          <p className="mt-1 font-medium text-slate-700">
-                            {visit.visitor}
-                          </p>
-                        </div>
+                        <DetailItem
+                          label="الزائر"
+                          value={
+                            visit.visitor
+                          }
+                        />
 
-                        <div>
-                          <p className="text-xs text-slate-400">
-                            التاريخ
-                          </p>
+                        <DetailItem
+                          label="نوع الزيارة"
+                          value={
+                            visit.type
+                          }
+                        />
 
-                          <p className="mt-1 font-medium text-slate-700">
-                            {formatDate(
-                              visit.date
-                            )}
-                          </p>
-                        </div>
+                        <DetailItem
+                          label="التاريخ"
+                          value={formatDate(
+                            visit.date
+                          )}
+                        />
+
+                        <DetailItem
+                          label="التفتيش"
+                          value={`${summary.inspected} / ${inspectionItems.length}`}
+                        />
+
                       </div>
 
-                      <div className="mt-4 rounded-xl bg-slate-50 p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-slate-600">
-                            نتيجة التفتيش
+                      <div className="mt-4 rounded-xl bg-gray-50 p-3">
+
+                        <div className="flex items-center justify-between">
+
+                          <span className="text-xs text-gray-500">
+                            نسبة الالتزام
                           </span>
 
-                          <span className="text-sm font-bold text-indigo-700">
+                          <strong className="text-sm text-gray-900">
                             {
-                              stats.percentage
+                              summary.compliancePercentage
                             }
                             %
-                          </span>
+                          </strong>
+
                         </div>
 
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200">
+
                           <div
-                            className="h-full rounded-full bg-indigo-600"
+                            className={`h-full rounded-full ${
+                              summary.compliancePercentage >=
+                              80
+                                ? "bg-emerald-500"
+                                : summary.compliancePercentage >=
+                                  60
+                                ? "bg-amber-500"
+                                : "bg-red-500"
+                            }`}
                             style={{
-                              width: `${stats.percentage}%`,
+                              width: `${summary.compliancePercentage}%`,
                             }}
                           />
+
                         </div>
 
-                        <div className="mt-2 grid grid-cols-3 gap-2 text-center text-[11px]">
-                          <div className="rounded-lg bg-green-50 py-1.5 text-green-700">
-                            مطابق{" "}
-                            {
-                              stats.compliant
-                            }
-                          </div>
+                        <div className="mt-2 flex gap-3 text-[11px]">
 
-                          <div className="rounded-lg bg-amber-50 py-1.5 text-amber-700">
-                            تحسين{" "}
+                          <span className="text-emerald-600">
+                            ✓{" "}
                             {
-                              stats.needsImprovement
+                              summary.compliant
                             }
-                          </div>
+                          </span>
 
-                          <div className="rounded-lg bg-red-50 py-1.5 text-red-700">
-                            مخالفة{" "}
+                          <span className="text-amber-600">
+                            ⚠{" "}
                             {
-                              stats.nonCompliant
+                              summary.needsImprovement
                             }
-                          </div>
+                          </span>
+
+                          <span className="text-red-600">
+                            ✕{" "}
+                            {
+                              summary.nonCompliant
+                            }
+                          </span>
+
                         </div>
+
                       </div>
 
-                      <div className="mt-4 grid grid-cols-2 gap-2">
+                      <div className="mt-4 flex flex-wrap gap-2">
+
                         <button
                           type="button"
                           onClick={() =>
-                            setSelectedVisit(
+                            openDetails(
                               visit
                             )
                           }
-                          className="rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700"
                         >
+                          <Eye size={14} />
                           التفاصيل
                         </button>
 
@@ -2021,366 +2370,372 @@ export default function VisitsPage() {
                               visit
                             )
                           }
-                          className="rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700"
                         >
-                          استكمال الزيارة
+                          <Pencil
+                            size={14}
+                          />
+                          استكمال
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            printVisitReport(
+                              visit
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700"
+                        >
+                          <Printer
+                            size={14}
+                          />
+                          التقرير
+                        </button>
+
                       </div>
+
                     </div>
                   );
                 }
               )}
+
             </div>
+
           </>
         )}
+
       </div>
 
-      {/* Inspection Framework */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-5 flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-            <ClipboardCheck size={21} />
-          </div>
+      {/* ===================================================
+          INSPECTION FRAMEWORK
+      =================================================== */}
 
-          <div>
-            <h2 className="font-bold text-slate-900">
-              إطار التفتيش والمتابعة
-            </h2>
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
 
-            <p className="mt-1 text-sm text-slate-500">
-              ثمانية محاور رئيسية لتقييم حالة المعهد أثناء الزيارة
-            </p>
-          </div>
-        </div>
+        <div className="mb-5">
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {inspectionItems.map((item) => (
-            <div
-              key={item}
-              className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-indigo-600 shadow-sm">
-                  <CheckCircle2 size={18} />
-                </div>
+          <div className="flex items-center gap-3">
 
-                <span className="text-sm font-medium text-slate-700">
-                  {item}
-                </span>
-              </div>
+            <div className="rounded-xl bg-gray-100 p-2.5">
+              <ClipboardCheck
+                size={20}
+                className="text-gray-700"
+              />
             </div>
-          ))}
+
+            <div>
+              <h2 className="font-bold text-gray-900">
+                إطار التفتيش والمتابعة
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-500">
+                ثمانية محاور رئيسية لتقييم
+                حالة المعهد أثناء الزيارة
+              </p>
+            </div>
+
+          </div>
+
         </div>
-      </div>
 
-      {/* New/Edit Visit Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  {editingVisitId
-                    ? "استكمال وتحديث الزيارة"
-                    : "تسجيل زيارة جديدة"}
-                </h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
-                <p className="mt-1 text-xs text-slate-500">
-                  أدخل بيانات الزيارة ثم قيّم جميع البنود التي تم فحصها
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={closeForm}
-                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          {inspectionItems.map(
+            (item, index) => (
+              <div
+                key={item}
+                className="rounded-xl border border-gray-100 bg-gray-50/70 p-4"
               >
-                <X size={21} />
-              </button>
-            </div>
 
-            <div className="space-y-6 p-5">
-              {errorMessage && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  {errorMessage}
-                </div>
-              )}
-
-              {/* Basic Information */}
-              <section>
-                <div className="mb-4 flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                    <CalendarDays size={17} />
-                  </div>
-
-                  <h3 className="font-bold text-slate-800">
-                    بيانات الزيارة
-                  </h3>
+                <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white text-xs font-bold text-gray-500 shadow-sm">
+                  {index + 1}
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      المعهد
-                    </label>
+                <p className="text-sm font-semibold leading-6 text-gray-800">
+                  {item}
+                </p>
 
-                    <select
-                      value={form.institute}
-                      onChange={(event) =>
-                        setForm(
-                          (previous) => ({
-                            ...previous,
-                            institute:
-                              event.target.value,
-                          })
-                        )
-                      }
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    >
-                      <option value="">
-                        اختر المعهد
-                      </option>
+              </div>
+            )
+          )}
 
-                      {institutes.map(
-                        (institute) => (
-                          <option
-                            key={institute.id}
-                            value={institute.id}
-                          >
-                            {institute.name} —{" "}
-                            {institute.code}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </div>
+        </div>
 
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      اسم الزائر
-                    </label>
+      </div>
 
-                    <input
-                      value={form.visitor}
-                      onChange={(event) =>
-                        setForm(
-                          (previous) => ({
-                            ...previous,
-                            visitor:
-                              event.target.value,
-                          })
-                        )
-                      }
-                      placeholder="مثال: مفتش الإدارة التعليمية"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+      {/* ===================================================
+          NEW / EDIT MODAL
+      =================================================== */}
+
+      {showForm && (
+        <Modal
+          title={
+            editingVisit
+              ? "تعديل واستكمال الزيارة"
+              : "تسجيل زيارة جديدة"
+          }
+          onClose={() =>
+            setShowForm(false)
+          }
+          size="xl"
+        >
+
+          <div className="space-y-6">
+
+            {/* BASIC DATA */}
+
+            <div>
+
+              <h3 className="mb-4 text-sm font-bold text-gray-900">
+                بيانات الزيارة
+              </h3>
+
+              <div className="grid gap-4 md:grid-cols-2">
+
+                <FormField label="المعهد">
+                  <SelectField
+                    value={form.institute}
+                    onChange={(value) =>
+                      updateForm(
+                        "institute",
+                        value
+                      )
+                    }
+                    options={[
+                      {
+                        value: "",
+                        label:
+                          "اختر المعهد",
+                      },
+                      ...institutes.map(
+                        (institute) => ({
+                          value:
+                            institute.id,
+                          label:
+                            institute.name,
+                        })
+                      ),
+                    ]}
+                  />
+                </FormField>
+
+                <FormField label="الزائر">
+                  <input
+                    value={
+                      form.visitor
+                    }
+                    onChange={(event) =>
+                      updateForm(
+                        "visitor",
+                        event.target
+                          .value
+                      )
+                    }
+                    placeholder="اسم الزائر أو لجنة التفتيش"
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-gray-400"
+                  />
+                </FormField>
+
+                <FormField label="نوع الزيارة">
+                  <SelectField
+                    value={form.type}
+                    onChange={(value) =>
+                      updateForm(
+                        "type",
+                        value
+                      )
+                    }
+                    options={[
+                      {
+                        value:
+                          "زيارة متابعة دورية",
+                        label:
+                          "زيارة متابعة دورية",
+                      },
+                      {
+                        value:
+                          "زيارة مفاجئة",
+                        label:
+                          "زيارة مفاجئة",
+                      },
+                      {
+                        value:
+                          "زيارة تقييم",
+                        label:
+                          "زيارة تقييم",
+                      },
+                      {
+                        value:
+                          "زيارة متابعة",
+                        label:
+                          "زيارة متابعة",
+                      },
+                      {
+                        value:
+                          "زيارة تفتيش",
+                        label:
+                          "زيارة تفتيش",
+                      },
+                    ]}
+                  />
+                </FormField>
+
+                <FormField label="تاريخ الزيارة">
+                  <div className="relative">
+
+                    <CalendarDays
+                      size={17}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
                     />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      نوع الزيارة
-                    </label>
-
-                    <select
-                      value={form.type}
-                      onChange={(event) =>
-                        setForm(
-                          (previous) => ({
-                            ...previous,
-                            type: event.target.value,
-                          })
-                        )
-                      }
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    >
-                      <option>
-                        زيارة متابعة دورية
-                      </option>
-
-                      <option>
-                        زيارة تفتيش
-                      </option>
-
-                      <option>
-                        زيارة مفاجئة
-                      </option>
-
-                      <option>
-                        زيارة متابعة شكوى
-                      </option>
-
-                      <option>
-                        زيارة تقييم
-                      </option>
-
-                      <option>
-                        زيارة أخرى
-                      </option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      تاريخ الزيارة
-                    </label>
 
                     <input
                       type="date"
                       value={form.date}
                       onChange={(event) =>
-                        setForm(
-                          (previous) => ({
-                            ...previous,
-                            date: event.target.value,
-                          })
+                        updateForm(
+                          "date",
+                          event.target
+                            .value
                         )
                       }
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-xl border border-gray-200 bg-white py-3 pr-10 pl-4 text-sm outline-none focus:border-gray-400"
                     />
+
                   </div>
-                </div>
-              </section>
+                </FormField>
 
-              {/* Live Result */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <ResultCard
-                  title="تم فحص"
-                  value={
-                    formInspectionStats.inspected
-                  }
-                  className="bg-slate-50"
-                />
-
-                <ResultCard
-                  title="مطابق"
-                  value={
-                    formInspectionStats.compliant
-                  }
-                  className="bg-green-50"
-                />
-
-                <ResultCard
-                  title="يحتاج تحسين"
-                  value={
-                    formInspectionStats.needsImprovement
-                  }
-                  className="bg-amber-50"
-                />
-
-                <ResultCard
-                  title="غير مطابق"
-                  value={
-                    formInspectionStats.nonCompliant
-                  }
-                  className="bg-red-50"
-                />
               </div>
 
-              {/* Inspection */}
-              <section>
-                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="font-bold text-slate-800">
-                      التقييم التفصيلي للتفتيش
-                    </h3>
+            </div>
 
-                    <p className="mt-1 text-xs text-slate-500">
-                      اختر نتيجة كل بند واكتب الملاحظة عند الحاجة
-                    </p>
-                  </div>
+            {/* INSPECTION */}
 
-                  <div className="rounded-xl bg-indigo-50 px-4 py-2 text-center">
-                    <span className="text-xs text-indigo-600">
-                      نسبة الالتزام الحالية
-                    </span>
+            <div>
 
-                    <div className="text-xl font-bold text-indigo-700">
-                      {
-                        formInspectionStats.percentage
-                      }
-                      %
-                    </div>
-                  </div>
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                <div>
+
+                  <h3 className="text-sm font-bold text-gray-900">
+                    نتائج التفتيش
+                  </h3>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    اختر نتيجة كل محور تم
+                    فحصه، ويمكن إضافة ملاحظة
+                    لكل محور.
+                  </p>
+
                 </div>
 
-                <div className="space-y-3">
-                  {inspectionItems.map(
-                    (item, index) => {
-                      const current =
-                        draftInspection[
-                          item
-                        ];
+                <InspectionSummary
+                  results={inspection}
+                />
 
-                      return (
-                        <div
-                          key={item}
-                          className="rounded-2xl border border-slate-200 bg-white p-4"
-                        >
-                          <div className="mb-3 flex items-start gap-3">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-500">
+              </div>
+
+              <div className="space-y-3">
+
+                {inspectionItems.map(
+                  (item, index) => {
+                    const current =
+                      inspection[item];
+
+                    return (
+                      <div
+                        key={item}
+                        className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4"
+                      >
+
+                        <div className="flex flex-col gap-4">
+
+                          <div className="flex items-start gap-3">
+
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-bold text-gray-500 shadow-sm">
                               {index + 1}
                             </div>
 
                             <div className="flex-1">
-                              <p className="font-semibold text-slate-800">
+
+                              <div className="font-semibold text-gray-800">
                                 {item}
-                              </p>
+                              </div>
 
-                              <p className="mt-1 text-xs text-slate-400">
-                                حدد نتيجة الفحص
-                              </p>
-                            </div>
-                          </div>
+                              <div className="mt-3 flex flex-wrap gap-2">
 
-                          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                            {(
-                              Object.keys(
-                                inspectionStatusConfig
-                              ) as InspectionStatus[]
-                            ).map(
-                              (status) => {
-                                const config =
-                                  inspectionStatusConfig[
+                                {(
+                                  Object.keys(
+                                    inspectionStatusConfig
+                                  ) as InspectionStatus[]
+                                ).map(
+                                  (
                                     status
-                                  ];
+                                  ) => {
+                                    const config =
+                                      inspectionStatusConfig[
+                                        status
+                                      ];
 
-                                const Icon =
-                                  config.icon;
+                                    const Icon =
+                                      config.icon;
 
-                                const active =
-                                  current.status ===
-                                  status;
+                                    const active =
+                                      current?.status ===
+                                      status;
 
-                                return (
+                                    return (
+                                      <button
+                                        key={
+                                          status
+                                        }
+                                        type="button"
+                                        onClick={() =>
+                                          setInspectionStatus(
+                                            item,
+                                            status
+                                          )
+                                        }
+                                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                                          active
+                                            ? config.className
+                                            : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                                        }`}
+                                      >
+                                        <Icon
+                                          size={
+                                            14
+                                          }
+                                        />
+                                        {
+                                          config.label
+                                        }
+                                      </button>
+                                    );
+                                  }
+                                )}
+
+                                {current && (
                                   <button
-                                    key={status}
                                     type="button"
                                     onClick={() =>
-                                      setInspectionStatus(
-                                        item,
-                                        status
+                                      clearInspectionItem(
+                                        item
                                       )
                                     }
-                                    className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
-                                      active
-                                        ? config.className
-                                        : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white"
-                                    }`}
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-400 hover:text-red-600"
                                   >
-                                    <Icon
-                                      size={17}
-                                    />
-
-                                    {
-                                      config.label
-                                    }
+                                    مسح
                                   </button>
-                                );
-                              }
-                            )}
+                                )}
+
+                              </div>
+
+                            </div>
+
                           </div>
 
-                          <div className="mt-3">
+                          {current && (
                             <textarea
                               value={
                                 current.note
@@ -2394,312 +2749,251 @@ export default function VisitsPage() {
                                     .value
                                 )
                               }
+                              placeholder="ملاحظة على هذا المحور..."
                               rows={2}
-                              placeholder="ملاحظات هذا البند..."
-                              className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                              className="w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-gray-400"
                             />
-                          </div>
+                          )}
+
                         </div>
-                      );
-                    }
-                  )}
+
+                      </div>
+                    );
+                  }
+                )}
+
+              </div>
+
+            </div>
+
+            {/* FOLLOW UP TASKS */}
+
+            <div>
+
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                <div>
+
+                  <h3 className="text-sm font-bold text-gray-900">
+                    مهام المتابعة
+                  </h3>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    المهام التي يجب تنفيذها بعد
+                    الزيارة.
+                  </p>
+
                 </div>
-              </section>
 
-              {/* Follow Up Tasks */}
-              <section>
-                <div className="mb-4 flex items-start gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                    <ClipboardList size={19} />
-                  </div>
+                <button
+                  type="button"
+                  onClick={
+                    generateTasksFromInspection
+                  }
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <ListChecks
+                    size={15}
+                  />
+                  إنشاء من نتائج التفتيش
+                </button>
 
-                  <div>
-                    <h3 className="font-bold text-slate-800">
-                      مهام المتابعة
-                    </h3>
+              </div>
 
-                    <p className="mt-1 text-xs text-slate-500">
-                      أنشئ مهامًا مرتبطة بنتائج الزيارة لمتابعة المعهد
-                    </p>
-                  </div>
-                </div>
+              <div className="flex gap-2">
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_1fr_180px_150px_auto]">
-                    <input
-                      value={
-                        taskForm.title
-                      }
-                      onChange={(event) =>
-                        setTaskForm(
-                          (previous) => ({
-                            ...previous,
-                            title:
-                              event.target
-                                .value,
-                          })
-                        )
-                      }
-                      placeholder="اسم مهمة المتابعة"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    />
-
-                    <input
-                      value={
-                        taskForm.responsible
-                      }
-                      onChange={(event) =>
-                        setTaskForm(
-                          (previous) => ({
-                            ...previous,
-                            responsible:
-                              event.target
-                                .value,
-                          })
-                        )
-                      }
-                      placeholder="المسؤول"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    />
-
-                    <input
-                      type="date"
-                      value={
-                        taskForm.dueDate
-                      }
-                      onChange={(event) =>
-                        setTaskForm(
-                          (previous) => ({
-                            ...previous,
-                            dueDate:
-                              event.target
-                                .value,
-                          })
-                        )
-                      }
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    />
-
-                    <select
-                      value={
-                        taskForm.priority
-                      }
-                      onChange={(event) =>
-                        setTaskForm(
-                          (previous) => ({
-                            ...previous,
-                            priority:
-                              event.target
-                                .value as
-                                | "low"
-                                | "medium"
-                                | "high",
-                          })
-                        )
-                      }
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    >
-                      <option value="low">
-                        أولوية منخفضة
-                      </option>
-
-                      <option value="medium">
-                        أولوية متوسطة
-                      </option>
-
-                      <option value="high">
-                        أولوية عالية
-                      </option>
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={
-                        addFollowUpTask
-                      }
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
-                    >
-                      <Plus size={17} />
-                      إضافة
-                    </button>
-                  </div>
-
-                  {followUpTasks.length >
-                    0 && (
-                    <div className="mt-4 space-y-2">
-                      {followUpTasks.map(
-                        (task) => (
-                          <div
-                            key={task.id}
-                            className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 md:flex-row md:items-center"
-                          >
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                              <ClipboardList
-                                size={18}
-                              />
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <p
-                                className={`font-semibold ${
-                                  task.status ===
-                                  "completed"
-                                    ? "text-slate-400 line-through"
-                                    : "text-slate-800"
-                                }`}
-                              >
-                                {task.title}
-                              </p>
-
-                              <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-400">
-                                <span>
-                                  المسؤول:{" "}
-                                  {
-                                    task.responsible
-                                  }
-                                </span>
-
-                                <span>
-                                  الاستحقاق:{" "}
-                                  {task.dueDate
-                                    ? formatShortDate(
-                                        task.dueDate
-                                      )
-                                    : "غير محدد"}
-                                </span>
-
-                                <span>
-                                  الأولوية:{" "}
-                                  {task.priority ===
-                                  "high"
-                                    ? "عالية"
-                                    : task.priority ===
-                                        "medium"
-                                      ? "متوسطة"
-                                      : "منخفضة"}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  toggleTaskStatus(
-                                    task.id
-                                  )
-                                }
-                                className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                                  task.status ===
-                                  "completed"
-                                    ? "bg-green-50 text-green-700"
-                                    : "bg-indigo-50 text-indigo-700"
-                                }`}
-                              >
-                                {task.status ===
-                                "completed"
-                                  ? "مكتملة"
-                                  : "مفتوحة"}
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  removeFollowUpTask(
-                                    task.id
-                                  )
-                                }
-                                className="rounded-lg p-2 text-red-500 hover:bg-red-50"
-                              >
-                                <X
-                                  size={17}
-                                />
-                              </button>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              {/* General Notes */}
-              <section>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  الملاحظات العامة للزيارة
-                </label>
-
-                <textarea
-                  value={form.notes}
+                <input
+                  value={taskInput}
                   onChange={(event) =>
-                    setForm(
-                      (previous) => ({
-                        ...previous,
-                        notes:
-                          event.target.value,
-                      })
+                    setTaskInput(
+                      event.target.value
                     )
                   }
-                  rows={4}
-                  placeholder="اكتب الملاحظات أو التوصيات العامة..."
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  onKeyDown={(event) => {
+                    if (
+                      event.key ===
+                      "Enter"
+                    ) {
+                      event.preventDefault();
+                      addTask();
+                    }
+                  }}
+                  placeholder="اكتب مهمة متابعة..."
+                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-gray-400"
                 />
-              </section>
 
-              {/* Footer */}
-              <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-xs text-slate-500">
-                  الحالة النهائية ستُحدد تلقائيًا بناءً على نتائج التفتيش.
-                </div>
+                <button
+                  type="button"
+                  onClick={addTask}
+                  className="rounded-xl bg-gray-900 px-4 text-white hover:bg-gray-800"
+                >
+                  <Plus size={18} />
+                </button>
 
-                <div className="flex flex-col-reverse gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={closeForm}
-                    disabled={saving}
-                    className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    إلغاء
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={createVisit}
-                    disabled={saving}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {saving ? (
-                      <>
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                        جاري الحفظ...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2
-                          size={18}
-                        />
-
-                        {editingVisitId
-                          ? "حفظ تحديث الزيارة"
-                          : "حفظ الزيارة"}
-                      </>
-                    )}
-                  </button>
-                </div>
               </div>
+
+              {followUpTasks.length >
+                0 && (
+                <div className="mt-3 space-y-2">
+
+                  {followUpTasks.map(
+                    (task, index) => (
+                      <div
+                        key={`${task}-${index}`}
+                        className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3"
+                      >
+
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-gray-500">
+                          {index + 1}
+                        </div>
+
+                        <div className="flex-1 text-sm text-gray-700">
+                          {task}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeTask(
+                              index
+                            )
+                          }
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2
+                            size={15}
+                          />
+                        </button>
+
+                      </div>
+                    )
+                  )}
+
+                </div>
+              )}
+
             </div>
+
+            {/* NOTES */}
+
+            <div>
+
+              <h3 className="mb-3 text-sm font-bold text-gray-900">
+                ملاحظات الزيارة
+              </h3>
+
+              <textarea
+                value={form.notes}
+                onChange={(event) =>
+                  updateForm(
+                    "notes",
+                    event.target.value
+                  )
+                }
+                rows={4}
+                placeholder="اكتب الملاحظات العامة والتوصيات..."
+                className="w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-gray-400"
+              />
+
+            </div>
+
+            {/* AUTO STATUS */}
+
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+
+              <div className="flex items-start gap-3">
+
+                <ClipboardCheck
+                  size={20}
+                  className="mt-0.5 text-blue-600"
+                />
+
+                <div>
+
+                  <div className="font-bold text-blue-900">
+                    الحالة تُحسب تلقائيًا
+                  </div>
+
+                  <p className="mt-1 text-xs leading-6 text-blue-700">
+                    إذا تم فحص المحاور الثمانية
+                    بالكامل ولا توجد مخالفات أو
+                    توصيات، تصبح الزيارة
+                    <strong>
+                      {" "}
+                      مكتملة
+                    </strong>
+                    . إذا وُجدت مخالفة أو بند
+                    يحتاج تحسين تصبح
+                    <strong>
+                      {" "}
+                      تحتاج متابعة
+                    </strong>
+                    . وإذا لم يكتمل التفتيش تبقى
+                    <strong>
+                      {" "}
+                      مجدولة
+                    </strong>
+                    .
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* BUTTONS */}
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowForm(false)
+                }
+                className="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                إلغاء
+              </button>
+
+              <button
+                type="button"
+                onClick={saveVisit}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-6 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+              >
+                <CheckCircle2
+                  size={17}
+                />
+
+                {editingVisit
+                  ? "حفظ التعديلات"
+                  : "تسجيل الزيارة"}
+              </button>
+
+            </div>
+
           </div>
-        </div>
+
+        </Modal>
       )}
 
-      {/* Visit Details Modal */}
-      {selectedVisit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+      {/* ===================================================
+          DETAILS MODAL
+      =================================================== */}
+
+      {showDetails &&
+        selectedVisit && (
+          <Modal
+            title="تفاصيل الزيارة ونتائج التفتيش"
+            onClose={() =>
+              setShowDetails(false)
+            }
+            size="xl"
+          >
+
             {(() => {
-              const stats =
-                calculateInspectionStats(
+              const summary =
+                calculateInspectionSummary(
                   selectedVisit.inspectionResults
                 );
 
@@ -2709,47 +3003,48 @@ export default function VisitsPage() {
                 ].icon;
 
               return (
-                <>
-                  <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-5 py-4">
-                    <div>
-                      <h2 className="text-lg font-bold text-slate-900">
-                        تفاصيل الزيارة والتفتيش
-                      </h2>
+                <div className="space-y-6">
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        {selectedVisit.institute}
-                      </p>
+                  {/* HEADER */}
+
+                  <div className="rounded-2xl bg-gray-50 p-5">
+
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+
+                      <div>
+
+                        <h2 className="text-xl font-bold text-gray-900">
+                          {
+                            selectedVisit.institute
+                          }
+                        </h2>
+
+                        <p className="mt-1 text-sm text-gray-500">
+                          {
+                            selectedVisit.code
+                          }
+                        </p>
+
+                      </div>
+
+                      <span
+                        className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-2 text-xs font-bold ${statusConfig[selectedVisit.status].className}`}
+                      >
+                        <StatusIcon
+                          size={15}
+                        />
+
+                        {
+                          statusConfig[
+                            selectedVisit
+                              .status
+                          ].label
+                        }
+                      </span>
+
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedVisit(
-                          null
-                        )
-                      }
-                      className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                    >
-                      <X size={21} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-6 p-5">
-                    {/* Header info */}
-                    <div className="grid grid-cols-1 gap-4 rounded-2xl bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-3">
-                      <DetailItem
-                        label="المعهد"
-                        value={
-                          selectedVisit.institute
-                        }
-                      />
-
-                      <DetailItem
-                        label="كود المعهد"
-                        value={
-                          selectedVisit.code
-                        }
-                      />
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
                       <DetailItem
                         label="الزائر"
@@ -2766,401 +3061,393 @@ export default function VisitsPage() {
                       />
 
                       <DetailItem
-                        label="تاريخ الزيارة"
+                        label="التاريخ"
                         value={formatDate(
                           selectedVisit.date
                         )}
                       />
 
-                      <div>
-                        <p className="mb-1 text-xs text-slate-400">
-                          الحالة
-                        </p>
+                      <DetailItem
+                        label="نسبة الفحص"
+                        value={`${summary.inspected} / ${inspectionItems.length}`}
+                      />
 
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusConfig[selectedVisit.status].className}`}
-                        >
-                          <StatusIcon
-                            size={14}
-                          />
-
-                          {
-                            statusConfig[
-                              selectedVisit
-                                .status
-                            ].label
-                          }
-                        </span>
-                      </div>
                     </div>
 
-                    {/* Inspection summary */}
-                    <div>
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="font-bold text-slate-800">
-                          ملخص نتيجة التفتيش
+                  </div>
+
+                  {/* SCORE */}
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+
+                    <MiniStat
+                      label="نسبة الالتزام"
+                      value={`${summary.compliancePercentage}%`}
+                      className="bg-indigo-50 text-indigo-700"
+                    />
+
+                    <MiniStat
+                      label="مطابق"
+                      value={
+                        summary.compliant
+                      }
+                      className="bg-emerald-50 text-emerald-700"
+                    />
+
+                    <MiniStat
+                      label="يحتاج تحسين"
+                      value={
+                        summary.needsImprovement
+                      }
+                      className="bg-amber-50 text-amber-700"
+                    />
+
+                    <MiniStat
+                      label="مخالفات"
+                      value={
+                        summary.nonCompliant
+                      }
+                      className="bg-red-50 text-red-700"
+                    />
+
+                    <MiniStat
+                      label="مهام المتابعة"
+                      value={
+                        selectedVisit
+                          .followUpTasks
+                          .length
+                      }
+                      className="bg-purple-50 text-purple-700"
+                    />
+
+                  </div>
+
+                  {/* PROGRESS */}
+
+                  <div className="rounded-2xl border border-gray-200 p-5">
+
+                    <div className="flex items-center justify-between">
+
+                      <div>
+                        <h3 className="font-bold text-gray-900">
+                          مستوى الالتزام
                         </h3>
 
-                        <span className="text-2xl font-bold text-indigo-700">
-                          {stats.percentage}%
-                        </span>
+                        <p className="mt-1 text-xs text-gray-500">
+                          محسوب من البنود التي تم
+                          فحصها فعليًا.
+                        </p>
                       </div>
 
-                      <div className="mb-4 h-3 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className={`h-full rounded-full ${
-                            stats.percentage >=
-                            80
-                              ? "bg-green-500"
-                              : stats.percentage >=
-                                  60
-                                ? "bg-amber-500"
-                                : "bg-red-500"
-                          }`}
-                          style={{
-                            width: `${stats.percentage}%`,
-                          }}
-                        />
-                      </div>
+                      <strong className="text-2xl font-bold text-gray-900">
+                        {
+                          summary.compliancePercentage
+                        }
+                        %
+                      </strong>
 
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <MiniStat
-                          label="تم فحص"
-                          value={
-                            stats.inspected
-                          }
-                        />
-
-                        <MiniStat
-                          label="مطابق"
-                          value={
-                            stats.compliant
-                          }
-                        />
-
-                        <MiniStat
-                          label="يحتاج تحسين"
-                          value={
-                            stats.needsImprovement
-                          }
-                        />
-
-                        <MiniStat
-                          label="غير مطابق"
-                          value={
-                            stats.nonCompliant
-                          }
-                        />
-                      </div>
                     </div>
 
-                    {/* Inspection Details */}
-                    <div>
-                      <h3 className="mb-3 font-bold text-slate-800">
-                        تفاصيل بنود التفتيش
-                      </h3>
+                    <div className="mt-4 h-3 overflow-hidden rounded-full bg-gray-100">
 
-                      <div className="space-y-3">
-                        {inspectionItems.map(
-                          (item) => {
-                            const result =
-                              getInspectionResult(
-                                selectedVisit.inspectionResults,
-                                item
-                              );
+                      <div
+                        className={`h-full rounded-full ${
+                          summary.compliancePercentage >=
+                          80
+                            ? "bg-emerald-500"
+                            : summary.compliancePercentage >=
+                              60
+                            ? "bg-amber-500"
+                            : "bg-red-500"
+                        }`}
+                        style={{
+                          width: `${summary.compliancePercentage}%`,
+                        }}
+                      />
 
-                            return (
-                              <div
-                                key={item}
-                                className="rounded-2xl border border-slate-200 p-4"
-                              >
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                  <div>
-                                    <p className="font-semibold text-slate-800">
-                                      {item}
-                                    </p>
+                    </div>
 
-                                    {result.note && (
-                                      <p className="mt-2 text-sm leading-6 text-slate-500">
-                                        {result.note}
-                                      </p>
-                                    )}
+                    <div className="mt-3 text-xs text-gray-500">
+                      تم فحص{" "}
+                      <strong>
+                        {
+                          summary.inspected
+                        }
+                      </strong>{" "}
+                      من أصل{" "}
+                      <strong>
+                        {
+                          inspectionItems.length
+                        }
+                      </strong>{" "}
+                      محاور.
+                    </div>
+
+                  </div>
+
+                  {/* INSPECTION DETAILS */}
+
+                  <div>
+
+                    <h3 className="mb-4 font-bold text-gray-900">
+                      نتائج محاور التفتيش
+                    </h3>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+
+                      {inspectionItems.map(
+                        (item, index) => {
+                          const result =
+                            selectedVisit
+                              .inspectionResults[
+                              item
+                            ];
+
+                          return (
+                            <div
+                              key={item}
+                              className="rounded-2xl border border-gray-200 p-4"
+                            >
+
+                              <div className="flex items-start gap-3">
+
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xs font-bold text-gray-500">
+                                  {index + 1}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+
+                                  <div className="font-semibold text-gray-800">
+                                    {item}
                                   </div>
 
-                                  {result.status ? (
-                                    (() => {
-                                      const config =
-                                        inspectionStatusConfig[
-                                          result.status
-                                        ];
+                                  <div className="mt-2">
 
-                                      const Icon =
-                                        config.icon;
+                                    {result ? (
+                                      <span
+                                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${inspectionStatusConfig[result.status].className}`}
+                                      >
+                                        {(() => {
+                                          const Icon =
+                                            inspectionStatusConfig[
+                                              result
+                                                .status
+                                            ]
+                                              .icon;
 
-                                      return (
-                                        <span
-                                          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${config.className}`}
-                                        >
-                                          <Icon
-                                            size={
-                                              15
-                                            }
-                                          />
+                                          return (
+                                            <Icon
+                                              size={
+                                                13
+                                              }
+                                            />
+                                          );
+                                        })()}
 
-                                          {
-                                            config.label
-                                          }
-                                        </span>
-                                      );
-                                    })()
-                                  ) : (
-                                    <span className="text-xs font-medium text-slate-400">
-                                      لم يتم تقييم هذا البند
-                                    </span>
+                                        {
+                                          inspectionStatusConfig[
+                                            result
+                                              .status
+                                          ]
+                                            .label
+                                        }
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-500">
+                                        لم يتم الفحص
+                                      </span>
+                                    )}
+
+                                  </div>
+
+                                  {result?.note && (
+                                    <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs leading-6 text-gray-600">
+                                      {
+                                        result.note
+                                      }
+                                    </div>
                                   )}
+
                                 </div>
+
                               </div>
-                            );
-                          }
-                        )}
-                      </div>
-                    </div>
 
-                    {/* Tasks */}
-                    <div>
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="font-bold text-slate-800">
-                          مهام المتابعة
-                        </h3>
-
-                        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                          {
-                            selectedVisit
-                              .followUpTasks
-                              .length
-                          }{" "}
-                          مهمة
-                        </span>
-                      </div>
-
-                      {selectedVisit
-                        .followUpTasks.length ===
-                      0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-400">
-                          لا توجد مهام متابعة لهذه الزيارة.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {selectedVisit.followUpTasks.map(
-                            (task) => (
-                              <div
-                                key={task.id}
-                                className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center"
-                              >
-                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                                  <ClipboardList
-                                    size={17}
-                                  />
-                                </div>
-
-                                <div className="flex-1">
-                                  <p className="text-sm font-semibold text-slate-800">
-                                    {task.title}
-                                  </p>
-
-                                  <p className="mt-1 text-xs text-slate-400">
-                                    المسؤول:{" "}
-                                    {
-                                      task.responsible
-                                    }
-
-                                    {" • "}
-
-                                    الاستحقاق:{" "}
-                                    {task.dueDate
-                                      ? formatShortDate(
-                                          task.dueDate
-                                        )
-                                      : "غير محدد"}
-                                  </p>
-                                </div>
-
-                                <span
-                                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                                    task.status ===
-                                    "completed"
-                                      ? "bg-green-50 text-green-700"
-                                      : "bg-amber-50 text-amber-700"
-                                  }`}
-                                >
-                                  {task.status ===
-                                  "completed"
-                                    ? "مكتملة"
-                                    : "مفتوحة"}
-                                </span>
-                              </div>
-                            )
-                          )}
-                        </div>
+                            </div>
+                          );
+                        }
                       )}
+
                     </div>
 
-                    {/* General Notes */}
-                    <div>
-                      <h3 className="mb-2 font-bold text-slate-800">
-                        الملاحظات العامة
-                      </h3>
-
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-7 text-slate-600">
-                        {selectedVisit.notes ||
-                          "لا توجد ملاحظات عامة مسجلة لهذه الزيارة."}
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-5 sm:grid-cols-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          printVisitReport(
-                            selectedVisit
-                          )
-                        }
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-                      >
-                        <Printer size={18} />
-                        طباعة التقرير
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openEditVisitForm(
-                            selectedVisit
-                          )
-                        }
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white hover:bg-indigo-700"
-                      >
-                        <ClipboardCheck
-                          size={18}
-                        />
-                        استكمال / تعديل
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelectedVisit(
-                            null
-                          )
-                        }
-                        className="rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                      >
-                        إغلاق
-                      </button>
-                    </div>
                   </div>
-                </>
+
+                  {/* TASKS */}
+
+                  <div>
+
+                    <h3 className="mb-3 font-bold text-gray-900">
+                      مهام المتابعة
+                    </h3>
+
+                    {selectedVisit
+                      .followUpTasks
+                      .length ===
+                    0 ? (
+                      <div className="rounded-xl border border-dashed border-gray-200 p-5 text-center text-sm text-gray-500">
+                        لا توجد مهام متابعة
+                        مسجلة لهذه الزيارة.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+
+                        {selectedVisit.followUpTasks.map(
+                          (
+                            task,
+                            index
+                          ) => (
+                            <div
+                              key={`${task}-${index}`}
+                              className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3"
+                            >
+
+                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-gray-500">
+                                {index +
+                                  1}
+                              </div>
+
+                              <div className="text-sm text-gray-700">
+                                {task}
+                              </div>
+
+                            </div>
+                          )
+                        )}
+
+                      </div>
+                    )}
+
+                  </div>
+
+                  {/* NOTES */}
+
+                  <div>
+
+                    <h3 className="mb-3 font-bold text-gray-900">
+                      ملاحظات الزيارة
+                    </h3>
+
+                    <div className="min-h-20 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm leading-7 text-gray-700">
+                      {selectedVisit.notes ||
+                        "لا توجد ملاحظات مسجلة."}
+                    </div>
+
+                  </div>
+
+                  {/* ACTIONS */}
+
+                  <div className="flex flex-col gap-2 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        printVisitReport(
+                          selectedVisit
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      <Printer
+                        size={17}
+                      />
+                      طباعة التقرير
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openEditVisitForm(
+                          selectedVisit
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+                    >
+                      <Pencil
+                        size={17}
+                      />
+                      تعديل واستكمال
+                    </button>
+
+                    {selectedVisit.status !==
+                      "cancelled" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          cancelVisit(
+                            selectedVisit
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-medium text-red-700 hover:bg-red-100"
+                      >
+                        <Ban
+                          size={17}
+                        />
+                        إلغاء الزيارة
+                      </button>
+                    )}
+
+                  </div>
+
+                </div>
               );
             })()}
-          </div>
-        </div>
-      )}
+
+          </Modal>
+        )}
+
     </div>
   );
 }
 
-// ---------------------------------------------------------
-// Components
-// ---------------------------------------------------------
+/* =========================================================
+   SMALL COMPONENTS
+========================================================= */
 
 function StatCard({
   title,
   value,
-  icon,
-  className,
-  suffix = "",
+  icon: Icon,
+  iconClass,
 }: {
   title: string;
-  value: number;
-  icon: React.ReactNode;
-  className?: string;
-  suffix?: string;
+  value: string | number;
+  icon: typeof CheckCircle2;
+  iconClass: string;
 }) {
   return (
-    <div
-      className={`rounded-2xl border border-slate-200 p-5 shadow-sm ${
-        className || "bg-white"
-      }`}
-    >
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80 text-indigo-600 shadow-sm">
-          {icon}
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+
+      <div className="flex items-start justify-between gap-2">
+
+        <div>
+
+          <div className="text-xs text-gray-500">
+            {title}
+          </div>
+
+          <div className="mt-2 text-2xl font-bold text-gray-900">
+            {value}
+          </div>
+
         </div>
 
-        <span className="text-3xl font-bold text-slate-900">
-          {value}
-          {suffix}
-        </span>
+        <div
+          className={`rounded-xl p-2.5 ${iconClass}`}
+        >
+          <Icon size={18} />
+        </div>
+
       </div>
 
-      <p className="text-sm font-medium text-slate-600">
-        {title}
-      </p>
-    </div>
-  );
-}
-
-function InfoCard({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-        {icon}
-      </div>
-
-      <div>
-        <p className="text-xs text-slate-400">
-          {title}
-        </p>
-
-        <p className="mt-1 text-2xl font-bold text-slate-900">
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function ResultCard({
-  title,
-  value,
-  className,
-}: {
-  title: string;
-  value: number;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`rounded-xl border border-slate-200 p-3 text-center ${
-        className || "bg-white"
-      }`}
-    >
-      <p className="text-xl font-bold text-slate-900">
-        {value}
-      </p>
-
-      <p className="mt-1 text-xs text-slate-500">
-        {title}
-      </p>
     </div>
   );
 }
@@ -3173,14 +3460,16 @@ function DetailItem({
   value: string;
 }) {
   return (
-    <div>
-      <p className="mb-1 text-xs text-slate-400">
-        {label}
-      </p>
+    <div className="rounded-xl border border-gray-100 bg-white p-3">
 
-      <p className="text-sm font-semibold text-slate-700">
+      <div className="text-[11px] text-gray-400">
+        {label}
+      </div>
+
+      <div className="mt-1 text-sm font-semibold text-gray-800">
         {value}
-      </p>
+      </div>
+
     </div>
   );
 }
@@ -3188,28 +3477,196 @@ function DetailItem({
 function MiniStat({
   label,
   value,
+  className,
 }: {
   label: string;
-  value: number;
+  value: string | number;
+  className: string;
 }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3 text-center">
-      <p className="text-xl font-bold text-slate-900">
-        {value}
-      </p>
-
-      <p className="mt-1 text-xs text-slate-500">
+    <div
+      className={`rounded-xl p-4 ${className}`}
+    >
+      <div className="text-xs opacity-75">
         {label}
-      </p>
+      </div>
+
+      <div className="mt-1 text-xl font-bold">
+        {value}
+      </div>
     </div>
   );
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+function FormField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-xs font-semibold text-gray-700">
+        {label}
+      </label>
+
+      {children}
+    </div>
+  );
+}
+
+function SelectField({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: {
+    value: string;
+    label: string;
+  }[];
+}) {
+  return (
+    <div className="relative">
+
+      <select
+        value={value}
+        onChange={(event) =>
+          onChange(
+            event.target.value
+          )
+        }
+        className="w-full appearance-none rounded-xl border border-gray-200 bg-white px-4 py-3 pl-10 text-sm outline-none focus:border-gray-400"
+      >
+        {options.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+
+      <ChevronDown
+        size={17}
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+      />
+
+    </div>
+  );
+}
+
+function ActionButton({
+  children,
+  title,
+  onClick,
+  danger = false,
+}: {
+  children: React.ReactNode;
+  title: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`rounded-lg border p-2 transition ${
+        danger
+          ? "border-red-100 bg-red-50 text-red-600 hover:bg-red-100"
+          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function InspectionSummary({
+  results,
+}: {
+  results: InspectionResults;
+}) {
+  const summary =
+    calculateInspectionSummary(
+      results
+    );
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+
+      <span className="rounded-full bg-gray-100 px-3 py-1.5 text-gray-600">
+        الفحص{" "}
+        <strong>
+          {summary.inspected}/
+          {inspectionItems.length}
+        </strong>
+      </span>
+
+      <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">
+        ✓ {summary.compliant}
+      </span>
+
+      <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700">
+        ⚠ {summary.needsImprovement}
+      </span>
+
+      <span className="rounded-full bg-red-50 px-3 py-1.5 text-red-700">
+        ✕ {summary.nonCompliant}
+      </span>
+
+    </div>
+  );
+}
+
+function Modal({
+  title,
+  children,
+  onClose,
+  size = "lg",
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  size?: "lg" | "xl";
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+
+      <div
+        className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ${
+          size === "xl"
+            ? "max-w-5xl"
+            : "max-w-3xl"
+        }`}
+      >
+
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4">
+
+          <h2 className="font-bold text-gray-900">
+            {title}
+          </h2>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          >
+            <X size={20} />
+          </button>
+
+        </div>
+
+        <div className="overflow-y-auto p-5">
+          {children}
+        </div>
+
+      </div>
+
+    </div>
+  );
 }
