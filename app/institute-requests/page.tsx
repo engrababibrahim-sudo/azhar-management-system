@@ -1,4 +1,3 @@
-```tsx
 "use client";
 
 import { createPortal } from "react-dom";
@@ -60,7 +59,11 @@ type RequestType =
   | "report"
   | "other";
 
-type Priority = "low" | "medium" | "high" | "urgent";
+type Priority =
+  | "low"
+  | "medium"
+  | "high"
+  | "urgent";
 
 type RequestStatus =
   | "new"
@@ -163,29 +166,35 @@ function isOverdue(request: InstituteRequest) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const due = new Date(`${request.due_date}T00:00:00`);
+  // تم تعديل هذا السطر لتجنب خطأ parsing في Vercel/Turbopack
+  const due = new Date(
+    request.due_date + "T00:00:00"
+  );
 
   return due < today;
 }
 
 function statusLabel(status: RequestStatus) {
   return (
-    statusOptions.find((item) => item.value === status)?.label ??
-    status
+    statusOptions.find(
+      (item) => item.value === status
+    )?.label ?? status
   );
 }
 
 function priorityLabel(priority: Priority) {
   return (
-    priorityOptions.find((item) => item.value === priority)?.label ??
-    priority
+    priorityOptions.find(
+      (item) => item.value === priority
+    )?.label ?? priority
   );
 }
 
 function typeLabel(type: RequestType) {
   return (
-    requestTypeOptions.find((item) => item.value === type)?.label ??
-    type
+    requestTypeOptions.find(
+      (item) => item.value === type
+    )?.label ?? type
   );
 }
 
@@ -231,22 +240,29 @@ function priorityClass(priority: Priority) {
 }
 
 export default function InstituteRequestsPage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
 
-  const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [institutes, setInstitutes] =
+    useState<Institute[]>([]);
 
-  const [requests, setRequests] = useState<InstituteRequest[]>([]);
+  const [requests, setRequests] =
+    useState<InstituteRequest[]>([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] =
+    useState(false);
 
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing] =
+    useState(false);
 
   const [requestedInstituteId, setRequestedInstituteId] =
     useState<string | null>(null);
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] =
+    useState("");
 
   const [statusFilter, setStatusFilter] =
     useState<RequestStatus | "all">("all");
@@ -254,39 +270,31 @@ export default function InstituteRequestsPage() {
   const [priorityFilter, setPriorityFilter] =
     useState<Priority | "all">("all");
 
-  const [instituteFilter, setInstituteFilter] = useState("all");
+  const [instituteFilter, setInstituteFilter] =
+    useState("all");
 
-  /*
-   * فلتر خاص ببطاقة:
-   *
-   * الطلبات المتأخرة
-   * يحتاج إجراء من المدير
-   */
   const [needsActionFilter, setNeedsActionFilter] =
     useState(false);
 
   /*
-   * فلتر Dashboard:
-   *
-   * الطلبات المعلقة
-   *
-   * يتم تشغيله عند فتح الصفحة بالرابط:
+   * فلتر الطلبات المعلقة القادم من Dashboard
    *
    * /institute-requests?filter=pending&instituteId=...
    *
-   * ويعرض فقط:
+   * يعرض فقط:
    * - جديد
    * - قيد المعالجة
    * - تحتاج تدخل المدير
    *
-   * ولا يعرض:
+   * ويستبعد:
    * - تم الحل
    * - مغلق
    */
   const [pendingFilter, setPendingFilter] =
     useState(false);
 
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] =
+    useState(false);
 
   const [selectedRequest, setSelectedRequest] =
     useState<InstituteRequest | null>(null);
@@ -299,11 +307,12 @@ export default function InstituteRequestsPage() {
     due_date: "",
   });
 
-  const [directorForm, setDirectorForm] = useState({
-    status: "new" as RequestStatus,
-    director_response: "",
-    due_date: "",
-  });
+  const [directorForm, setDirectorForm] =
+    useState({
+      status: "new" as RequestStatus,
+      director_response: "",
+      due_date: "",
+    });
 
   const isDirector =
     profile?.role === "director" ||
@@ -320,12 +329,18 @@ export default function InstituteRequestsPage() {
     return (
       institutes.find(
         (institute) =>
-          institute.id === requestedInstituteId
+          institute.id ===
+          requestedInstituteId
       ) ?? null
     );
-  }, [institutes, requestedInstituteId]);
+  }, [
+    institutes,
+    requestedInstituteId,
+  ]);
 
-  async function loadData(showRefresh = false) {
+  async function loadData(
+    showRefresh = false
+  ) {
     try {
       if (showRefresh) {
         setRefreshing(true);
@@ -334,44 +349,49 @@ export default function InstituteRequestsPage() {
       }
 
       /*
-       * ============================================
        * قراءة بيانات الرابط
-       * ============================================
        */
 
       const searchParams =
         typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search)
+          ? new URLSearchParams(
+              window.location.search
+            )
           : null;
 
       const urlInstituteId =
-        searchParams?.get("instituteId") ?? null;
+        searchParams?.get(
+          "instituteId"
+        ) ?? null;
 
       const urlFilter =
-        searchParams?.get("filter") ?? null;
+        searchParams?.get("filter") ??
+        null;
 
-      setRequestedInstituteId(urlInstituteId);
+      setRequestedInstituteId(
+        urlInstituteId
+      );
 
       /*
-       * فلتر الطلبات المعلقة القادم من Dashboard
-       *
-       * /institute-requests?filter=pending&instituteId=...
+       * فلتر الطلبات المعلقة
        */
+
       const shouldUsePendingFilter =
         urlFilter === "pending";
 
-      setPendingFilter(shouldUsePendingFilter);
+      setPendingFilter(
+        shouldUsePendingFilter
+      );
 
       /*
-       * ============================================
        * المستخدم الحالي
-       * ============================================
        */
 
       const {
         data: { user },
         error: userError,
-      } = await supabase.auth.getUser();
+      } =
+        await supabase.auth.getUser();
 
       if (userError || !user) {
         window.location.href =
@@ -381,9 +401,7 @@ export default function InstituteRequestsPage() {
       }
 
       /*
-       * ============================================
        * تحميل Profile
-       * ============================================
        */
 
       const {
@@ -397,26 +415,36 @@ export default function InstituteRequestsPage() {
         .eq("id", user.id)
         .single();
 
-      if (profileError || !profileData) {
-        console.error(profileError);
+      if (
+        profileError ||
+        !profileData
+      ) {
+        console.error(
+          profileError
+        );
 
-        alert("تعذر تحميل بيانات المستخدم.");
+        alert(
+          "تعذر تحميل بيانات المستخدم."
+        );
 
         return;
       }
 
-      const currentProfile = profileData as Profile;
+      const currentProfile =
+        profileData as Profile;
 
-      setProfile(currentProfile);
+      setProfile(
+        currentProfile
+      );
 
       const currentIsDirector =
-        currentProfile.role === "director" ||
-        currentProfile.role === "super_admin";
+        currentProfile.role ===
+          "director" ||
+        currentProfile.role ===
+          "super_admin";
 
       /*
-       * ============================================
-       * فلاتر المدير القادمة من Dashboard
-       * ============================================
+       * فلتر المدير
        */
 
       const shouldUseNeedsActionFilter =
@@ -428,225 +456,257 @@ export default function InstituteRequestsPage() {
       );
 
       /*
-       * إذا كان الرابط يطلب الطلبات المعلقة
-       * فلا نستخدم فلتر needs_action في نفس الوقت.
+       * لا نستخدم needs_action
+       * مع pending
        */
 
-      if (shouldUsePendingFilter) {
-        setNeedsActionFilter(false);
-      }
-
-      /*
-       * إذا دخل المدير من بطاقة
-       * "يحتاج إجراء من المدير"
-       * نلغي أي فلتر حالة سابق.
-       */
-
-      if (shouldUseNeedsActionFilter) {
-        setStatusFilter("all");
-      }
-
-      /*
-       * عند فتح الطلبات المعلقة من Dashboard
-       * نلغي فلتر الحالة اليدوي حتى لا يمنع
-       * ظهور باقي الطلبات المعلقة.
-       */
-
-      if (shouldUsePendingFilter) {
-        setStatusFilter("all");
-      }
-
-      /*
-       * ============================================
-       * تحميل المعاهد
-       * ============================================
-       */
-
-      let institutesQuery = supabase
-        .from("institutes")
-        .select(
-          "id, name, code, directorate_id"
-        )
-        .order("name");
-
-      if (currentProfile.directorate_id) {
-        institutesQuery = institutesQuery.eq(
-          "directorate_id",
-          currentProfile.directorate_id
+      if (
+        shouldUsePendingFilter
+      ) {
+        setNeedsActionFilter(
+          false
         );
+      }
+
+      if (
+        shouldUseNeedsActionFilter
+      ) {
+        setStatusFilter("all");
+      }
+
+      if (
+        shouldUsePendingFilter
+      ) {
+        setStatusFilter("all");
+      }
+
+      /*
+       * تحميل المعاهد
+       */
+
+      let institutesQuery =
+        supabase
+          .from("institutes")
+          .select(
+            "id, name, code, directorate_id"
+          )
+          .order("name");
+
+      if (
+        currentProfile.directorate_id
+      ) {
+        institutesQuery =
+          institutesQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
+          );
       }
 
       if (
         !currentIsDirector &&
         currentProfile.institute_id
       ) {
-        institutesQuery = institutesQuery.eq(
-          "id",
-          currentProfile.institute_id
-        );
+        institutesQuery =
+          institutesQuery.eq(
+            "id",
+            currentProfile.institute_id
+          );
       }
 
       const {
         data: institutesData,
         error: institutesError,
-      } = await institutesQuery;
+      } =
+        await institutesQuery;
 
       if (institutesError) {
-        console.error(institutesError);
+        console.error(
+          institutesError
+        );
 
-        alert("تعذر تحميل بيانات المعاهد.");
+        alert(
+          "تعذر تحميل بيانات المعاهد."
+        );
 
         return;
       }
 
       const availableInstitutes =
-        (institutesData ?? []) as Institute[];
+        (institutesData ??
+          []) as Institute[];
 
-      setInstitutes(availableInstitutes);
+      setInstitutes(
+        availableInstitutes
+      );
 
       /*
-       * ============================================
        * تحديد المعهد النهائي
-       * ============================================
        */
 
-      let effectiveInstituteId: string | null = null;
+      let effectiveInstituteId:
+        | string
+        | null = null;
 
       if (currentIsDirector) {
         if (urlInstituteId) {
           const selectedBelongsToDirectorate =
             availableInstitutes.some(
               (institute) =>
-                institute.id === urlInstituteId
+                institute.id ===
+                urlInstituteId
             );
 
-          if (selectedBelongsToDirectorate) {
-            effectiveInstituteId = urlInstituteId;
+          if (
+            selectedBelongsToDirectorate
+          ) {
+            effectiveInstituteId =
+              urlInstituteId;
           } else {
             alert(
               "المعهد المحدد غير تابع للمديرية الحالية."
             );
 
-            effectiveInstituteId = null;
+            effectiveInstituteId =
+              null;
           }
         }
       } else {
         effectiveInstituteId =
-          currentProfile.institute_id ?? null;
+          currentProfile.institute_id ??
+          null;
       }
 
       /*
-       * ============================================
        * تحميل الطلبات
-       * ============================================
        */
 
-      let requestsQuery = supabase
-        .from("institute_requests")
-        .select(`
-          id,
-          directorate_id,
-          institute_id,
-          created_by,
-          title,
-          description,
-          request_type,
-          priority,
-          status,
-          due_date,
-          director_response,
-          resolved_at,
-          resolved_by,
-          created_at,
-          updated_at,
-          institute:institutes (
+      let requestsQuery =
+        supabase
+          .from("institute_requests")
+          .select(`
             id,
-            name,
-            code
-          )
-        `)
-        .order("created_at", {
-          ascending: false,
-        });
+            directorate_id,
+            institute_id,
+            created_by,
+            title,
+            description,
+            request_type,
+            priority,
+            status,
+            due_date,
+            director_response,
+            resolved_at,
+            resolved_by,
+            created_at,
+            updated_at,
+            institute:institutes (
+              id,
+              name,
+              code
+            )
+          `)
+          .order(
+            "created_at",
+            {
+              ascending: false,
+            }
+          );
 
       /*
-       * ============================================
        * مدير الإدارة
-       * ============================================
        */
 
       if (currentIsDirector) {
         if (effectiveInstituteId) {
-          requestsQuery = requestsQuery.eq(
-            "institute_id",
-            effectiveInstituteId
-          );
-        } else if (currentProfile.directorate_id) {
-          requestsQuery = requestsQuery.eq(
-            "directorate_id",
-            currentProfile.directorate_id
-          );
+          requestsQuery =
+            requestsQuery.eq(
+              "institute_id",
+              effectiveInstituteId
+            );
+        } else if (
+          currentProfile.directorate_id
+        ) {
+          requestsQuery =
+            requestsQuery.eq(
+              "directorate_id",
+              currentProfile.directorate_id
+            );
         } else {
-          requestsQuery = requestsQuery.eq(
-            "institute_id",
-            "00000000-0000-0000-0000-000000000000"
-          );
+          requestsQuery =
+            requestsQuery.eq(
+              "institute_id",
+              "00000000-0000-0000-0000-000000000000"
+            );
         }
       } else {
         /*
-         * ==========================================
          * مستخدم داخل المعهد
-         * ==========================================
          */
 
-        if (currentProfile.institute_id) {
-          requestsQuery = requestsQuery.eq(
-            "institute_id",
-            currentProfile.institute_id
-          );
+        if (
+          currentProfile.institute_id
+        ) {
+          requestsQuery =
+            requestsQuery.eq(
+              "institute_id",
+              currentProfile.institute_id
+            );
         } else {
-          requestsQuery = requestsQuery.eq(
-            "institute_id",
-            "00000000-0000-0000-0000-000000000000"
-          );
+          requestsQuery =
+            requestsQuery.eq(
+              "institute_id",
+              "00000000-0000-0000-0000-000000000000"
+            );
         }
       }
 
       const {
         data: requestsData,
         error: requestsError,
-      } = await requestsQuery;
+      } =
+        await requestsQuery;
 
       if (requestsError) {
-        console.error(requestsError);
+        console.error(
+          requestsError
+        );
 
-        alert("تعذر تحميل طلبات المعاهد.");
+        alert(
+          "تعذر تحميل طلبات المعاهد."
+        );
 
         return;
       }
 
       /*
-       * ============================================
        * Normalize institute relation
-       * ============================================
        */
 
-      const normalizedRequests: InstituteRequest[] = (
-        requestsData ?? []
-      ).map((request: any) => ({
-        ...request,
+      const normalizedRequests: InstituteRequest[] =
+        (
+          requestsData ?? []
+        ).map(
+          (request: any) => ({
+            ...request,
 
-        institute: Array.isArray(request.institute)
-          ? request.institute[0] ?? null
-          : request.institute ?? null,
-      }));
+            institute:
+              Array.isArray(
+                request.institute
+              )
+                ? request
+                    .institute[0] ??
+                  null
+                : request.institute ??
+                  null,
+          })
+        );
 
-      setRequests(normalizedRequests);
+      setRequests(
+        normalizedRequests
+      );
 
       /*
-       * ============================================
        * تثبيت فلتر المعهد
-       * ============================================
        */
 
       if (effectiveInstituteId) {
@@ -659,18 +719,14 @@ export default function InstituteRequestsPage() {
     } catch (error) {
       console.error(error);
 
-      alert("حدث خطأ أثناء تحميل البيانات.");
+      alert(
+        "حدث خطأ أثناء تحميل البيانات."
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }
-
-  /*
-   * ============================================
-   * أول تحميل
-   * ============================================
-   */
 
   useEffect(() => {
     loadData();
@@ -679,21 +735,22 @@ export default function InstituteRequestsPage() {
   }, []);
 
   /*
-   * ============================================
    * فتح الطلب
-   * ============================================
    */
 
   function openRequest(
     request: InstituteRequest
   ) {
-    setSelectedRequest(request);
+    setSelectedRequest(
+      request
+    );
 
     setDirectorForm({
       status: request.status,
 
       director_response:
-        request.director_response ?? "",
+        request.director_response ??
+        "",
 
       due_date:
         request.due_date ?? "",
@@ -701,9 +758,7 @@ export default function InstituteRequestsPage() {
   }
 
   /*
-   * ============================================
    * إغلاق التفاصيل
-   * ============================================
    */
 
   function closeRequest() {
@@ -717,9 +772,7 @@ export default function InstituteRequestsPage() {
   }
 
   /*
-   * ============================================
    * Reset create form
-   * ============================================
    */
 
   function resetCreateForm() {
@@ -733,13 +786,12 @@ export default function InstituteRequestsPage() {
   }
 
   /*
-   * ============================================
    * إنشاء طلب
-   * ============================================
    */
 
   async function createRequest() {
-    if (!canCreate || !profile) return;
+    if (!canCreate || !profile)
+      return;
 
     if (!profile.institute_id) {
       alert(
@@ -749,7 +801,9 @@ export default function InstituteRequestsPage() {
       return;
     }
 
-    if (!profile.directorate_id) {
+    if (
+      !profile.directorate_id
+    ) {
       alert(
         "لا توجد مديرية مرتبطة بحساب المستخدم."
       );
@@ -758,13 +812,19 @@ export default function InstituteRequestsPage() {
     }
 
     if (!form.title.trim()) {
-      alert("برجاء كتابة عنوان الطلب.");
+      alert(
+        "برجاء كتابة عنوان الطلب."
+      );
 
       return;
     }
 
-    if (!form.description.trim()) {
-      alert("برجاء كتابة تفاصيل الطلب.");
+    if (
+      !form.description.trim()
+    ) {
+      alert(
+        "برجاء كتابة تفاصيل الطلب."
+      );
 
       return;
     }
@@ -772,33 +832,38 @@ export default function InstituteRequestsPage() {
     try {
       setSaving(true);
 
-      const { error } = await supabase
-        .from("institute_requests")
-        .insert({
-          directorate_id:
-            profile.directorate_id,
+      const { error } =
+        await supabase
+          .from(
+            "institute_requests"
+          )
+          .insert({
+            directorate_id:
+              profile.directorate_id,
 
-          institute_id:
-            profile.institute_id,
+            institute_id:
+              profile.institute_id,
 
-          created_by: profile.id,
+            created_by:
+              profile.id,
 
-          title: form.title.trim(),
+            title:
+              form.title.trim(),
 
-          description:
-            form.description.trim(),
+            description:
+              form.description.trim(),
 
-          request_type:
-            form.request_type,
+            request_type:
+              form.request_type,
 
-          priority:
-            form.priority,
+            priority:
+              form.priority,
 
-          status: "new",
+            status: "new",
 
-          due_date:
-            form.due_date || null,
-        });
+            due_date:
+              form.due_date || null,
+          });
 
       if (error) {
         console.error(error);
@@ -831,9 +896,7 @@ export default function InstituteRequestsPage() {
   }
 
   /*
-   * ============================================
    * تحديث الطلب بواسطة المدير
-   * ============================================
    */
 
   async function updateRequest() {
@@ -863,8 +926,10 @@ export default function InstituteRequestsPage() {
         newStatus === "closed";
 
       const wasResolved =
-        selectedRequest.status === "resolved" ||
-        selectedRequest.status === "closed";
+        selectedRequest.status ===
+          "resolved" ||
+        selectedRequest.status ===
+          "closed";
 
       const newResolvedAt =
         isNowResolved
@@ -900,30 +965,34 @@ export default function InstituteRequestsPage() {
         return;
       }
 
-      const { error } = await supabase
-        .from("institute_requests")
-        .update({
-          status: newStatus,
+      const { error } =
+        await supabase
+          .from(
+            "institute_requests"
+          )
+          .update({
+            status:
+              newStatus,
 
-          director_response:
-            newResponse,
+            director_response:
+              newResponse,
 
-          due_date:
-            newDueDate,
+            due_date:
+              newDueDate,
 
-          updated_at:
-            new Date().toISOString(),
+            updated_at:
+              new Date().toISOString(),
 
-          resolved_at:
-            newResolvedAt,
+            resolved_at:
+              newResolvedAt,
 
-          resolved_by:
-            newResolvedBy,
-        })
-        .eq(
-          "id",
-          selectedRequest.id
-        );
+            resolved_by:
+              newResolvedBy,
+          })
+          .eq(
+            "id",
+            selectedRequest.id
+          );
 
       if (error) {
         console.error(error);
@@ -954,227 +1023,203 @@ export default function InstituteRequestsPage() {
   }
 
   /*
-   * ============================================
    * فلترة الطلبات
-   * ============================================
    */
 
-  const filteredRequests = useMemo(() => {
-    const search =
-      searchTerm.trim().toLowerCase();
+  const filteredRequests =
+    useMemo(() => {
+      const search =
+        searchTerm
+          .trim()
+          .toLowerCase();
 
-    return requests.filter((request) => {
-      /*
-       * ==========================================
-       * فلتر Dashboard:
-       * الطلبات المعلقة فقط
-       * ==========================================
-       *
-       * يتم تفعيله عند:
-       *
-       * /institute-requests?filter=pending&instituteId=...
-       *
-       * الطلب المعلق هو:
-       * - جديد
-       * - قيد المعالجة
-       * - تحتاج تدخل المدير
-       *
-       * ويتم استبعاد:
-       * - تم الحل
-       * - مغلق
-       */
+      return requests.filter(
+        (request) => {
+          /*
+           * الطلبات المعلقة فقط
+           */
 
-      if (pendingFilter) {
-        const isPending =
-          request.status === "new" ||
-          request.status === "in_progress" ||
-          request.status ===
-            "needs_director_action";
+          if (pendingFilter) {
+            const isPending =
+              request.status ===
+                "new" ||
+              request.status ===
+                "in_progress" ||
+              request.status ===
+                "needs_director_action";
 
-        if (!isPending) {
-          return false;
+            if (!isPending) {
+              return false;
+            }
+          }
+
+          /*
+           * يحتاج إجراء من المدير
+           */
+
+          if (
+            needsActionFilter
+          ) {
+            const isClosedOrResolved =
+              request.status ===
+                "resolved" ||
+              request.status ===
+                "closed";
+
+            if (
+              isClosedOrResolved
+            ) {
+              return false;
+            }
+
+            const isPending =
+              request.status ===
+                "new" ||
+              request.status ===
+                "in_progress" ||
+              request.status ===
+                "needs_director_action";
+
+            const overdue =
+              isOverdue(request);
+
+            if (
+              !isPending &&
+              !overdue
+            ) {
+              return false;
+            }
+          }
+
+          /*
+           * البحث
+           */
+
+          const matchesSearch =
+            !search ||
+            request.title
+              .toLowerCase()
+              .includes(search) ||
+            request.description
+              .toLowerCase()
+              .includes(search) ||
+            (
+              request.institute
+                ?.name ?? ""
+            )
+              .toLowerCase()
+              .includes(search);
+
+          /*
+           * الحالة
+           */
+
+          const matchesStatus =
+            statusFilter ===
+              "all" ||
+            request.status ===
+              statusFilter;
+
+          /*
+           * الأولوية
+           */
+
+          const matchesPriority =
+            priorityFilter ===
+              "all" ||
+            request.priority ===
+              priorityFilter;
+
+          /*
+           * المعهد
+           */
+
+          const matchesInstitute =
+            instituteFilter ===
+              "all" ||
+            request.institute_id ===
+              instituteFilter;
+
+          return (
+            matchesSearch &&
+            matchesStatus &&
+            matchesPriority &&
+            matchesInstitute
+          );
         }
-      }
-
-      /*
-       * ==========================================
-       * فلتر "يحتاج إجراء من المدير"
-       * ==========================================
-       *
-       * هذا الفلتر يعمل فقط عندما يفتح المدير
-       * الصفحة من بطاقة الطلبات المتأخرة:
-       *
-       * /institute-requests?filter=needs_action
-       *
-       * يتم استبعاد:
-       * - تم الحل
-       * - مغلق
-       *
-       * ويتم الاحتفاظ بـ:
-       * - جديد
-       * - قيد المعالجة
-       * - تحتاج تدخل المدير
-       * - أي طلب متأخر ما زال مفتوحًا
-       */
-
-      if (needsActionFilter) {
-        const isClosedOrResolved =
-          request.status === "resolved" ||
-          request.status === "closed";
-
-        if (isClosedOrResolved) {
-          return false;
-        }
-
-        const isPending =
-          request.status === "new" ||
-          request.status ===
-            "in_progress" ||
-          request.status ===
-            "needs_director_action";
-
-        const overdue =
-          isOverdue(request);
-
-        /*
-         * لا يظهر في هذا العرض إلا الطلب
-         * المعلق أو المتأخر.
-         */
-
-        if (!isPending && !overdue) {
-          return false;
-        }
-      }
-
-      /*
-       * ==========================================
-       * البحث
-       * ==========================================
-       */
-
-      const matchesSearch =
-        !search ||
-        request.title
-          .toLowerCase()
-          .includes(search) ||
-        request.description
-          .toLowerCase()
-          .includes(search) ||
-        (
-          request.institute?.name ?? ""
-        )
-          .toLowerCase()
-          .includes(search);
-
-      /*
-       * ==========================================
-       * الحالة
-       * ==========================================
-       */
-
-      const matchesStatus =
-        statusFilter === "all" ||
-        request.status ===
-          statusFilter;
-
-      /*
-       * ==========================================
-       * الأولوية
-       * ==========================================
-       */
-
-      const matchesPriority =
-        priorityFilter === "all" ||
-        request.priority ===
-          priorityFilter;
-
-      /*
-       * ==========================================
-       * المعهد
-       * ==========================================
-       */
-
-      const matchesInstitute =
-        instituteFilter === "all" ||
-        request.institute_id ===
-          instituteFilter;
-
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesPriority &&
-        matchesInstitute
       );
-    });
-  }, [
-    requests,
-    searchTerm,
-    statusFilter,
-    priorityFilter,
-    instituteFilter,
-    needsActionFilter,
-    pendingFilter,
-  ]);
+    }, [
+      requests,
+      searchTerm,
+      statusFilter,
+      priorityFilter,
+      instituteFilter,
+      needsActionFilter,
+      pendingFilter,
+    ]);
 
   /*
-   * ============================================
    * الإحصائيات
-   * ============================================
    */
 
   const stats = useMemo(
     () => ({
-      total: requests.length,
+      total:
+        requests.length,
 
-      newCount: requests.filter(
-        (request) =>
-          request.status === "new"
-      ).length,
+      newCount:
+        requests.filter(
+          (request) =>
+            request.status ===
+            "new"
+        ).length,
 
-      inProgress: requests.filter(
-        (request) =>
-          request.status ===
-          "in_progress"
-      ).length,
+      inProgress:
+        requests.filter(
+          (request) =>
+            request.status ===
+            "in_progress"
+        ).length,
 
-      needsDirector: requests.filter(
-        (request) =>
-          request.status ===
-          "needs_director_action"
-      ).length,
+      needsDirector:
+        requests.filter(
+          (request) =>
+            request.status ===
+            "needs_director_action"
+        ).length,
 
-      overdue: requests.filter(
-        (request) =>
-          isOverdue(request)
-      ).length,
+      overdue:
+        requests.filter(
+          (request) =>
+            isOverdue(request)
+        ).length,
 
-      resolved: requests.filter(
-        (request) =>
-          request.status ===
-            "resolved" ||
-          request.status ===
-            "closed"
-      ).length,
+      resolved:
+        requests.filter(
+          (request) =>
+            request.status ===
+              "resolved" ||
+            request.status ===
+              "closed"
+        ).length,
     }),
     [requests]
   );
 
   /*
-   * ============================================
    * عنوان الصفحة
-   * ============================================
    */
 
-  const pageTitle = isDirector
-    ? "مدير الإدارة التعليمية الأزهرية"
-    : profile?.role === "sheikh"
-      ? "شيخ المعهد"
-      : "منصة الإدارة والمتابعة المركزية";
+  const pageTitle =
+    isDirector
+      ? "مدير الإدارة التعليمية الأزهرية"
+      : profile?.role ===
+          "sheikh"
+        ? "شيخ المعهد"
+        : "منصة الإدارة والمتابعة المركزية";
 
   /*
-   * ============================================
    * Loading
-   * ============================================
    */
 
   if (loading) {
@@ -1197,9 +1242,7 @@ export default function InstituteRequestsPage() {
   }
 
   /*
-   * ============================================
    * الصفحة
-   * ============================================
    */
 
   return (
@@ -1208,9 +1251,7 @@ export default function InstituteRequestsPage() {
         dir="rtl"
         className="min-h-screen bg-slate-50"
       >
-        {/* ====================================== */}
-        {/* Header                                  */}
-        {/* ====================================== */}
+        {/* Header */}
 
         <div className="border-b border-slate-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -1235,7 +1276,9 @@ export default function InstituteRequestsPage() {
                     المعهد المحدد:
 
                     <span>
-                      {selectedInstitute.name}
+                      {
+                        selectedInstitute.name
+                      }
                     </span>
                   </div>
                 )}
@@ -1284,7 +1327,9 @@ export default function InstituteRequestsPage() {
                   <button
                     type="button"
                     onClick={() =>
-                      setShowCreate(true)
+                      setShowCreate(
+                        true
+                      )
                     }
                     className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700"
                   >
@@ -1298,14 +1343,10 @@ export default function InstituteRequestsPage() {
           </div>
         </div>
 
-        {/* ====================================== */}
-        {/* Main                                    */}
-        {/* ====================================== */}
+        {/* Main */}
 
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          {/* ==================================== */}
-          {/* Selected institute                    */}
-          {/* ==================================== */}
+          {/* Selected institute */}
 
           {isDirector &&
             requestedInstituteId &&
@@ -1320,7 +1361,9 @@ export default function InstituteRequestsPage() {
                     </div>
 
                     <div className="font-black text-indigo-900">
-                      {selectedInstitute.name}
+                      {
+                        selectedInstitute.name
+                      }
                     </div>
                   </div>
                 </div>
@@ -1334,9 +1377,7 @@ export default function InstituteRequestsPage() {
               </div>
             )}
 
-          {/* ==================================== */}
-          {/* Pending notice                        */}
-          {/* ==================================== */}
+          {/* Pending notice */}
 
           {isDirector &&
             pendingFilter && (
@@ -1369,9 +1410,7 @@ export default function InstituteRequestsPage() {
               </div>
             )}
 
-          {/* ==================================== */}
-          {/* Needs action notice                   */}
-          {/* ==================================== */}
+          {/* Needs action notice */}
 
           {isDirector &&
             needsActionFilter && (
@@ -1401,13 +1440,9 @@ export default function InstituteRequestsPage() {
               </div>
             )}
 
-          {/* ==================================== */}
-          {/* Statistics                            */}
-          {/* ==================================== */}
+          {/* Statistics */}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {/* Total */}
-
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-500">
@@ -1421,8 +1456,6 @@ export default function InstituteRequestsPage() {
                 {stats.total}
               </div>
             </div>
-
-            {/* New */}
 
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
@@ -1438,8 +1471,6 @@ export default function InstituteRequestsPage() {
               </div>
             </div>
 
-            {/* In progress */}
-
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-amber-700">
@@ -1453,8 +1484,6 @@ export default function InstituteRequestsPage() {
                 {stats.inProgress}
               </div>
             </div>
-
-            {/* Needs director */}
 
             <div className="rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
@@ -1470,8 +1499,6 @@ export default function InstituteRequestsPage() {
               </div>
             </div>
 
-            {/* Overdue */}
-
             <div
               role={
                 isDirector
@@ -1484,15 +1511,14 @@ export default function InstituteRequestsPage() {
                   : undefined
               }
               onClick={() => {
-                if (!isDirector) return;
+                if (!isDirector)
+                  return;
 
                 window.location.href =
                   "/institute-requests?filter=needs_action";
               }}
               onKeyDown={(event) => {
-                if (
-                  !isDirector
-                ) {
+                if (!isDirector) {
                   return;
                 }
 
@@ -1534,8 +1560,6 @@ export default function InstituteRequestsPage() {
               </div>
             </div>
 
-            {/* Resolved */}
-
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm font-bold text-emerald-700">
@@ -1551,9 +1575,7 @@ export default function InstituteRequestsPage() {
             </div>
           </div>
 
-          {/* ==================================== */}
-          {/* Filters                               */}
-          {/* ==================================== */}
+          {/* Filters */}
 
           <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-5 flex items-center gap-2">
@@ -1565,8 +1587,6 @@ export default function InstituteRequestsPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {/* Search */}
-
               <div className="relative">
                 <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
@@ -1582,8 +1602,6 @@ export default function InstituteRequestsPage() {
                   className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-4 pr-10 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 />
               </div>
-
-              {/* Status */}
 
               <select
                 value={statusFilter}
@@ -1619,8 +1637,6 @@ export default function InstituteRequestsPage() {
                 )}
               </select>
 
-              {/* Priority */}
-
               <select
                 value={priorityFilter}
                 onChange={(event) =>
@@ -1654,8 +1670,6 @@ export default function InstituteRequestsPage() {
                   )
                 )}
               </select>
-
-              {/* Institute */}
 
               {isDirector ? (
                 <select
@@ -1699,9 +1713,7 @@ export default function InstituteRequestsPage() {
             </div>
           </section>
 
-          {/* ==================================== */}
-          {/* Requests list                         */}
-          {/* ==================================== */}
+          {/* Requests list */}
 
           <section className="mt-6">
             <div className="mb-4">
@@ -1885,9 +1897,7 @@ export default function InstituteRequestsPage() {
           </section>
         </main>
 
-        {/* ====================================== */}
-        {/* Create request modal                    */}
-        {/* ====================================== */}
+        {/* Create request modal */}
 
         {showCreate &&
           typeof document !==
@@ -1901,7 +1911,9 @@ export default function InstituteRequestsPage() {
                 className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
                 onClick={() => {
                   if (!saving) {
-                    setShowCreate(false);
+                    setShowCreate(
+                      false
+                    );
                   }
                 }}
               />
@@ -1928,7 +1940,9 @@ export default function InstituteRequestsPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        setShowCreate(false)
+                        setShowCreate(
+                          false
+                        )
                       }
                       disabled={saving}
                       className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-100"
@@ -1945,14 +1959,19 @@ export default function InstituteRequestsPage() {
 
                       <input
                         type="text"
-                        value={form.title}
-                        onChange={(event) =>
+                        value={
+                          form.title
+                        }
+                        onChange={(
+                          event
+                        ) =>
                           setForm(
                             (current) => ({
                               ...current,
-                              title: event
-                                .target
-                                .value,
+                              title:
+                                event
+                                  .target
+                                  .value,
                             })
                           )
                         }
@@ -1987,7 +2006,9 @@ export default function InstituteRequestsPage() {
                           className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                         >
                           {requestTypeOptions.map(
-                            (option) => (
+                            (
+                              option
+                            ) => (
                               <option
                                 key={
                                   option.value
@@ -2030,7 +2051,9 @@ export default function InstituteRequestsPage() {
                           className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                         >
                           {priorityOptions.map(
-                            (option) => (
+                            (
+                              option
+                            ) => (
                               <option
                                 key={
                                   option.value
@@ -2150,9 +2173,7 @@ export default function InstituteRequestsPage() {
             document.body
           )}
 
-        {/* ====================================== */}
-        {/* Request details modal                   */}
-        {/* ====================================== */}
+        {/* Request details modal */}
 
         {selectedRequest &&
           typeof document !==
@@ -2572,4 +2593,3 @@ export default function InstituteRequestsPage() {
     </AppShell>
   );
 }
-```
