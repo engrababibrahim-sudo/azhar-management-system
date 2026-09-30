@@ -52,88 +52,149 @@ const allMenuItems = [
     icon: LayoutDashboard,
     roles: ["director", "sheikh", "deputy", "super_admin"],
   },
+
   {
     title: "إدارة المعاهد",
     href: "/institutes",
     icon: Building2,
     roles: ["director", "deputy", "super_admin"],
   },
+
   {
     title: "الطلاب",
     href: "/students",
     icon: GraduationCap,
-    roles: ["director", "sheikh", "deputy", "teacher", "super_admin"],
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "teacher",
+      "super_admin",
+    ],
   },
+
   {
     title: "المدرسون",
     href: "/teachers",
     icon: Users,
-    roles: ["director", "sheikh", "deputy", "super_admin"],
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "super_admin",
+    ],
   },
+
   {
     title: "الحضور والغياب",
     href: "/attendance",
     icon: ClipboardList,
-    roles: ["director", "sheikh", "deputy", "teacher", "super_admin"],
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "teacher",
+      "super_admin",
+    ],
   },
+
   {
     title: "التقارير والإحصائيات",
     href: "/attendance-report",
     icon: FileBarChart,
-    roles: ["director", "sheikh", "deputy", "super_admin"],
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "super_admin",
+    ],
   },
+
   {
     title: "المهام والمتابعة",
-
-    // تم تعديل هذا الرابط فقط
     href: "/institute-tasks",
-
     icon: CheckSquare,
-    roles: ["director", "sheikh", "deputy", "super_admin"],
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "super_admin",
+    ],
   },
+
+  // =========================================================
+  // طلبات المعاهد
+  // =========================================================
+  {
+    title: "طلبات المعاهد",
+    href: "/institute-requests",
+    icon: ClipboardList,
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "employee",
+      "super_admin",
+    ],
+  },
+
   {
     title: "الإعلانات",
     href: "/announcements",
     icon: Megaphone,
-    roles: ["director", "sheikh", "deputy", "teacher", "super_admin"],
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "teacher",
+      "super_admin",
+    ],
   },
- {
-  title: "الشكاوى والبلاغات",
-  href: "/complaints",
-  icon: MessageSquareWarning,
-  roles: [
-    "director",
-    "sheikh",
-    "deputy",
-    "teacher",
-    "employee",
-    "parent",
-    "super_admin",
-  ],
-},
-{
-  title: "شكاوى أولياء الأمور",
-  href: "/parent-complaints",
-  icon: MessageSquareWarning,
-  roles: ["director", "deputy", "super_admin"],
-},
-{
-  title: "استيراد البيانات",
-  href: "/import",
-  icon: BookOpenCheck,
-  roles: ["director", "super_admin"],
-},
+
+  {
+    title: "الشكاوى والبلاغات",
+    href: "/complaints",
+    icon: MessageSquareWarning,
+    roles: [
+      "director",
+      "sheikh",
+      "deputy",
+      "teacher",
+      "employee",
+      "parent",
+      "super_admin",
+    ],
+  },
+
+  {
+    title: "شكاوى أولياء الأمور",
+    href: "/parent-complaints",
+    icon: MessageSquareWarning,
+    roles: [
+      "director",
+      "deputy",
+      "super_admin",
+    ],
+  },
+
   {
     title: "استيراد البيانات",
     href: "/import",
     icon: BookOpenCheck,
-    roles: ["director", "super_admin"],
+    roles: [
+      "director",
+      "super_admin",
+    ],
   },
+
   {
     title: "الإعدادات",
     href: "/settings",
     icon: Settings,
-    roles: ["director", "super_admin"],
+    roles: [
+      "director",
+      "super_admin",
+    ],
   },
 ];
 
@@ -164,7 +225,9 @@ export default function AppShell({
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("role, full_name, institute_id, directorate_id")
+        .select(
+          "role, full_name, institute_id, directorate_id"
+        )
         .eq("id", user.id)
         .single();
 
