@@ -23,6 +23,7 @@ import AppShell from "./components/AppShell";
 import { supabase } from "../lib/supabase/client";
 
 type Profile = {
+  id: string;
   role: string;
   full_name: string | null;
   institute_id: string | null;
@@ -249,6 +250,27 @@ export default function HomePage() {
 
   const [searchTerm, setSearchTerm] =
     useState("");
+
+  const [showInterventionForm, setShowInterventionForm] =
+    useState(false);
+
+  const [interventionSaving, setInterventionSaving] =
+    useState(false);
+
+  const [selectedIntervention, setSelectedIntervention] =
+    useState<{
+      instituteId: string;
+      instituteName: string;
+      type: "attendance" | "tasks" | "requests" | "complaints";
+    } | null>(null);
+
+  const [interventionForm, setInterventionForm] =
+    useState({
+      title: "",
+      description: "",
+      priority: "high" as "low" | "medium" | "high" | "urgent",
+      due_date: "",
+    });
 
   function getTodayDate() {
     const date = new Date();
@@ -840,7 +862,7 @@ export default function HomePage() {
         await supabase
           .from("profiles")
           .select(
-            "role, full_name, institute_id, directorate_id"
+            "id, role, full_name, institute_id, directorate_id"
           )
           .eq("id", user.id)
           .maybeSingle();
@@ -1080,6 +1102,10 @@ export default function HomePage() {
     profile?.role ===
       "deputy";
 
+  const canCreateManagerIntervention =
+    profile?.role === "super_admin" ||
+    profile?.role === "director";
+
   const currentInstitute =
     institutes.length > 0
       ? institutes[0]
@@ -1186,6 +1212,107 @@ export default function HomePage() {
       institutes,
       searchTerm,
     ]);
+
+  function openInterventionForm(
+    instituteId: string,
+    instituteName: string,
+    type: "attendance" | "tasks" | "requests" | "complaints"
+  ) {
+    if (!canCreateManagerIntervention) return;
+
+    const presets = {
+      attendance: {
+        title: `متابعة تسجيل حضور اليوم - ${instituteName}`,
+        description: `يرجى مراجعة سبب عدم تسجيل حضور اليوم في ${instituteName} واتخاذ الإجراء اللازم وإرسال الرد من خلال نظام المهام والمتابعة.`,
+      },
+      tasks: {
+        title: `متابعة المهام المعلقة - ${instituteName}`,
+        description: `يرجى مراجعة المهام المعلقة الخاصة بـ ${instituteName}، وتحديد ما تم تنفيذه واستكمال ما يلزم وإرسال الرد عبر النظام.`,
+      },
+      requests: {
+        title: `متابعة طلبات المعهد - ${instituteName}`,
+        description: `يرجى مراجعة الطلبات المعلقة الخاصة بـ ${instituteName} واتخاذ الإجراء الإداري المناسب وتحديث حالة المتابعة.`,
+      },
+      complaints: {
+        title: `متابعة الشكاوى المفتوحة - ${instituteName}`,
+        description: `يرجى مراجعة الشكاوى المفتوحة الخاصة بـ ${instituteName} ومتابعة إجراءات الحل والرد وتحديث الحالة.`,
+      },
+    } as const;
+
+    setSelectedIntervention({ instituteId, instituteName, type });
+    setInterventionForm({
+      title: presets[type].title,
+      description: presets[type].description,
+      priority: type === "attendance" ? "high" : "medium",
+      due_date: "",
+    });
+    setShowInterventionForm(true);
+  }
+
+  async function createManagerIntervention() {
+    if (!canCreateManagerIntervention || !profile?.id || !profile.directorate_id) {
+      alert("هذا الإجراء متاح لمدير الإدارة فقط.");
+      return;
+    }
+
+    if (!selectedIntervention) {
+      alert("اختر نوع المتابعة أولًا.");
+      return;
+    }
+
+    if (!interventionForm.title.trim()) {
+      alert("اكتب عنوان المتابعة.");
+      return;
+    }
+
+    setInterventionSaving(true);
+
+    try {
+      const assignmentGroupId = crypto.randomUUID();
+
+      const { data: createdTask, error: taskError } = await supabase
+        .from("institute_tasks")
+        .insert({
+          assignment_group_id: assignmentGroupId,
+          directorate_id: profile.directorate_id,
+          institute_id: null,
+          title: interventionForm.title.trim(),
+          description: interventionForm.description.trim() || null,
+          priority: interventionForm.priority,
+          status: "pending",
+          due_date: interventionForm.due_date || null,
+          created_by: profile.id,
+        })
+        .select("id")
+        .single();
+
+      if (taskError) throw taskError;
+      if (!createdTask) throw new Error("تعذر إنشاء المتابعة الإدارية.");
+
+      const { error: targetError } = await supabase
+        .from("institute_task_targets")
+        .insert({
+          task_id: createdTask.id,
+          institute_id: selectedIntervention.instituteId,
+          status: "pending",
+        });
+
+      if (targetError) {
+        await supabase.from("institute_tasks").delete().eq("id", createdTask.id);
+        throw targetError;
+      }
+
+      alert("تم إنشاء المتابعة الإدارية وإرسالها إلى المعهد بنجاح.");
+      setShowInterventionForm(false);
+      setSelectedIntervention(null);
+      await loadDashboard(true);
+    } catch (error: any) {
+      console.error("createManagerIntervention error:", error);
+      alert(error?.message || "حدث خطأ أثناء إنشاء المتابعة الإدارية.");
+    } finally {
+      setInterventionSaving(false);
+    }
+  }
 
   /*
    * =========================================================
@@ -1882,7 +2009,8 @@ export default function HomePage() {
                               <div className="mt-3 space-y-2">
 
                                 {attendanceNeedsAction && (
-                                  <Link
+                                  <>
+                                    <Link
                                     href={`/attendance?instituteId=${institute.id}`}
                                     className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-amber-800 shadow-sm transition hover:bg-amber-100"
                                   >
@@ -1893,10 +2021,27 @@ export default function HomePage() {
 
                                     <ArrowLeft size={14} />
                                   </Link>
-                                )}
+
+                                  {canCreateManagerIntervention && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openInterventionForm(
+                                          institute.id,
+                                          institute.name,
+                                          "attendance"
+                                        )
+                                      }
+                                      className="mt-1 w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-black text-amber-800 transition hover:bg-amber-100"
+                                    >
+                                      إنشاء متابعة من المدير
+                                    </button>
+                                  )}
+                                  </>)}
 
                                 {tasksNeedAction && (
-                                  <Link
+                                  <>
+                                    <Link
                                     href={`/institute-tasks?instituteId=${institute.id}`}
                                     className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-blue-800 shadow-sm transition hover:bg-blue-50"
                                   >
@@ -1911,10 +2056,27 @@ export default function HomePage() {
 
                                     <ArrowLeft size={14} />
                                   </Link>
-                                )}
+
+                                  {canCreateManagerIntervention && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openInterventionForm(
+                                          institute.id,
+                                          institute.name,
+                                          "tasks"
+                                        )
+                                      }
+                                      className="mt-1 w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-black text-blue-800 transition hover:bg-blue-100"
+                                    >
+                                      إنشاء متابعة من المدير
+                                    </button>
+                                  )}
+                                  </>)}
 
                                 {requestsNeedAction && (
-                                  <Link
+                                  <>
+                                    <Link
                                     href={`/institute-requests?instituteId=${institute.id}`}
                                     className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-amber-800 shadow-sm transition hover:bg-amber-50"
                                   >
@@ -1929,10 +2091,27 @@ export default function HomePage() {
 
                                     <ArrowLeft size={14} />
                                   </Link>
-                                )}
+
+                                  {canCreateManagerIntervention && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openInterventionForm(
+                                          institute.id,
+                                          institute.name,
+                                          "requests"
+                                        )
+                                      }
+                                      className="mt-1 w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-black text-amber-800 transition hover:bg-amber-100"
+                                    >
+                                      إنشاء متابعة من المدير
+                                    </button>
+                                  )}
+                                  </>)}
 
                                 {complaintsNeedAction && (
-                                  <Link
+                                  <>
+                                    <Link
                                     href={`/complaints?instituteId=${institute.id}`}
                                     className="flex items-center justify-between rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-red-800 shadow-sm transition hover:bg-red-50"
                                   >
@@ -1949,7 +2128,23 @@ export default function HomePage() {
 
                                     <ArrowLeft size={14} />
                                   </Link>
-                                )}
+
+                                  {canCreateManagerIntervention && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openInterventionForm(
+                                          institute.id,
+                                          institute.name,
+                                          "complaints"
+                                        )
+                                      }
+                                      className="mt-1 w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-black text-red-800 transition hover:bg-red-100"
+                                    >
+                                      إنشاء متابعة من المدير
+                                    </button>
+                                  )}
+                                  </>)}
 
                               </div>
                             )}
@@ -2211,6 +2406,55 @@ export default function HomePage() {
 
         </div>
       </div>
+
+
+      {showInterventionForm && selectedIntervention && canCreateManagerIntervention && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={20} className="text-amber-600" />
+                  <h2 className="text-lg font-black text-slate-900">إنشاء متابعة إدارية</h2>
+                </div>
+                <p className="mt-1 text-sm text-slate-500">{selectedIntervention.instituteName}</p>
+              </div>
+              <button type="button" onClick={() => { if (!interventionSaving) { setShowInterventionForm(false); setSelectedIntervention(null); } }} className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" aria-label="إغلاق">
+                <XCircle size={22} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div>
+                <label className="mb-1.5 block text-sm font-bold text-slate-700">عنوان المتابعة</label>
+                <input value={interventionForm.title} onChange={(event) => setInterventionForm((current) => ({ ...current, title: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-bold text-slate-700">تفاصيل الإجراء المطلوب</label>
+                <textarea rows={4} value={interventionForm.description} onChange={(event) => setInterventionForm((current) => ({ ...current, description: event.target.value }))} className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-6 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">الأولوية</label>
+                  <select value={interventionForm.priority} onChange={(event) => setInterventionForm((current) => ({ ...current, priority: event.target.value as typeof current.priority }))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100">
+                    <option value="low">منخفضة</option><option value="medium">متوسطة</option><option value="high">عالية</option><option value="urgent">عاجلة</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">موعد المتابعة</label>
+                  <input type="date" value={interventionForm.due_date} onChange={(event) => setInterventionForm((current) => ({ ...current, due_date: event.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100" />
+                </div>
+              </div>
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-6 text-blue-800">سيتم إنشاء تكليف حقيقي في نظام المهام والمتابعة وربطه بهذا المعهد، دون إنشاء جدول جديد أو تغيير بيانات المعهد.</div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:justify-end">
+              <button type="button" disabled={interventionSaving} onClick={() => { setShowInterventionForm(false); setSelectedIntervention(null); }} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50">إلغاء</button>
+              <button type="button" disabled={interventionSaving} onClick={createManagerIntervention} className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">{interventionSaving ? "جاري إنشاء المتابعة..." : "إنشاء المتابعة وإرسالها"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
