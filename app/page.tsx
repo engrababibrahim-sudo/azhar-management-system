@@ -261,23 +261,14 @@ export default function HomePage() {
     useState<{
       instituteId: string;
       instituteName: string;
-      type:
-        | "attendance"
-        | "tasks"
-        | "requests"
-        | "complaints";
+      type: "attendance" | "tasks" | "requests" | "complaints";
     } | null>(null);
 
   const [interventionForm, setInterventionForm] =
     useState({
       title: "",
       description: "",
-      priority:
-        "high" as
-          | "low"
-          | "medium"
-          | "high"
-          | "urgent",
+      priority: "high" as "low" | "medium" | "high" | "urgent",
       due_date: "",
     });
 
@@ -320,12 +311,6 @@ export default function HomePage() {
       role === "deputy"
     );
   }
-
-  /*
-   * =========================================================
-   * الحضور الحقيقي لليوم
-   * =========================================================
-   */
 
   async function loadAttendanceData(
     instituteIds: string[]
@@ -433,12 +418,6 @@ export default function HomePage() {
     );
   }
 
-  /*
-   * =========================================================
-   * الطلبات + الشكاوى + المهام
-   * =========================================================
-   */
-
   async function loadFollowUpData(
     instituteIds: string[],
     currentProfile: Profile
@@ -461,12 +440,6 @@ export default function HomePage() {
       isCentralRole(
         currentProfile.role
       );
-
-    /*
-     * =========================================================
-     * طلبات المعاهد
-     * =========================================================
-     */
 
     try {
       let requestQuery = supabase
@@ -540,12 +513,6 @@ export default function HomePage() {
         error
       );
     }
-
-    /*
-     * =========================================================
-     * الشكاوى
-     * =========================================================
-     */
 
     try {
       let complaintQuery = supabase
@@ -622,15 +589,6 @@ export default function HomePage() {
         error
       );
     }
-
-    /*
-     * =========================================================
-     * المهام
-     *
-     * نعتمد على institute_task_targets
-     * لأنها تحدد المعهد الذي تم إسناد المهمة إليه فعليًا.
-     * =========================================================
-     */
 
     try {
       let taskQuery = supabase
@@ -723,12 +681,6 @@ export default function HomePage() {
     );
   }
 
-  /*
-   * =========================================================
-   * الأعداد الحقيقية
-   * =========================================================
-   */
-
   async function loadRealInstituteCounts(
     instituteList: Institute[]
   ) {
@@ -809,12 +761,6 @@ export default function HomePage() {
 
     setCountsByInstitute(results);
   }
-
-  /*
-   * =========================================================
-   * تحميل لوحة التحكم
-   * =========================================================
-   */
 
   async function loadDashboard(
     showRefresh = false
@@ -999,12 +945,6 @@ export default function HomePage() {
     loadDashboard();
   }, []);
 
-  /*
-   * =========================================================
-   * المؤشرات العامة
-   * =========================================================
-   */
-
   const totalInstitutes =
     institutes.length;
 
@@ -1035,12 +975,6 @@ export default function HomePage() {
         item.teacherCount,
       0
     );
-
-  /*
-   * =========================================================
-   * بيانات المستخدم
-   * =========================================================
-   */
 
   const roleTitle =
     profile?.role === "it_admin"
@@ -1090,12 +1024,6 @@ export default function HomePage() {
       ? `/institutes/${currentInstitute.id}`
       : "/";
 
-  /*
-   * =========================================================
-   * Helpers
-   * =========================================================
-   */
-
   function getInstituteAttendance(
     instituteId: string
   ) {
@@ -1144,12 +1072,6 @@ export default function HomePage() {
     );
   }
 
-  /*
-   * =========================================================
-   * البحث
-   * =========================================================
-   */
-
   const filteredInstitutes =
     useMemo(() => {
       const search =
@@ -1190,11 +1112,7 @@ export default function HomePage() {
   function openInterventionForm(
     instituteId: string,
     instituteName: string,
-    type:
-      | "attendance"
-      | "tasks"
-      | "requests"
-      | "complaints"
+    type: "attendance" | "tasks" | "requests" | "complaints"
   ) {
     if (!canCreateManagerIntervention) return;
 
@@ -1203,17 +1121,14 @@ export default function HomePage() {
         title: `متابعة تسجيل حضور اليوم - ${instituteName}`,
         description: `يرجى مراجعة سبب عدم تسجيل حضور اليوم في ${instituteName} واتخاذ الإجراء اللازم وإرسال الرد من خلال نظام المهام والمتابعة.`,
       },
-
       tasks: {
         title: `متابعة المهام المعلقة - ${instituteName}`,
         description: `يرجى مراجعة المهام المعلقة الخاصة بـ ${instituteName}، وتحديد ما تم تنفيذه واستكمال ما يلزم وإرسال الرد عبر النظام.`,
       },
-
       requests: {
         title: `متابعة طلبات المعهد - ${instituteName}`,
         description: `يرجى مراجعة الطلبات المعلقة الخاصة بـ ${instituteName} واتخاذ الإجراء الإداري المناسب وتحديث حالة المتابعة.`,
       },
-
       complaints: {
         title: `متابعة الشكاوى المفتوحة - ${instituteName}`,
         description: `يرجى مراجعة الشكاوى المفتوحة الخاصة بـ ${instituteName} ومتابعة إجراءات الحل والرد وتحديث الحالة.`,
@@ -1228,8 +1143,7 @@ export default function HomePage() {
 
     setInterventionForm({
       title: presets[type].title,
-      description:
-        presets[type].description,
+      description: presets[type].description,
       priority:
         type === "attendance"
           ? "high"
@@ -1259,7 +1173,9 @@ export default function HomePage() {
       return;
     }
 
-    if (!interventionForm.title.trim()) {
+    if (
+      !interventionForm.title.trim()
+    ) {
       alert(
         "اكتب عنوان المتابعة."
       );
@@ -1299,13 +1215,15 @@ export default function HomePage() {
         .select("id")
         .single();
 
-      if (taskError)
+      if (taskError) {
         throw taskError;
+      }
 
-      if (!createdTask)
+      if (!createdTask) {
         throw new Error(
           "تعذر إنشاء المتابعة الإدارية."
         );
+      }
 
       const {
         error: targetError,
@@ -1356,18 +1274,10 @@ export default function HomePage() {
     }
   }
 
-  /*
-   * =========================================================
-   * Render
-   * =========================================================
-   */
-
   return (
     <AppShell>
       <div className="min-h-screen bg-slate-100">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-
-          {/* العنوان */}
 
           <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1421,8 +1331,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* البانر */}
-
           <section className="relative mb-6 overflow-hidden rounded-3xl bg-slate-950 p-6 text-white shadow-xl sm:p-8">
             <div className="absolute -left-16 -top-16 h-40 w-40 rounded-full bg-white/5" />
             <div className="absolute -bottom-20 right-10 h-48 w-48 rounded-full bg-white/5" />
@@ -1446,8 +1354,6 @@ export default function HomePage() {
               </p>
             </div>
           </section>
-
-          {/* الخطأ */}
 
           {errorMessage && (
             <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5">
@@ -1480,8 +1386,6 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* الملخص العام */}
-
           <section className="mb-8">
             <div className="mb-4">
               <h2 className="text-lg font-black text-slate-900">
@@ -1494,7 +1398,6 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
               <StatCard
                 title={
                   isItAdmin
@@ -1571,8 +1474,6 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* الوصول السريع */}
-
           <section className="mb-8">
             <div className="mb-4">
               <h2 className="text-lg font-black text-slate-900">
@@ -1585,7 +1486,6 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-
               {isCentralManager && (
                 <QuickAction
                   title="إدارة المعاهد"
@@ -1640,8 +1540,6 @@ export default function HomePage() {
               />
             </div>
           </section>
-
-          {/* المعاهد */}
 
           <section className="mb-8">
             <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1824,8 +1722,6 @@ export default function HomePage() {
                       >
                         <div className="p-5">
 
-                          {/* رأس البطاقة */}
-
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex min-w-0 items-center gap-3">
                               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-900 group-hover:text-white">
@@ -1867,10 +1763,7 @@ export default function HomePage() {
                             </span>
                           </div>
 
-                          {/* الطلاب والمدرسون */}
-
                           <div className="mt-5 grid grid-cols-2 gap-3">
-
                             <Link
                               href={`/students?instituteId=${institute.id}`}
                               className="rounded-xl bg-slate-50 p-3 transition hover:bg-slate-100"
@@ -1910,10 +1803,7 @@ export default function HomePage() {
                                 العدد الحقيقي من قاعدة البيانات
                               </div>
                             </Link>
-
                           </div>
-
-                          {/* الحضور */}
 
                           <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
                             <div className="flex items-center justify-between gap-2">
@@ -1937,7 +1827,6 @@ export default function HomePage() {
                             </div>
 
                             <div className="mt-4 grid grid-cols-3 gap-2">
-
                               <div className="rounded-lg bg-emerald-50 p-2.5 text-center">
                                 <div className="text-[11px] text-emerald-700">
                                   حاضر
@@ -1973,7 +1862,6 @@ export default function HomePage() {
                                   )}
                                 </div>
                               </div>
-
                             </div>
 
                             <div className="mt-3">
@@ -2000,8 +1888,6 @@ export default function HomePage() {
                               </div>
                             </div>
                           </div>
-
-                          {/* يحتاج تدخل المدير */}
 
                           <div
                             className={`mt-4 rounded-xl border p-4 ${
@@ -2050,8 +1936,6 @@ export default function HomePage() {
                             {needsManagerIntervention && (
                               <div className="mt-3 space-y-2">
 
-                                {/* الحضور */}
-
                                 {attendanceNeedsAction && (
                                   <>
                                     <Link
@@ -2083,8 +1967,6 @@ export default function HomePage() {
                                     )}
                                   </>
                                 )}
-
-                                {/* المهام */}
 
                                 {tasksNeedAction && (
                                   <>
@@ -2122,8 +2004,6 @@ export default function HomePage() {
                                   </>
                                 )}
 
-                                {/* الطلبات المعلقة */}
-
                                 {requestsNeedAction && (
                                   <>
                                     <Link
@@ -2142,25 +2022,17 @@ export default function HomePage() {
                                       <ArrowLeft size={14} />
                                     </Link>
 
-                                    {canCreateManagerIntervention && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          openInterventionForm(
-                                            institute.id,
-                                            institute.name,
-                                            "requests"
-                                          )
-                                        }
-                                        className="mt-1 w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-black text-amber-800 transition hover:bg-amber-100"
-                                      >
-                                        اتخاذ إجراء من المدير
-                                      </button>
-                                    )}
+                                    {/* مهم:
+                                        لم نعد ننشئ متابعة إدارية هنا.
+                                        الزر يفتح الطلبات المعلقة لهذا المعهد فقط. */}
+                                    <Link
+                                      href={`/institute-requests?filter=pending&instituteId=${institute.id}`}
+                                      className="mt-1 flex w-full items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-black text-amber-800 transition hover:bg-amber-100"
+                                    >
+                                      اتخاذ إجراء من المدير
+                                    </Link>
                                   </>
                                 )}
-
-                                {/* الشكاوى المفتوحة */}
 
                                 {complaintsNeedAction && (
                                   <>
@@ -2182,29 +2054,21 @@ export default function HomePage() {
                                       <ArrowLeft size={14} />
                                     </Link>
 
-                                    {canCreateManagerIntervention && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          openInterventionForm(
-                                            institute.id,
-                                            institute.name,
-                                            "complaints"
-                                          )
-                                        }
-                                        className="mt-1 w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-black text-red-800 transition hover:bg-red-100"
-                                      >
-                                        اتخاذ إجراء من المدير
-                                      </button>
-                                    )}
+                                    {/* مهم:
+                                        لم نعد ننشئ متابعة إدارية هنا.
+                                        الزر يفتح الشكاوى المفتوحة لهذا المعهد فقط. */}
+                                    <Link
+                                      href={`/complaints?filter=open&instituteId=${institute.id}`}
+                                      className="mt-1 flex w-full items-center justify-center rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-black text-red-800 transition hover:bg-red-100"
+                                    >
+                                      اتخاذ إجراء من المدير
+                                    </Link>
                                   </>
                                 )}
 
                               </div>
                             )}
                           </div>
-
-                          {/* المتابعة الإدارية */}
 
                           <div className="mt-4">
                             <div className="mb-3 flex items-center gap-2">
@@ -2219,7 +2083,6 @@ export default function HomePage() {
                             </div>
 
                             <div className="grid grid-cols-3 gap-2">
-
                               <FollowUpNumber
                                 icon={
                                   <ListChecks size={15} />
@@ -2254,11 +2117,8 @@ export default function HomePage() {
                                 }
                                 color="red"
                               />
-
                             </div>
                           </div>
-
-                          {/* شيخ المعهد */}
 
                           {institute.director_name && (
                             <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500">
@@ -2277,10 +2137,7 @@ export default function HomePage() {
                             </div>
                           )}
 
-                          {/* الوصول المباشر */}
-
                           <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
-
                             <Link
                               href={`/students?instituteId=${institute.id}`}
                               className="rounded-lg bg-slate-50 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition hover:bg-slate-900 hover:text-white"
@@ -2322,10 +2179,7 @@ export default function HomePage() {
                             >
                               الشكاوى
                             </Link>
-
                           </div>
-
-                          {/* فتح ملف المعهد */}
 
                           <Link
                             href={`/institutes/${institute.id}`}
@@ -2334,7 +2188,6 @@ export default function HomePage() {
                             فتح ملف المعهد
                             <ArrowLeft size={15} />
                           </Link>
-
                         </div>
                       </div>
                     );
@@ -2343,8 +2196,6 @@ export default function HomePage() {
               </div>
             )}
           </section>
-
-          {/* حالة النظام */}
 
           <section className="mb-8">
             <div className="mb-4">
@@ -2358,7 +2209,6 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
-
               <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                   <CheckCircle2 size={21} />
@@ -2406,11 +2256,8 @@ export default function HomePage() {
                   </div>
                 </div>
               </div>
-
             </div>
           </section>
-
-          {/* الإعلانات */}
 
           <section>
             <div className="mb-4">
@@ -2425,7 +2272,6 @@ export default function HomePage() {
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
                 <div className="flex items-start gap-4">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
                     <Bell size={21} />
@@ -2449,7 +2295,6 @@ export default function HomePage() {
                   الانتقال إلى الإعلانات
                   <ArrowLeft size={16} />
                 </Link>
-
               </div>
             </div>
           </section>
@@ -2457,7 +2302,6 @@ export default function HomePage() {
           <div className="mt-8 border-t border-slate-200 pt-6 text-center text-xs text-slate-400">
             نظام إدارة المعاهد الأزهرية — منصة الإدارة والمتابعة التعليمية
           </div>
-
         </div>
       </div>
 
@@ -2466,7 +2310,6 @@ export default function HomePage() {
         canCreateManagerIntervention && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
             <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-
               <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
                 <div>
                   <div className="flex items-center gap-2">
@@ -2492,6 +2335,7 @@ export default function HomePage() {
                       setShowInterventionForm(
                         false
                       );
+
                       setSelectedIntervention(
                         null
                       );
@@ -2505,7 +2349,6 @@ export default function HomePage() {
               </div>
 
               <div className="space-y-4 p-5">
-
                 <div>
                   <label className="mb-1.5 block text-sm font-bold text-slate-700">
                     عنوان المتابعة
@@ -2520,8 +2363,7 @@ export default function HomePage() {
                         (current) => ({
                           ...current,
                           title:
-                            event.target
-                              .value,
+                            event.target.value,
                         })
                       )
                     }
@@ -2544,8 +2386,7 @@ export default function HomePage() {
                         (current) => ({
                           ...current,
                           description:
-                            event.target
-                              .value,
+                            event.target.value,
                         })
                       )
                     }
@@ -2554,7 +2395,6 @@ export default function HomePage() {
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
-
                   <div>
                     <label className="mb-1.5 block text-sm font-bold text-slate-700">
                       الأولوية
@@ -2609,32 +2449,31 @@ export default function HomePage() {
                           (current) => ({
                             ...current,
                             due_date:
-                              event.target
-                                .value,
+                              event.target.value,
                           })
                         )
                       }
                       className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                     />
                   </div>
-
                 </div>
 
                 <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-6 text-blue-800">
                   سيتم إنشاء تكليف حقيقي في نظام المهام والمتابعة وربطه بهذا المعهد، دون إنشاء جدول جديد أو تغيير بيانات المعهد.
                 </div>
-
               </div>
 
               <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:justify-end">
-
                 <button
                   type="button"
-                  disabled={interventionSaving}
+                  disabled={
+                    interventionSaving
+                  }
                   onClick={() => {
                     setShowInterventionForm(
                       false
                     );
+
                     setSelectedIntervention(
                       null
                     );
@@ -2646,7 +2485,9 @@ export default function HomePage() {
 
                 <button
                   type="button"
-                  disabled={interventionSaving}
+                  disabled={
+                    interventionSaving
+                  }
                   onClick={
                     createManagerIntervention
                   }
@@ -2656,9 +2497,7 @@ export default function HomePage() {
                     ? "جاري إنشاء المتابعة..."
                     : "إنشاء المتابعة وإرسالها"}
                 </button>
-
               </div>
-
             </div>
           </div>
         )}
