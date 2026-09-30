@@ -11,6 +11,7 @@ import {
   RefreshCw,
   UserRound,
   Pencil,
+  Printer,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase/client";
 
@@ -64,7 +65,8 @@ export default function StudentsPage() {
   const [parentLookupLoading, setParentLookupLoading] =
     useState(false);
 
-  const [parentLookupMessage, setParentLookupMessage] = useState("");
+  const [parentLookupMessage, setParentLookupMessage] =
+    useState("");
 
   const [parentLookupType, setParentLookupType] =
     useState<"success" | "warning" | "">("");
@@ -110,6 +112,23 @@ export default function StudentsPage() {
 
   const canManageStudents =
     !!isCentralManager || !!isInstituteUser;
+
+  // ==========================================
+  // الطباعة
+  // ==========================================
+
+  function handlePrintStudents() {
+    if (filteredStudents.length === 0) {
+      setError("لا توجد بيانات طلاب متاحة للطباعة.");
+      return;
+    }
+
+    setError("");
+
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  }
 
   // ==========================================
   // المعهد المحدد من الرابط
@@ -267,10 +286,6 @@ export default function StudentsPage() {
 
       setProfile(profileData);
 
-      // ==========================================
-      // شيخ المعهد / مسؤول IT
-      // ==========================================
-
       if (
         profileData.role === "sheikh" ||
         profileData.role === "it_admin"
@@ -324,10 +339,6 @@ export default function StudentsPage() {
         return;
       }
 
-      // ==========================================
-      // مدير الإدارة
-      // ==========================================
-
       if (
         profileData.role === "super_admin" ||
         profileData.role === "director" ||
@@ -365,10 +376,6 @@ export default function StudentsPage() {
           loadedInstitutes
         );
 
-        // ==========================================
-        // لو الصفحة مفتوحة من بطاقة معهد
-        // ==========================================
-
         if (requestedId) {
           const selectedInstituteData =
             loadedInstitutes.find(
@@ -400,10 +407,6 @@ export default function StudentsPage() {
 
           return;
         }
-
-        // ==========================================
-        // الدخول العام من القائمة
-        // ==========================================
 
         setInstitute(null);
         setSelectedInstitute("all");
@@ -440,10 +443,6 @@ export default function StudentsPage() {
       setLoading(false);
     }
   }
-
-  // ==========================================
-  // تشغيل الصفحة
-  // ==========================================
 
   useEffect(() => {
     loadUserAndInstitute();
@@ -1171,9 +1170,40 @@ export default function StudentsPage() {
     >
       <div className="max-w-7xl mx-auto">
 
+        {/* PRINT HEADER */}
+
+        <div className="hidden print:block mb-6 text-center border-b-2 border-slate-800 pb-4">
+          <h1 className="text-2xl font-bold text-slate-900">
+            نظام إدارة المعاهد الأزهرية
+          </h1>
+
+          <h2 className="text-xl font-bold mt-2">
+            قائمة الطلاب
+          </h2>
+
+          <p className="text-sm mt-2">
+            {isCentralManager
+              ? institute?.name ||
+                "جميع معاهد الإدارة التعليمية"
+              : institute?.name ||
+                "المعهد"}
+          </p>
+
+          <p className="text-sm mt-1">
+            عدد الطلاب: {filteredStudents.length}
+          </p>
+
+          <p className="text-xs text-slate-500 mt-2">
+            تاريخ الطباعة:{" "}
+            {new Date().toLocaleDateString(
+              "ar-EG"
+            )}
+          </p>
+        </div>
+
         {/* HEADER */}
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6 print:hidden">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
             <div>
@@ -1220,6 +1250,18 @@ export default function StudentsPage() {
                 تحديث
               </button>
 
+              {/* PRINT BUTTON */}
+
+              <button
+                type="button"
+                onClick={handlePrintStudents}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 hover:text-blue-700 transition"
+                title="طباعة قائمة الطلاب"
+              >
+                <Printer className="w-4 h-4" />
+                طباعة
+              </button>
+
               {canManageStudents && (
                 <button
                   type="button"
@@ -1243,20 +1285,20 @@ export default function StudentsPage() {
         {/* ALERTS */}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-5">
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-5 print:hidden">
             {error}
           </div>
         )}
 
         {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 mb-5">
+          <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 mb-5 print:hidden">
             {success}
           </div>
         )}
 
         {/* STATISTICS */}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 print:hidden">
 
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center justify-between">
@@ -1320,7 +1362,7 @@ export default function StudentsPage() {
 
         {/* SEARCH */}
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-sm">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-sm print:hidden">
 
           <div
             className={`grid grid-cols-1 ${
@@ -1455,7 +1497,7 @@ export default function StudentsPage() {
                     resetForm();
                     setShowForm(true);
                   }}
-                  className="mt-5 bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700"
+                  className="mt-5 bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 print:hidden"
                 >
                   إضافة طالب
                 </button>
@@ -1467,55 +1509,55 @@ export default function StudentsPage() {
 
             <div className="overflow-x-auto">
 
-              <table className="w-full text-right">
+              <table className="w-full text-right border-collapse">
 
                 <thead className="bg-slate-50">
 
                   <tr>
 
                     {isCentralManager && (
-                      <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                      <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b">
                         المعهد
                       </th>
                     )}
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b">
                       الكود
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b">
                       الرقم القومي
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b">
                       اسم الطالب
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b">
                       الجنس
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b">
                       الفصل
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b">
                       ولي الأمر
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b print:hidden">
                       الحساب
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b">
                       الهاتف
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b">
                       الحالة
                     </th>
 
-                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap">
+                    <th className="px-5 py-4 text-sm font-semibold text-slate-600 whitespace-nowrap border-b print:hidden">
                       الإجراءات
                     </th>
 
@@ -1534,7 +1576,6 @@ export default function StudentsPage() {
 
                         {isCentralManager && (
                           <td className="px-5 py-4 text-sm text-slate-600">
-
                             <div className="font-medium text-slate-700">
                               {getInstituteName(
                                 student.institute_id
@@ -1550,7 +1591,6 @@ export default function StudentsPage() {
                                 )?.code
                               }
                             </div>
-
                           </td>
                         )}
 
@@ -1586,8 +1626,7 @@ export default function StudentsPage() {
                             "-"}
                         </td>
 
-                        <td className="px-5 py-4 whitespace-nowrap">
-
+                        <td className="px-5 py-4 whitespace-nowrap print:hidden">
                           {student.parent_id ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
                               <UserRound className="w-3.5 h-3.5" />
@@ -1598,7 +1637,6 @@ export default function StudentsPage() {
                               غير مرتبط
                             </span>
                           )}
-
                         </td>
 
                         <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
@@ -1608,7 +1646,6 @@ export default function StudentsPage() {
                         </td>
 
                         <td className="px-5 py-4 whitespace-nowrap">
-
                           {student.is_active ? (
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
                               نشط
@@ -1618,11 +1655,9 @@ export default function StudentsPage() {
                               غير نشط
                             </span>
                           )}
-
                         </td>
 
-                        <td className="px-5 py-4 whitespace-nowrap">
-
+                        <td className="px-5 py-4 whitespace-nowrap print:hidden">
                           {canManageStudents && (
                             <button
                               type="button"
@@ -1637,7 +1672,6 @@ export default function StudentsPage() {
                               تعديل
                             </button>
                           )}
-
                         </td>
 
                       </tr>
@@ -1658,7 +1692,7 @@ export default function StudentsPage() {
       {/* MODAL */}
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 print:hidden">
 
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
 
@@ -1702,7 +1736,6 @@ export default function StudentsPage() {
 
                 {isCentralManager && (
                   <div className="md:col-span-2">
-
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                       المعهد *
                     </label>
@@ -1721,7 +1754,6 @@ export default function StudentsPage() {
                       }
                       className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
                     >
-
                       <option value="">
                         اختر المعهد
                       </option>
@@ -1736,14 +1768,11 @@ export default function StudentsPage() {
                           </option>
                         )
                       )}
-
                     </select>
-
                   </div>
                 )}
 
                 <div className="md:col-span-2">
-
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     اسم الطالب *
                   </label>
@@ -1759,11 +1788,9 @@ export default function StudentsPage() {
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />
-
                 </div>
 
                 <div>
-
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     الرقم القومي للطالب *
                   </label>
@@ -1794,11 +1821,9 @@ export default function StudentsPage() {
                   <p className="text-xs text-slate-400 mt-1">
                     يجب أن يتكون الرقم القومي من 14 رقمًا.
                   </p>
-
                 </div>
 
                 <div>
-
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     كود الطالب
                   </label>
@@ -1813,11 +1838,9 @@ export default function StudentsPage() {
                     placeholder="كود الطالب"
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
-
                 </div>
 
                 <div>
-
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     الجنس
                   </label>
@@ -1831,7 +1854,6 @@ export default function StudentsPage() {
                     }
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500"
                   >
-
                     <option value="">
                       اختر
                     </option>
@@ -1843,13 +1865,10 @@ export default function StudentsPage() {
                     <option value="أنثى">
                       أنثى
                     </option>
-
                   </select>
-
                 </div>
 
                 <div>
-
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     الفصل
                   </label>
@@ -1863,7 +1882,6 @@ export default function StudentsPage() {
                     }
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500"
                   >
-
                     <option value="">
                       اختر الفصل
                     </option>
@@ -1882,7 +1900,6 @@ export default function StudentsPage() {
                           {item.name}
                         </option>
                       ))}
-
                   </select>
 
                   {classes.filter(
@@ -1894,11 +1911,9 @@ export default function StudentsPage() {
                       لا توجد فصول معرفة لهذا المعهد حاليًا.
                     </p>
                   )}
-
                 </div>
 
                 <div className="md:col-span-2">
-
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     ربط ولي الأمر تلقائيًا
                   </label>
@@ -1965,11 +1980,9 @@ export default function StudentsPage() {
                     )}
 
                   </div>
-
                 </div>
 
                 <div>
-
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     هاتف الطالب
                   </label>
@@ -1984,11 +1997,9 @@ export default function StudentsPage() {
                     placeholder="رقم الهاتف"
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
-
                 </div>
 
                 <div>
-
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     اسم ولي الأمر
                   </label>
@@ -2003,7 +2014,6 @@ export default function StudentsPage() {
                     placeholder="اسم ولي الأمر"
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
                   />
-
                 </div>
 
               </div>
@@ -2027,7 +2037,6 @@ export default function StudentsPage() {
                   disabled={saving}
                   className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-6 py-2.5 rounded-xl"
                 >
-
                   {saving && (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   )}
@@ -2037,7 +2046,6 @@ export default function StudentsPage() {
                     : editingStudentId
                     ? "حفظ التعديلات"
                     : "حفظ الطالب"}
-
                 </button>
 
               </div>
@@ -2045,10 +2053,54 @@ export default function StudentsPage() {
             </form>
 
           </div>
-
         </div>
       )}
 
+      {/* PRINT STYLES */}
+
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
+          }
+
+          html,
+          body {
+            background: white !important;
+            color: black !important;
+          }
+
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+
+          th,
+          td {
+            border: 1px solid #d1d5db !important;
+            padding: 7px !important;
+            font-size: 11px !important;
+          }
+
+          thead {
+            display: table-header-group;
+          }
+
+          tr {
+            page-break-inside: avoid;
+          }
+
+          .bg-white {
+            box-shadow: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
