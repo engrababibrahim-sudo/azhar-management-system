@@ -143,6 +143,28 @@ function formatDateTime(date: string) {
   return new Date(date).toLocaleString("ar-EG");
 }
 
+/*
+ * =========================================================
+ * تحديد الشكاوى المفتوحة
+ * =========================================================
+ *
+ * أي شكوى ليست resolved أو closed تعتبر مفتوحة.
+ *
+ * الحالات المفتوحة حاليًا:
+ * new
+ * received
+ * in_progress
+ * waiting_parent
+ * escalated
+ */
+
+function isOpenComplaint(complaint: Complaint) {
+  return (
+    complaint.status !== "resolved" &&
+    complaint.status !== "closed"
+  );
+}
+
 export default function ComplaintsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [institutes, setInstitutes] = useState<Institute[]>([]);
@@ -160,6 +182,17 @@ export default function ComplaintsPage() {
   const [requestedInstituteId, setRequestedInstituteId] = useState<
     string | null | undefined
   >(undefined);
+
+  /*
+   * هل الصفحة مفتوحة بوضع:
+   *
+   * /complaints?filter=open
+   *
+   * أو:
+   *
+   * /complaints?filter=open&instituteId=XXX
+   */
+  const [openFilter, setOpenFilter] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -199,22 +232,35 @@ export default function ComplaintsPage() {
     profile?.role === "super_admin";
 
   /*
-   * ---------------------------------------------------------
-   * قراءة instituteId من الرابط
-   * ---------------------------------------------------------
+   * =========================================================
+   * قراءة بيانات الرابط
+   * =========================================================
    */
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const instituteId = params.get("instituteId");
+    const params = new URLSearchParams(
+      window.location.search
+    );
 
-    setRequestedInstituteId(instituteId);
+    const instituteId =
+      params.get("instituteId");
+
+    const filter =
+      params.get("filter");
+
+    setRequestedInstituteId(
+      instituteId
+    );
+
+    setOpenFilter(
+      filter === "open"
+    );
   }, []);
 
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * تحميل البيانات
-   * ---------------------------------------------------------
+   * =========================================================
    */
 
   async function loadData(
@@ -286,7 +332,8 @@ export default function ComplaintsPage() {
         return;
       }
 
-      const currentProfile = profileData as Profile;
+      const currentProfile =
+        profileData as Profile;
 
       setProfile(currentProfile);
 
@@ -315,7 +362,9 @@ export default function ComplaintsPage() {
 
       let instituteQuery = supabase
         .from("institutes")
-        .select("id, name, directorate_id")
+        .select(
+          "id, name, directorate_id"
+        )
         .order("name", {
           ascending: true,
         });
@@ -339,10 +388,11 @@ export default function ComplaintsPage() {
           return;
         }
 
-        instituteQuery = instituteQuery.eq(
-          "directorate_id",
-          currentProfile.directorate_id
-        );
+        instituteQuery =
+          instituteQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
+          );
       }
 
       /*
@@ -364,21 +414,25 @@ export default function ComplaintsPage() {
           return;
         }
 
-        instituteQuery = instituteQuery.eq(
-          "id",
-          currentProfile.institute_id
-        );
+        instituteQuery =
+          instituteQuery.eq(
+            "id",
+            currentProfile.institute_id
+          );
       }
 
       /*
        * ولي الأمر لا يحتاج قائمة المعاهد
        */
 
-      else if (currentProfile.role !== "parent") {
-        instituteQuery = instituteQuery.eq(
-          "id",
-          "00000000-0000-0000-0000-000000000000"
-        );
+      else if (
+        currentProfile.role !== "parent"
+      ) {
+        instituteQuery =
+          instituteQuery.eq(
+            "id",
+            "00000000-0000-0000-0000-000000000000"
+          );
       }
 
       const {
@@ -393,7 +447,9 @@ export default function ComplaintsPage() {
       const currentInstitutes =
         (institutesData || []) as Institute[];
 
-      setInstitutes(currentInstitutes);
+      setInstitutes(
+        currentInstitutes
+      );
 
       /*
        * -------------------------------------------------------
@@ -403,10 +459,13 @@ export default function ComplaintsPage() {
        * مدير الإدارة:
        *
        * /complaints
-       * => كل المعاهد التابعة لإدارته
+       * => كل معاهد الإدارة
        *
        * /complaints?instituteId=XXX
        * => المعهد XXX فقط
+       *
+       * /complaints?filter=open&instituteId=XXX
+       * => الشكاوى المفتوحة للمعهد XXX فقط
        *
        * مستخدم المعهد:
        * => معهد حسابه فقط مهما كان instituteId في الرابط
@@ -429,7 +488,7 @@ export default function ComplaintsPage() {
 
         /*
          * يوجد instituteId
-         * => تحقق أولًا أنه تابع لإدارة المدير
+         * => تحقق أنه تابع للإدارة الحالية
          */
 
         if (requestedInstituteIdOverride) {
@@ -455,8 +514,7 @@ export default function ComplaintsPage() {
           }
 
           /*
-           * هنا يتم حصر الاستعلام نفسه
-           * في المعهد المحدد
+           * حصر الاستعلام في المعهد المحدد
            */
 
           effectiveInstituteIds = [
@@ -536,7 +594,10 @@ export default function ComplaintsPage() {
        * -------------------------------------------------------
        */
 
-      if (currentProfile.role === "parent") {
+      if (
+        currentProfile.role ===
+        "parent"
+      ) {
         query = query.eq(
           "parent_id",
           user.id
@@ -561,18 +622,14 @@ export default function ComplaintsPage() {
         }
 
         /*
-         * الحماية الأساسية:
-         *
-         * الاستعلام لا يجلب إلا المعاهد الموجودة
-         * داخل effectiveInstituteIds.
-         *
-         * عند فتح بطاقة معهد:
-         * effectiveInstituteIds = [instituteId]
-         *
-         * وبالتالي لا يمكن أن تظهر شكاوى المعاهد الأخرى.
+         * الاستعلام لا يجلب إلا المعاهد
+         * التابعة للإدارة الحالية.
          */
 
-        if (effectiveInstituteIds.length === 0) {
+        if (
+          effectiveInstituteIds.length ===
+          0
+        ) {
           setComplaints([]);
 
           if (showSpinner) {
@@ -624,9 +681,8 @@ export default function ComplaintsPage() {
        * حماية إضافية نهائية
        * -------------------------------------------------------
        *
-       * حتى لو حدث خطأ في أي جزء من الاستعلام،
-       * لا نسمح للواجهة بعرض شكوى من معهد آخر
-       * عند وجود instituteId.
+       * عند وجود instituteId:
+       * لا نسمح بعرض شكوى من معهد آخر.
        */
 
       let finalComplaints =
@@ -683,15 +739,18 @@ export default function ComplaintsPage() {
   }
 
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * التحميل الأول
-   * ---------------------------------------------------------
+   * =========================================================
    *
-   * ننتظر قراءة instituteId من الرابط أولًا.
+   * ننتظر قراءة instituteId و filter من الرابط أولًا.
    */
 
   useEffect(() => {
-    if (requestedInstituteId !== undefined) {
+    if (
+      requestedInstituteId !==
+      undefined
+    ) {
       loadData(
         true,
         requestedInstituteId
@@ -700,17 +759,41 @@ export default function ComplaintsPage() {
   }, [requestedInstituteId]);
 
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * تصفية النتائج
-   * ---------------------------------------------------------
+   * =========================================================
    */
 
   const filteredComplaints = useMemo(() => {
     const search =
-      searchTerm.trim().toLowerCase();
+      searchTerm
+        .trim()
+        .toLowerCase();
 
     return complaints.filter(
       (complaint) => {
+        /*
+         * -----------------------------------------------------
+         * فلتر الشكاوى المفتوحة
+         * -----------------------------------------------------
+         *
+         * عند فتح:
+         *
+         * /complaints?filter=open
+         *
+         * يتم استبعاد:
+         *
+         * resolved
+         * closed
+         */
+
+        if (
+          openFilter &&
+          !isOpenComplaint(complaint)
+        ) {
+          return false;
+        }
+
         const matchesSearch =
           !search ||
           complaint.title
@@ -752,48 +835,67 @@ export default function ComplaintsPage() {
     statusFilter,
     priorityFilter,
     instituteFilter,
+    openFilter,
   ]);
 
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * الإحصائيات
-   * ---------------------------------------------------------
+   * =========================================================
+   *
+   * إذا كانت الصفحة مفتوحة بفلتر open،
+   * تكون الإحصائيات الخاصة بالقائمة الحالية فقط.
    */
 
   const statistics = useMemo(() => {
+    const sourceComplaints =
+      openFilter
+        ? complaints.filter(
+            isOpenComplaint
+          )
+        : complaints;
+
     return {
-      total: complaints.length,
+      total:
+        sourceComplaints.length,
 
-      newCount: complaints.filter(
-        (item) =>
-          item.status === "new"
-      ).length,
+      newCount:
+        sourceComplaints.filter(
+          (item) =>
+            item.status === "new"
+        ).length,
 
-      inProgress: complaints.filter(
-        (item) =>
-          item.status ===
-          "in_progress"
-      ).length,
+      inProgress:
+        sourceComplaints.filter(
+          (item) =>
+            item.status ===
+            "in_progress"
+        ).length,
 
-      escalated: complaints.filter(
-        (item) =>
-          item.status ===
-          "escalated"
-      ).length,
+      escalated:
+        sourceComplaints.filter(
+          (item) =>
+            item.status ===
+            "escalated"
+        ).length,
 
-      resolved: complaints.filter(
-        (item) =>
-          item.status ===
-            "resolved" ||
-          item.status === "closed"
-      ).length,
+      resolved:
+        sourceComplaints.filter(
+          (item) =>
+            item.status ===
+              "resolved" ||
+            item.status === "closed"
+        ).length,
     };
-  }, [complaints]);
+  }, [
+    complaints,
+    openFilter,
+  ]);
 
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * إنشاء شكوى
-   * ---------------------------------------------------------
+   * =========================================================
    */
 
   async function createComplaint() {
@@ -898,9 +1000,9 @@ export default function ComplaintsPage() {
   }
 
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * تحديث الشكوى
-   * ---------------------------------------------------------
+   * =========================================================
    */
 
   async function updateComplaint() {
@@ -1073,9 +1175,9 @@ export default function ComplaintsPage() {
   }
 
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * فتح تفاصيل الشكوى
-   * ---------------------------------------------------------
+   * =========================================================
    */
 
   function openComplaint(
@@ -1102,9 +1204,9 @@ export default function ComplaintsPage() {
   }
 
   /*
-   * ---------------------------------------------------------
+   * =========================================================
    * Render
-   * ---------------------------------------------------------
+   * =========================================================
    */
 
   return (
@@ -1207,6 +1309,34 @@ export default function ComplaintsPage() {
 
         <div className="mx-auto max-w-7xl px-6 py-8">
           {/* =====================================================
+              OPEN FILTER NOTICE
+          ====================================================== */}
+
+          {openFilter && (
+            <div className="mb-7 rounded-2xl border border-red-100 bg-red-50 p-5">
+              <div className="flex items-start gap-3">
+                <MessageSquareWarning
+                  size={23}
+                  className="mt-0.5 shrink-0 text-red-600"
+                />
+
+                <div>
+                  <h2 className="font-bold text-red-900">
+                    الشكاوى المفتوحة
+                  </h2>
+
+                  <p className="mt-1 text-sm leading-6 text-red-800">
+                    يتم عرض الشكاوى التي لم يتم حلها أو إغلاقها فقط.
+                    {requestedInstituteId
+                      ? " النتائج مقتصرة على المعهد المحدد."
+                      : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =====================================================
               STATISTICS
           ====================================================== */}
 
@@ -1215,7 +1345,9 @@ export default function ComplaintsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-slate-500">
-                    إجمالي البلاغات
+                    {openFilter
+                      ? "إجمالي الشكاوى المفتوحة"
+                      : "إجمالي البلاغات"}
                   </p>
 
                   <p className="mt-2 text-3xl font-bold">
@@ -1511,11 +1643,15 @@ export default function ComplaintsPage() {
                 />
 
                 <h2 className="mt-4 text-lg font-bold">
-                  لا توجد شكاوى أو بلاغات
+                  {openFilter
+                    ? "لا توجد شكاوى مفتوحة"
+                    : "لا توجد شكاوى أو بلاغات"}
                 </h2>
 
                 <p className="mt-2 text-sm text-slate-500">
-                  لم يتم العثور على بيانات مطابقة للبحث أو الفلاتر الحالية.
+                  {openFilter
+                    ? "لا توجد حاليًا شكاوى مفتوحة مطابقة للمعهد أو الفلاتر الحالية."
+                    : "لم يتم العثور على بيانات مطابقة للبحث أو الفلاتر الحالية."}
                 </p>
 
                 {canCreateComplaint && (
@@ -1546,7 +1682,9 @@ export default function ComplaintsPage() {
               <div className="mt-7">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-bold text-slate-900">
-                    قائمة الشكاوى والبلاغات
+                    {openFilter
+                      ? "الشكاوى المفتوحة"
+                      : "قائمة الشكاوى والبلاغات"}
                   </h2>
 
                   <span className="text-sm text-slate-500">
