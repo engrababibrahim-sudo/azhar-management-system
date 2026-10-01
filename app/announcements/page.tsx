@@ -18,6 +18,7 @@ import {
   X,
   Power,
   PowerOff,
+  Printer,
 } from "lucide-react";
 
 import AppShell from "../components/AppShell";
@@ -124,6 +125,15 @@ function formatDate(date: string | null) {
     day: "2-digit",
   }).format(new Date(date));
 }
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 
 export default function AnnouncementsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -499,6 +509,234 @@ export default function AnnouncementsPage() {
     await loadAnnouncements(profile!);
   }
 
+  function handlePrintAnnouncements() {
+    if (filteredAnnouncements.length === 0) {
+      alert("لا توجد إعلانات مطابقة للطباعة.");
+      return;
+    }
+
+    const now = new Intl.DateTimeFormat("ar-EG", {
+      dateStyle: "full",
+      timeStyle: "short",
+    }).format(new Date());
+
+    const filterParts = [
+      searchTerm.trim() ? `البحث: ${searchTerm.trim()}` : "",
+      typeFilter !== "all"
+        ? `النوع: ${typeLabels[typeFilter] || typeFilter}`
+        : "",
+      priorityFilter !== "all"
+        ? `الأولوية: ${priorityLabels[priorityFilter] || priorityFilter}`
+        : "",
+      statusFilter !== "all"
+        ? `الحالة: ${statusFilter === "active" ? "نشطة" : "غير نشطة"}`
+        : "",
+    ].filter(Boolean);
+
+    const total = filteredAnnouncements.length;
+    const active = filteredAnnouncements.filter((item) => item.is_active).length;
+    const inactive = total - active;
+    const urgent = filteredAnnouncements.filter(
+      (item) => item.priority === "urgent"
+    ).length;
+
+    const rows = filteredAnnouncements
+      .map(
+        (announcement, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td class="title">${escapeHtml(announcement.title)}</td>
+            <td>${escapeHtml(
+              announcement.target_type === "all"
+                ? "جميع المعاهد"
+                : announcement.institute?.name || "معهد محدد"
+            )}</td>
+            <td>${escapeHtml(
+              typeLabels[announcement.announcement_type] ||
+                announcement.announcement_type
+            )}</td>
+            <td>${escapeHtml(
+              priorityLabels[announcement.priority] || announcement.priority
+            )}</td>
+            <td>${announcement.is_active ? "نشط" : "غير نشط"}</td>
+            <td>${escapeHtml(formatDate(announcement.start_date))}</td>
+            <td>${escapeHtml(formatDate(announcement.end_date))}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const filtersHtml = filterParts.length
+      ? `<div class="filters"><strong>الفلاتر:</strong> ${filterParts
+          .map(escapeHtml)
+          .join(" &nbsp; | &nbsp; ")}</div>`
+      : `<div class="filters"><strong>الفلاتر:</strong> جميع الإعلانات</div>`;
+
+    const printWindow = window.open("", "_blank", "width=1400,height=900");
+
+    if (!printWindow) {
+      alert("تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة.");
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="ar" dir="rtl">
+      <head>
+        <meta charset="UTF-8" />
+        <title>تقرير الإعلانات</title>
+        <style>
+          @page { size: A4 landscape; margin: 12mm; }
+          * { box-sizing: border-box; }
+          body {
+            font-family: Arial, Tahoma, sans-serif;
+            direction: rtl;
+            color: #111827;
+            margin: 0;
+            background: #fff;
+          }
+          .header {
+            border-bottom: 2px solid #1d4ed8;
+            padding-bottom: 14px;
+            margin-bottom: 16px;
+          }
+          .title {
+            font-size: 22px;
+            font-weight: 800;
+          }
+          .subtitle {
+            color: #4b5563;
+            font-size: 13px;
+            margin-top: 5px;
+          }
+          .meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin: 12px 0;
+            font-size: 12px;
+            color: #374151;
+          }
+          .filters {
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            padding: 9px 12px;
+            border-radius: 7px;
+            font-size: 12px;
+            margin-bottom: 14px;
+          }
+          .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 16px;
+          }
+          .stat {
+            border: 1px solid #e5e7eb;
+            border-radius: 7px;
+            padding: 9px;
+            text-align: center;
+          }
+          .stat strong {
+            display: block;
+            font-size: 18px;
+            margin-bottom: 3px;
+          }
+          .stat span {
+            font-size: 11px;
+            color: #6b7280;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+          th, td {
+            border: 1px solid #d1d5db;
+            padding: 7px 6px;
+            font-size: 10.5px;
+            vertical-align: middle;
+            text-align: right;
+            word-wrap: break-word;
+          }
+          th {
+            background: #f1f5f9;
+            font-weight: 800;
+          }
+          th:first-child, td:first-child {
+            width: 4%;
+            text-align: center;
+          }
+          th:nth-child(2), td:nth-child(2) { width: 22%; }
+          th:nth-child(3), td:nth-child(3) { width: 17%; }
+          th:nth-child(4), td:nth-child(4) { width: 11%; }
+          th:nth-child(5), td:nth-child(5) { width: 10%; }
+          th:nth-child(6), td:nth-child(6) { width: 10%; }
+          th:nth-child(7), td:nth-child(7),
+          th:nth-child(8), td:nth-child(8) { width: 13%; }
+          .footer {
+            margin-top: 12px;
+            font-size: 10px;
+            color: #6b7280;
+            text-align: center;
+          }
+          @media print {
+            body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="title">نظام إدارة المعاهد الأزهرية</div>
+          <div class="subtitle">تقرير الإعلانات</div>
+        </div>
+
+        <div class="meta">
+          <div><strong>النطاق:</strong> جميع الإعلانات المعروضة</div>
+          <div><strong>عدد النتائج:</strong> ${total}</div>
+          <div><strong>تاريخ الطباعة:</strong> ${escapeHtml(now)}</div>
+        </div>
+
+        ${filtersHtml}
+
+        <div class="stats">
+          <div class="stat"><strong>${total}</strong><span>إجمالي النتائج</span></div>
+          <div class="stat"><strong>${active}</strong><span>إعلانات نشطة</span></div>
+          <div class="stat"><strong>${inactive}</strong><span>إعلانات غير نشطة</span></div>
+          <div class="stat"><strong>${urgent}</strong><span>إعلانات عاجلة</span></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>م</th>
+              <th>عنوان الإعلان</th>
+              <th>المعهد / النطاق</th>
+              <th>النوع</th>
+              <th>الأولوية</th>
+              <th>الحالة</th>
+              <th>يبدأ من</th>
+              <th>ينتهي في</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+
+        <div class="footer">
+          نظام إدارة المعاهد الأزهرية — تقرير الإعلانات
+        </div>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+
+    setTimeout(() => {
+      printWindow.print();
+    }, 300);
+  }
+
   const filteredAnnouncements = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
 
@@ -614,6 +852,15 @@ export default function AnnouncementsPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrintAnnouncements}
+              disabled={filteredAnnouncements.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Printer className="w-4 h-4" />
+              طباعة
+            </button>
+
             <button
               onClick={() => profile && loadAnnouncements(profile)}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition"
