@@ -11,6 +11,7 @@ import {
   BookOpen,
   GraduationCap,
   Pencil,
+  Printer,
 } from "lucide-react";
 import AppShell from "../components/AppShell";
 import { supabase } from "../../lib/supabase/client";
@@ -519,6 +520,117 @@ export default function TeachersPage() {
     } finally {
       setLoadingTeachers(false);
     }
+  }
+
+  function escapeHtml(value: string | null | undefined) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function handlePrintTeachers() {
+    if (filteredTeachers.length === 0) {
+      setMessage("لا توجد بيانات مدرسين للطباعة.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=1200,height=800");
+
+    if (!printWindow) {
+      setMessage("تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة من المتصفح.");
+      return;
+    }
+
+    const instituteTitle =
+      selectedInstituteName || "جميع معاهد الإدارة التعليمية الأزهرية";
+
+    const printedAt = new Date().toLocaleString("ar-EG", {
+      dateStyle: "full",
+      timeStyle: "short",
+    });
+
+    const rows = filteredTeachers.map((teacher, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(teacher.teacher_code || "-")}</td>
+        <td class="name">${escapeHtml(teacher.full_name)}</td>
+        <td>${escapeHtml(teacher.phone || "-")}</td>
+        <td>${escapeHtml(teacher.email || "-")}</td>
+        <td>${escapeHtml(teacher.specialization || "-")}</td>
+        <td>${escapeHtml(teacher.qualification || "-")}</td>
+        <td><span class="${teacher.is_active ? "active" : "inactive"}">${teacher.is_active ? "نشط" : "غير نشط"}</span></td>
+      </tr>
+    `).join("");
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<title>كشف المدرسين - ${escapeHtml(instituteTitle)}</title>
+<style>
+@page { size: A4 landscape; margin: 12mm; }
+* { box-sizing: border-box; }
+body { margin:0; font-family:Arial,Tahoma,sans-serif; color:#172033; direction:rtl; }
+.header { text-align:center; border-bottom:2px solid #172033; padding-bottom:14px; margin-bottom:18px; }
+.title { font-size:24px; font-weight:700; margin:0 0 8px; }
+.subtitle { font-size:17px; font-weight:700; margin:0 0 6px; }
+.meta { font-size:12px; color:#526071; display:flex; justify-content:center; gap:28px; flex-wrap:wrap; }
+.summary { display:flex; justify-content:space-between; margin:0 0 14px; font-size:13px; }
+table { width:100%; border-collapse:collapse; font-size:11px; }
+th { background:#eef2f7; font-weight:700; padding:8px 6px; border:1px solid #b9c2cf; text-align:center; }
+td { padding:7px 6px; border:1px solid #cbd3dd; text-align:center; vertical-align:middle; }
+tr:nth-child(even) td { background:#f8fafc; }
+td.name { font-weight:700; text-align:right; }
+.active,.inactive { display:inline-block; padding:3px 9px; border-radius:999px; font-weight:700; }
+.active { color:#166534; background:#dcfce7; }
+.inactive { color:#991b1b; background:#fee2e2; }
+.footer { margin-top:18px; padding-top:10px; border-top:1px solid #d1d5db; display:flex; justify-content:space-between; font-size:11px; color:#64748b; }
+@media print {
+  body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  thead { display:table-header-group; }
+  tr { break-inside:avoid; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+<h1 class="title">نظام إدارة المعاهد الأزهرية</h1>
+<p class="subtitle">كشف المدرسين</p>
+<p class="subtitle">${escapeHtml(instituteTitle)}</p>
+<div class="meta">
+<span>تاريخ الطباعة: ${escapeHtml(printedAt)}</span>
+<span>عدد النتائج: ${filteredTeachers.length}</span>
+${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : ""}
+</div>
+</div>
+<div class="summary">
+<span>إجمالي المدرسين المعروضين: <strong>${filteredTeachers.length}</strong></span>
+<span>النشطون: <strong>${filteredTeachers.filter((teacher) => teacher.is_active).length}</strong></span>
+<span>غير النشطين: <strong>${filteredTeachers.filter((teacher) => !teacher.is_active).length}</strong></span>
+</div>
+<table>
+<thead><tr>
+<th>م</th><th>كود المعلم</th><th>اسم المعلم</th><th>الهاتف</th>
+<th>البريد الإلكتروني</th><th>التخصص</th><th>المؤهل</th><th>الحالة</th>
+</tr></thead>
+<tbody>${rows}</tbody>
+</table>
+<div class="footer">
+<span>منصة الإدارة والمتابعة التعليمية الأزهرية</span>
+<span>كشف صادر من نظام إدارة المعاهد الأزهرية</span>
+</div>
+</body>
+</html>`);
+
+    printWindow.document.close();
+    printWindow.focus();
+
+    setTimeout(() => {
+      printWindow.print();
+    }, 300);
   }
 
   function resetForm() {
@@ -1103,6 +1215,16 @@ export default function TeachersPage() {
                 />
 
                 تحديث
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePrintTeachers}
+                disabled={filteredTeachers.length === 0}
+                className="bg-white border border-slate-200 px-5 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Printer size={18} />
+                طباعة
               </button>
 
               {canAddTeacher && (
