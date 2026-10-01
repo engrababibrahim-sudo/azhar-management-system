@@ -12,6 +12,7 @@ import {
   Building2,
   Eye,
   ShieldCheck,
+  Printer,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase/client";
 
@@ -189,6 +190,257 @@ export default function AttendancePage() {
     selectedInstitute,
     selectedDate,
   ]);
+
+  function escapeHtml(value: string | null | undefined) {
+    return (value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function handlePrintAttendance() {
+    if (!selectedInstitute || filteredStudents.length === 0) {
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=1200,height=800");
+
+    if (!printWindow) {
+      setMessage("تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة.");
+      return;
+    }
+
+    const instituteName = currentInstitute?.name || "المعهد";
+    const instituteCode = currentInstitute?.code
+      ? ` (${currentInstitute.code})`
+      : "";
+
+    const className =
+      classes.find((classItem) => classItem.id === selectedClass)?.name ||
+      "كل الفصول";
+
+    const searchLabel = searchTerm.trim()
+      ? searchTerm.trim()
+      : "بدون بحث";
+
+    const statusLabels: Record<AttendanceStatus, string> = {
+      present: "حاضر",
+      absent: "غائب",
+      late: "متأخر",
+      excused: "معذور",
+    };
+
+    const rows = filteredStudents
+      .map((student, index) => {
+        const status = getStudentStatus(student.id);
+        const notes = attendance[student.id]?.notes || "-";
+
+        return `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(student.student_code || "-")}</td>
+            <td class="name">${escapeHtml(student.full_name)}</td>
+            <td>${escapeHtml(statusLabels[status])}</td>
+            <td>${escapeHtml(notes)}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const generatedAt = new Date().toLocaleString("ar-EG");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="ar" dir="rtl">
+        <head>
+          <meta charset="UTF-8" />
+          <title>كشف الحضور والغياب - ${escapeHtml(instituteName)}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 12mm;
+            }
+
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              font-family: Arial, Tahoma, sans-serif;
+              color: #111827;
+              margin: 0;
+              background: white;
+              direction: rtl;
+            }
+
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #1f2937;
+              padding-bottom: 14px;
+              margin-bottom: 18px;
+            }
+
+            h1 {
+              margin: 0 0 7px;
+              font-size: 23px;
+            }
+
+            h2 {
+              margin: 0 0 5px;
+              font-size: 18px;
+            }
+
+            .meta {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 8px;
+              margin-bottom: 16px;
+            }
+
+            .meta-item {
+              border: 1px solid #d1d5db;
+              border-radius: 7px;
+              padding: 8px 10px;
+              font-size: 13px;
+            }
+
+            .meta-item strong {
+              display: inline-block;
+              margin-left: 5px;
+            }
+
+            .stats {
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 8px;
+              margin-bottom: 18px;
+            }
+
+            .stat {
+              border: 1px solid #d1d5db;
+              border-radius: 7px;
+              padding: 9px;
+              text-align: center;
+            }
+
+            .stat strong {
+              display: block;
+              font-size: 18px;
+              margin-top: 3px;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 12px;
+            }
+
+            th,
+            td {
+              border: 1px solid #9ca3af;
+              padding: 8px 6px;
+              text-align: center;
+            }
+
+            th {
+              background: #f3f4f6;
+              font-weight: 700;
+            }
+
+            td.name {
+              text-align: right;
+              font-weight: 600;
+            }
+
+            .footer {
+              margin-top: 18px;
+              padding-top: 10px;
+              border-top: 1px solid #d1d5db;
+              display: flex;
+              justify-content: space-between;
+              font-size: 11px;
+              color: #4b5563;
+            }
+
+            @media print {
+              .no-print {
+                display: none !important;
+              }
+
+              tr {
+                page-break-inside: avoid;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>نظام إدارة المعاهد الأزهرية</h1>
+            <h2>كشف الحضور والغياب</h2>
+            <div>${escapeHtml(instituteName)}${escapeHtml(instituteCode)}</div>
+          </div>
+
+          <div class="meta">
+            <div class="meta-item">
+              <strong>التاريخ:</strong>
+              ${escapeHtml(selectedDate)}
+            </div>
+            <div class="meta-item">
+              <strong>الفصل:</strong>
+              ${escapeHtml(className)}
+            </div>
+            <div class="meta-item">
+              <strong>البحث:</strong>
+              ${escapeHtml(searchLabel)}
+            </div>
+            <div class="meta-item">
+              <strong>عدد الطلاب:</strong>
+              ${filteredStudents.length}
+            </div>
+          </div>
+
+          <div class="stats">
+            <div class="stat">حاضر<strong>${presentCount}</strong></div>
+            <div class="stat">غائب<strong>${absentCount}</strong></div>
+            <div class="stat">متأخر<strong>${lateCount}</strong></div>
+            <div class="stat">معذور<strong>${excusedCount}</strong></div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>م</th>
+                <th>كود الطالب</th>
+                <th>اسم الطالب</th>
+                <th>الحالة</th>
+                <th>ملاحظات</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <span>تم إنشاء التقرير من منصة الإدارة التعليمية الأزهرية</span>
+            <span>تاريخ ووقت الطباعة: ${escapeHtml(generatedAt)}</span>
+          </div>
+
+          <script>
+            window.onload = function () {
+              setTimeout(function () {
+                window.print();
+              }, 300);
+            };
+          <\/script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+  }
 
   /*
    * =========================================================
@@ -993,6 +1245,20 @@ export default function AttendancePage() {
             )}
 
           </div>
+
+          {/* زر الطباعة */}
+
+          {selectedInstitute && (
+            <button
+              type="button"
+              onClick={handlePrintAttendance}
+              disabled={filteredStudents.length === 0}
+              className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 text-gray-700 border border-gray-300 px-6 py-3 rounded-xl font-semibold"
+            >
+              <Printer size={20} />
+              طباعة
+            </button>
+          )}
 
           {/* زر الحفظ لمسؤول IT فقط */}
 
