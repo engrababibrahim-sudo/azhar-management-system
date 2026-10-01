@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Building2,
   TrendingUp,
+  Printer,
 } from "lucide-react";
 
 import { supabase } from "../../lib/supabase/client";
@@ -834,6 +835,138 @@ export default function AttendanceReportPage() {
       attendance,
     ]);
 
+
+  function escapeHtml(value: string | null | undefined) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function formatDateForPrint(date: string) {
+    if (!date) return "-";
+    const [year, month, day] = date.split("-");
+    return `${day}/${month}/${year}`;
+  }
+
+  function handlePrintReport() {
+    if (report.length === 0 && instituteSummary.length === 0) {
+      setMessage("لا توجد بيانات متاحة للطباعة");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=1200,height=800");
+    if (!printWindow) {
+      setMessage("تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة.");
+      return;
+    }
+
+    const instituteTitle = selectedInstitute
+      ? institutes.find((item) => item.id === selectedInstitute)?.name || "-"
+      : "جميع المعاهد التابعة للإدارة";
+
+    const classTitle = selectedClass
+      ? classes.find((item) => item.id === selectedClass)?.name || "-"
+      : "كل الفصول";
+
+    const searchTitle = searchTerm.trim() || "بدون بحث";
+
+    const summarySection =
+      isCentralManager && selectedInstitute === "" && instituteSummary.length > 0
+        ? `
+          <section class="section">
+            <h2>ملخص أداء المعاهد</h2>
+            <table>
+              <thead><tr>
+                <th>المعهد</th><th>الطلاب</th><th>الحضور</th><th>الغياب</th>
+                <th>التأخير</th><th>المعذور</th><th>نسبة الحضور</th>
+              </tr></thead>
+              <tbody>
+                ${instituteSummary.map((row) => `
+                  <tr>
+                    <td><strong>${escapeHtml(row.institute.name)}</strong><br><small>${escapeHtml(row.institute.code)}</small></td>
+                    <td>${row.students}</td><td>${row.present}</td><td>${row.absent}</td>
+                    <td>${row.late}</td><td>${row.excused}</td><td>${row.percentage}%</td>
+                  </tr>`).join("")}
+              </tbody>
+            </table>
+          </section>`
+        : "";
+
+    const studentSection = report.length > 0
+      ? `
+        <section class="section">
+          <h2>التقرير التفصيلي للطلاب</h2>
+          <table>
+            <thead><tr>
+              ${selectedInstitute === "" && isCentralManager ? "<th>المعهد</th>" : ""}
+              <th>م</th><th>الطالب</th><th>الكود</th><th>الحضور</th>
+              <th>الغياب</th><th>التأخير</th><th>المعذور</th>
+              <th>إجمالي السجلات</th><th>نسبة الحضور</th>
+            </tr></thead>
+            <tbody>
+              ${report.map((row, index) => {
+                const institute = institutes.find((item) => item.id === row.student.institute_id);
+                return `<tr>
+                  ${selectedInstitute === "" && isCentralManager ? `<td>${escapeHtml(institute?.name || "-")}</td>` : ""}
+                  <td>${index + 1}</td>
+                  <td><strong>${escapeHtml(row.student.full_name)}</strong></td>
+                  <td>${escapeHtml(row.student.student_code || "-")}</td>
+                  <td>${row.present}</td><td>${row.absent}</td><td>${row.late}</td>
+                  <td>${row.excused}</td><td>${row.total}</td><td><strong>${row.percentage}%</strong></td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </section>`
+      : `<div class="empty">لا توجد بيانات طلاب مطابقة للفلاتر المحددة.</div>`;
+
+    printWindow.document.write(`<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"/>
+<title>تقرير الحضور والإحصائيات</title>
+<style>
+@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}
+body{font-family:Arial,Tahoma,sans-serif;direction:rtl;color:#1f2937;margin:0}
+.header{text-align:center;border-bottom:2px solid #1d4ed8;padding-bottom:14px;margin-bottom:16px}
+h1{margin:0 0 6px;font-size:24px}.subtitle{color:#4b5563;font-size:15px}
+.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 18px}
+.meta div{border:1px solid #d1d5db;border-radius:7px;padding:8px;font-size:12px;background:#f9fafb}
+.meta strong{display:block;margin-bottom:3px}.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:18px}
+.stat{border:1px solid #d1d5db;border-radius:7px;padding:9px;text-align:center}
+.stat .label{font-size:11px;color:#6b7280}.stat .value{font-size:18px;font-weight:bold;margin-top:4px}
+.section{margin-top:18px}h2{font-size:17px;margin:0 0 9px}
+table{width:100%;border-collapse:collapse;font-size:10px}
+th,td{border:1px solid #cbd5e1;padding:6px 5px;text-align:center;vertical-align:middle}
+th{background:#f1f5f9;font-weight:bold}td:first-child,th:first-child{text-align:right}
+small{color:#64748b}.empty{text-align:center;border:1px solid #d1d5db;padding:25px;margin-top:20px}
+.footer{margin-top:18px;padding-top:8px;border-top:1px solid #d1d5db;font-size:10px;color:#6b7280;text-align:center}
+@media print{.section{break-inside:avoid}tr{break-inside:avoid}}
+</style></head><body>
+<div class="header"><h1>نظام إدارة المعاهد الأزهرية</h1><div class="subtitle">تقرير الحضور والإحصائيات</div></div>
+<div class="meta">
+<div><strong>المعهد</strong>${escapeHtml(instituteTitle)}</div>
+<div><strong>الفصل</strong>${escapeHtml(classTitle)}</div>
+<div><strong>الفترة</strong>${formatDateForPrint(fromDate)} إلى ${formatDateForPrint(toDate)}</div>
+<div><strong>البحث</strong>${escapeHtml(searchTitle)}</div>
+</div>
+<div class="stats">
+<div class="stat"><div class="label">المعاهد</div><div class="value">${isCentralManager ? institutes.length : 1}</div></div>
+<div class="stat"><div class="label">الطلاب</div><div class="value">${totals.students}</div></div>
+<div class="stat"><div class="label">الحضور</div><div class="value">${totals.present}</div></div>
+<div class="stat"><div class="label">الغياب</div><div class="value">${totals.absent}</div></div>
+<div class="stat"><div class="label">التأخير</div><div class="value">${totals.late}</div></div>
+<div class="stat"><div class="label">نسبة الحضور</div><div class="value">${overallPercentage}%</div></div>
+</div>
+${summarySection}${studentSection}
+<div class="footer">تم إنشاء التقرير بتاريخ ${new Date().toLocaleString("ar-EG")}</div>
+</body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 300);
+  }
+
   /*
    * Loading
    */
@@ -926,22 +1059,28 @@ export default function AttendanceReportPage() {
             </div>
           </div>
 
-          <button
-            onClick={refreshReport}
-            disabled={reportLoading}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-5 py-3 rounded-xl font-semibold"
-          >
-            <RefreshCw
-              size={19}
-              className={
-                reportLoading
-                  ? "animate-spin"
-                  : ""
-              }
-            />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <button
+              onClick={handlePrintReport}
+              disabled={report.length === 0 && instituteSummary.length === 0}
+              className="flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 px-5 py-3 rounded-xl font-semibold"
+            >
+              <Printer size={19} />
+              طباعة
+            </button>
 
-            تحديث التقرير
-          </button>
+            <button
+              onClick={refreshReport}
+              disabled={reportLoading}
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-5 py-3 rounded-xl font-semibold"
+            >
+              <RefreshCw
+                size={19}
+                className={reportLoading ? "animate-spin" : ""}
+              />
+              تحديث التقرير
+            </button>
+          </div>
         </div>
 
         {/* Message */}
