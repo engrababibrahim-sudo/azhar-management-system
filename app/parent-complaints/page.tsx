@@ -10,6 +10,7 @@ import {
   FileText,
   MessageCircleWarning,
   Plus,
+  Printer,
   RefreshCw,
   Search,
   Send,
@@ -140,18 +141,6 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function parseRpcResult(value: unknown): any {
-  if (typeof value === "string") {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-
-  return value;
-}
-
 export default function ParentComplaintsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
@@ -190,178 +179,17 @@ export default function ParentComplaintsPage() {
   const [message, setMessage] = useState("");
 
   const isParent = profile?.role === "parent";
-
   const isInstituteUser = ["sheikh", "deputy", "employee"].includes(
     profile?.role || ""
   );
-
   const isDirector =
     profile?.role === "director" || profile?.role === "super_admin";
-
-  async function loadParentData(
-    nationalId: string,
-    email: string
-  ): Promise<boolean> {
-    const { data: dashboardRaw, error: dashboardError } =
-      await supabase.rpc("get_parent_dashboard", {
-        p_national_id: nationalId,
-        p_email: email,
-      });
-
-    if (dashboardError) {
-      console.error("get_parent_dashboard:", dashboardError);
-      setMessage(
-        `تعذر تحميل بيانات ولي الأمر: ${dashboardError.message}`
-      );
-      return false;
-    }
-
-    const dashboard = parseRpcResult(dashboardRaw);
-
-    if (!dashboard?.success || !dashboard?.parent) {
-      setMessage(
-        dashboard?.message ||
-          "تعذر التحقق من بيانات ولي الأمر."
-      );
-      return false;
-    }
-
-    const parentProfile: Profile = {
-      id: dashboard.parent.id,
-      full_name: dashboard.parent.full_name || "ولي الأمر",
-      role: "parent",
-      institute_id: null,
-      directorate_id: null,
-      is_active: true,
-    };
-
-    const parentStudents: Student[] = (dashboard.students || []).map(
-      (student: any) => ({
-        id: student.id,
-        full_name: student.full_name,
-        student_code: student.student_code || null,
-        institute_id: student.institute_id,
-        parent_id: dashboard.parent.id,
-        is_active: student.is_active !== false,
-      })
-    );
-
-    const parentInstitutesMap = new Map<string, Institute>();
-
-    (dashboard.students || []).forEach((student: any) => {
-      if (!student.institute_id) return;
-
-      parentInstitutesMap.set(student.institute_id, {
-        id: student.institute_id,
-        name: student.institute_name || "المعهد",
-        code: student.institute_code || null,
-        directorate_id: student.directorate_id || "",
-      });
-    });
-
-    const { data: complaintsRaw, error: complaintsError } =
-      await supabase.rpc("get_parent_complaints", {
-        p_national_id: nationalId,
-        p_email: email,
-      });
-
-    if (complaintsError) {
-      console.error("get_parent_complaints:", complaintsError);
-      setMessage(
-        `تعذر تحميل شكاوى ولي الأمر: ${complaintsError.message}`
-      );
-      return false;
-    }
-
-    const complaintsPayload = parseRpcResult(complaintsRaw);
-
-    if (!complaintsPayload?.success) {
-      setMessage(
-        complaintsPayload?.message ||
-          "تعذر تحميل شكاوى ولي الأمر."
-      );
-      return false;
-    }
-
-    const parentComplaints: Complaint[] = (
-      complaintsPayload.complaints || []
-    ).map((complaint: any) => ({
-      ...complaint,
-      student: complaint.student
-        ? {
-            id: complaint.student.id,
-            full_name: complaint.student.full_name,
-            student_code: complaint.student.student_code || null,
-            institute_id: complaint.student.institute_id,
-            parent_id: complaint.student.parent_id || dashboard.parent.id,
-            is_active: complaint.student.is_active !== false,
-          }
-        : undefined,
-      institute: complaint.institute
-        ? {
-            id: complaint.institute.id,
-            name: complaint.institute.name,
-            code: complaint.institute.code || null,
-            directorate_id: complaint.institute.directorate_id,
-          }
-        : undefined,
-    }));
-
-    parentComplaints.forEach((complaint) => {
-      if (complaint.institute) {
-        parentInstitutesMap.set(
-          complaint.institute.id,
-          complaint.institute
-        );
-      }
-    });
-
-    setProfile(parentProfile);
-    setStudents(parentStudents);
-    setInstitutes([...parentInstitutesMap.values()]);
-    setComplaints(parentComplaints);
-
-    return true;
-  }
 
   async function loadData() {
     try {
       setLoading(true);
       setMessage("");
 
-      /*
-       * ============================================================
-       * أولًا: ولي الأمر
-       * ============================================================
-       *
-       * ولي الأمر يدخل من parent-login بدون Supabase Auth.
-       * لذلك نستخدم البيانات المحفوظة في sessionStorage.
-       */
-      if (typeof window !== "undefined") {
-        const parentNationalId =
-          window.sessionStorage.getItem("parent_national_id");
-
-        const parentEmail =
-          window.sessionStorage.getItem("parent_email");
-
-        if (parentNationalId && parentEmail) {
-          await loadParentData(
-            parentNationalId,
-            parentEmail
-          );
-
-          return;
-        }
-      }
-
-      /*
-       * ============================================================
-       * ثانيًا: باقي مستخدمي النظام
-       * ============================================================
-       *
-       * المدير والشيخ وغيرهما يستمرون باستخدام Supabase Auth
-       * كما كان النظام يعمل سابقًا.
-       */
       const {
         data: authData,
         error: authError,
@@ -374,14 +202,13 @@ export default function ParentComplaintsPage() {
 
       const userId = authData.user.id;
 
-      const { data: profileData, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select(
-            "id, full_name, role, institute_id, directorate_id, is_active"
-          )
-          .eq("id", userId)
-          .single();
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select(
+          "id, full_name, role, institute_id, directorate_id, is_active"
+        )
+        .eq("id", userId)
+        .single();
 
       if (profileError) {
         console.error(profileError);
@@ -394,10 +221,35 @@ export default function ParentComplaintsPage() {
       let studentRows: Student[] = [];
       let instituteRows: Institute[] = [];
 
-      if (
-        profileData.role === "sheikh" &&
-        profileData.institute_id
-      ) {
+      if (profileData.role === "parent") {
+        const { data: parentStudents, error: studentsError } = await supabase
+          .from("students")
+          .select(
+            "id, full_name, student_code, institute_id, parent_id, is_active"
+          )
+          .eq("parent_id", userId)
+          .eq("is_active", true)
+          .order("full_name");
+
+        if (studentsError) {
+          console.error(studentsError);
+        } else {
+          studentRows = (parentStudents || []) as Student[];
+        }
+
+        const instituteIds = [
+          ...new Set(studentRows.map((student) => student.institute_id)),
+        ];
+
+        if (instituteIds.length > 0) {
+          const { data: instituteData } = await supabase
+            .from("institutes")
+            .select("id, name, code, directorate_id")
+            .in("id", instituteIds);
+
+          instituteRows = (instituteData || []) as Institute[];
+        }
+      } else if (profileData.role === "sheikh" && profileData.institute_id) {
         const { data: instituteData } = await supabase
           .from("institutes")
           .select("id, name, code, directorate_id")
@@ -429,35 +281,22 @@ export default function ParentComplaintsPage() {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (
-        profileData.role === "sheikh" &&
-        profileData.institute_id
-      ) {
-        query = query.eq(
-          "institute_id",
-          profileData.institute_id
-        );
+      if (profileData.role === "parent") {
+        query = query.eq("parent_id", userId);
+      } else if (profileData.role === "sheikh" && profileData.institute_id) {
+        query = query.eq("institute_id", profileData.institute_id);
       } else if (
         profileData.role === "director" &&
         profileData.directorate_id
       ) {
-        query = query.eq(
-          "directorate_id",
-          profileData.directorate_id
-        );
+        query = query.eq("directorate_id", profileData.directorate_id);
       } else if (profileData.role === "super_admin") {
         // Super admin sees all complaints.
       } else {
-        query = query.eq(
-          "id",
-          "00000000-0000-0000-0000-000000000000"
-        );
+        query = query.eq("id", "00000000-0000-0000-0000-000000000000");
       }
 
-      const {
-        data: complaintData,
-        error: complaintsError,
-      } = await query;
+      const { data: complaintData, error: complaintsError } = await query;
 
       if (complaintsError) {
         console.error(complaintsError);
@@ -467,13 +306,8 @@ export default function ParentComplaintsPage() {
 
       const rows = (complaintData || []) as Complaint[];
 
-      const studentIds = [
-        ...new Set(rows.map((row) => row.student_id)),
-      ];
-
-      const instituteIds = [
-        ...new Set(rows.map((row) => row.institute_id)),
-      ];
+      const studentIds = [...new Set(rows.map((row) => row.student_id))];
+      const instituteIds = [...new Set(rows.map((row) => row.institute_id))];
 
       let complaintStudents: Student[] = [];
       let complaintInstitutes: Institute[] = [];
@@ -492,9 +326,7 @@ export default function ParentComplaintsPage() {
       if (instituteIds.length > 0) {
         const { data } = await supabase
           .from("institutes")
-          .select(
-            "id, name, code, directorate_id"
-          )
+          .select("id, name, code, directorate_id")
           .in("id", instituteIds);
 
         complaintInstitutes = (data || []) as Institute[];
@@ -511,9 +343,6 @@ export default function ParentComplaintsPage() {
       }));
 
       setComplaints(enriched);
-    } catch (error) {
-      console.error(error);
-      setMessage("حدث خطأ غير متوقع أثناء تحميل البيانات.");
     } finally {
       setLoading(false);
     }
@@ -531,16 +360,11 @@ export default function ParentComplaintsPage() {
         !search ||
         complaint.title.toLowerCase().includes(search) ||
         complaint.description.toLowerCase().includes(search) ||
-        (complaint.student?.full_name || "")
-          .toLowerCase()
-          .includes(search) ||
-        (complaint.institute?.name || "")
-          .toLowerCase()
-          .includes(search);
+        (complaint.student?.full_name || "").toLowerCase().includes(search) ||
+        (complaint.institute?.name || "").toLowerCase().includes(search);
 
       const matchesStatus =
-        statusFilter === "all" ||
-        complaint.status === statusFilter;
+        statusFilter === "all" || complaint.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -551,15 +375,9 @@ export default function ParentComplaintsPage() {
       total: complaints.length,
       new: complaints.filter((c) => c.status === "new").length,
       processing: complaints.filter((c) =>
-        [
-          "under_review",
-          "in_progress",
-          "admin_review",
-        ].includes(c.status)
+        ["under_review", "in_progress", "admin_review"].includes(c.status)
       ).length,
-      escalated: complaints.filter(
-        (c) => c.status === "escalated"
-      ).length,
+      escalated: complaints.filter((c) => c.status === "escalated").length,
       resolved: complaints.filter((c) =>
         ["resolved", "admin_resolved"].includes(c.status)
       ).length,
@@ -592,31 +410,19 @@ export default function ParentComplaintsPage() {
       return;
     }
 
-    const student = students.find(
-      (item) => item.id === selectedStudentId
-    );
+    const student = students.find((item) => item.id === selectedStudentId);
 
     if (!student) {
       setMessage("لم يتم العثور على بيانات الطالب.");
       return;
     }
 
-    const parentNationalId =
-      typeof window !== "undefined"
-        ? window.sessionStorage.getItem(
-            "parent_national_id"
-          )
-        : null;
+    const institute = institutes.find(
+      (item) => item.id === student.institute_id
+    );
 
-    const parentEmail =
-      typeof window !== "undefined"
-        ? window.sessionStorage.getItem("parent_email")
-        : null;
-
-    if (!parentNationalId || !parentEmail) {
-      setMessage(
-        "انتهت جلسة ولي الأمر. يرجى تسجيل الدخول مرة أخرى."
-      );
+    if (!institute) {
+      setMessage("لم يتم العثور على المعهد المرتبط بالطالب.");
       return;
     }
 
@@ -624,52 +430,39 @@ export default function ParentComplaintsPage() {
       setSaving(true);
       setMessage("");
 
-      /*
-       * إرسال الشكوى من خلال RPC آمن.
-       *
-       * الـRPC يتحقق بنفسه أن:
-       * - الرقم القومي مرتبط بولي الأمر
-       * - البريد الإلكتروني صحيح
-       * - الطالب تابع لنفس ولي الأمر
-       */
-      const { data: resultRaw, error } =
-        await supabase.rpc(
-          "create_parent_complaint",
-          {
-            p_national_id: parentNationalId,
-            p_email: parentEmail,
-            p_student_id: student.id,
-            p_title: newTitle.trim(),
-            p_complaint_type: newType,
-            p_description: newDescription.trim(),
-            p_priority: newPriority,
-          }
-        );
+      const { data, error } = await supabase
+        .from("parent_complaints")
+        .insert({
+          parent_id: profile.id,
+          student_id: student.id,
+          institute_id: institute.id,
+          directorate_id: institute.directorate_id,
+          title: newTitle.trim(),
+          complaint_type: newType,
+          description: newDescription.trim(),
+          priority: newPriority,
+          status: "new",
+        })
+        .select()
+        .single();
 
       if (error) {
         console.error(error);
-        setMessage(
-          `تعذر إرسال الشكوى: ${error.message}`
-        );
+        setMessage(`تعذر إرسال الشكوى: ${error.message}`);
         return;
       }
 
-      const result = parseRpcResult(resultRaw);
-
-      if (!result?.success) {
-        setMessage(
-          result?.message || "تعذر إرسال الشكوى."
-        );
-        return;
-      }
+      await supabase.from("parent_complaint_updates").insert({
+        complaint_id: data.id,
+        actor_id: profile.id,
+        actor_role: profile.role,
+        action: "created",
+        note: "تم تقديم الشكوى بواسطة ولي الأمر.",
+      });
 
       setShowCreateModal(false);
       resetCreateForm();
-
-      setMessage(
-        "تم إرسال الشكوى بنجاح، وأصبحت ظاهرة للمعهد والإدارة."
-      );
-
+      setMessage("تم إرسال الشكوى بنجاح، وأصبحت ظاهرة للمعهد والإدارة.");
       await loadData();
     } finally {
       setSaving(false);
@@ -678,10 +471,7 @@ export default function ParentComplaintsPage() {
 
   function openInstituteModal(complaint: Complaint) {
     setSelectedComplaint(complaint);
-    setInstituteResponse(
-      complaint.institute_response || ""
-    );
-
+    setInstituteResponse(complaint.institute_response || "");
     setInstituteStatus(
       complaint.status === "new" ||
         complaint.status === "under_review" ||
@@ -690,11 +480,7 @@ export default function ParentComplaintsPage() {
         ? complaint.status
         : "new"
     );
-
-    setEscalationReason(
-      complaint.escalation_reason || ""
-    );
-
+    setEscalationReason(complaint.escalation_reason || "");
     setShowInstituteModal(true);
   }
 
@@ -712,10 +498,8 @@ export default function ParentComplaintsPage() {
 
       const updateData: Record<string, unknown> = {
         status: instituteStatus,
-        institute_response:
-          instituteResponse.trim(),
-        institute_responded_at:
-          new Date().toISOString(),
+        institute_response: instituteResponse.trim(),
+        institute_responded_at: new Date().toISOString(),
         institute_responded_by: profile.id,
         updated_at: new Date().toISOString(),
       };
@@ -727,30 +511,24 @@ export default function ParentComplaintsPage() {
 
       if (error) {
         console.error(error);
-        setMessage(
-          `تعذر تحديث الشكوى: ${error.message}`
-        );
+        setMessage(`تعذر تحديث الشكوى: ${error.message}`);
         return;
       }
 
-      await supabase
-        .from("parent_complaint_updates")
-        .insert({
-          complaint_id: selectedComplaint.id,
-          actor_id: profile.id,
-          actor_role: profile.role,
-          action:
-            instituteStatus === "resolved"
-              ? "resolved_by_institute"
-              : "institute_response",
-          note: instituteResponse.trim(),
-        });
+      await supabase.from("parent_complaint_updates").insert({
+        complaint_id: selectedComplaint.id,
+        actor_id: profile.id,
+        actor_role: profile.role,
+        action:
+          instituteStatus === "resolved"
+            ? "resolved_by_institute"
+            : "institute_response",
+        note: instituteResponse.trim(),
+      });
 
       setShowInstituteModal(false);
       setSelectedComplaint(null);
-
       setMessage("تم تحديث الشكوى بنجاح.");
-
       await loadData();
     } finally {
       setSaving(false);
@@ -761,9 +539,7 @@ export default function ParentComplaintsPage() {
     if (!profile || !selectedComplaint) return;
 
     if (!escalationReason.trim()) {
-      setMessage(
-        "من فضلك اكتبي سبب التصعيد إلى مدير الإدارة."
-      );
+      setMessage("من فضلك اكتبي سبب التصعيد إلى مدير الإدارة.");
       return;
     }
 
@@ -777,38 +553,29 @@ export default function ParentComplaintsPage() {
           status: "escalated",
           escalated_at: new Date().toISOString(),
           escalated_by: profile.id,
-          escalation_reason:
-            escalationReason.trim(),
+          escalation_reason: escalationReason.trim(),
           updated_at: new Date().toISOString(),
         })
         .eq("id", selectedComplaint.id);
 
       if (error) {
         console.error(error);
-        setMessage(
-          `تعذر تصعيد الشكوى: ${error.message}`
-        );
+        setMessage(`تعذر تصعيد الشكوى: ${error.message}`);
         return;
       }
 
-      await supabase
-        .from("parent_complaint_updates")
-        .insert({
-          complaint_id: selectedComplaint.id,
-          actor_id: profile.id,
-          actor_role: profile.role,
-          action: "escalated_to_director",
-          note: escalationReason.trim(),
-        });
+      await supabase.from("parent_complaint_updates").insert({
+        complaint_id: selectedComplaint.id,
+        actor_id: profile.id,
+        actor_role: profile.role,
+        action: "escalated_to_director",
+        note: escalationReason.trim(),
+      });
 
       setShowInstituteModal(false);
       setSelectedComplaint(null);
       setEscalationReason("");
-
-      setMessage(
-        "تم تصعيد الشكوى إلى مدير الإدارة."
-      );
-
+      setMessage("تم تصعيد الشكوى إلى مدير الإدارة.");
       await loadData();
     } finally {
       setSaving(false);
@@ -817,27 +584,20 @@ export default function ParentComplaintsPage() {
 
   function openAdminModal(complaint: Complaint) {
     setSelectedComplaint(complaint);
-    setAdminResponse(
-      complaint.admin_response || ""
-    );
-
+    setAdminResponse(complaint.admin_response || "");
     setAdminStatus(
       complaint.status === "admin_resolved"
         ? "admin_resolved"
         : "admin_review"
     );
-
     setShowAdminModal(true);
   }
 
   async function updateAdminComplaint() {
-    if (!profile || !selectedComplaint || !isDirector)
-      return;
+    if (!profile || !selectedComplaint || !isDirector) return;
 
     if (!adminResponse.trim()) {
-      setMessage(
-        "من فضلك اكتبي رد مدير الإدارة."
-      );
+      setMessage("من فضلك اكتبي رد مدير الإدارة.");
       return;
     }
 
@@ -849,10 +609,8 @@ export default function ParentComplaintsPage() {
         .from("parent_complaints")
         .update({
           status: adminStatus,
-          admin_response:
-            adminResponse.trim(),
-          admin_responded_at:
-            new Date().toISOString(),
+          admin_response: adminResponse.trim(),
+          admin_responded_at: new Date().toISOString(),
           admin_responded_by: profile.id,
           updated_at: new Date().toISOString(),
         })
@@ -860,144 +618,106 @@ export default function ParentComplaintsPage() {
 
       if (error) {
         console.error(error);
-        setMessage(
-          `تعذر حفظ إجراء مدير الإدارة: ${error.message}`
-        );
+        setMessage(`تعذر حفظ إجراء مدير الإدارة: ${error.message}`);
         return;
       }
 
-      await supabase
-        .from("parent_complaint_updates")
-        .insert({
-          complaint_id: selectedComplaint.id,
-          actor_id: profile.id,
-          actor_role: profile.role,
-          action:
-            adminStatus === "admin_resolved"
-              ? "admin_resolved"
-              : "admin_review",
-          note: adminResponse.trim(),
-        });
+      await supabase.from("parent_complaint_updates").insert({
+        complaint_id: selectedComplaint.id,
+        actor_id: profile.id,
+        actor_role: profile.role,
+        action:
+          adminStatus === "admin_resolved"
+            ? "admin_resolved"
+            : "admin_review",
+        note: adminResponse.trim(),
+      });
 
       setShowAdminModal(false);
       setSelectedComplaint(null);
-
-      setMessage(
-        "تم حفظ إجراء مدير الإدارة."
-      );
-
+      setMessage("تم حفظ إجراء مدير الإدارة.");
       await loadData();
     } finally {
       setSaving(false);
     }
   }
 
-  async function requestFollowUp(
-    complaint: Complaint
-  ) {
+  async function requestFollowUp(complaint: Complaint) {
     if (!profile || !isParent) return;
-
-    const parentNationalId =
-      typeof window !== "undefined"
-        ? window.sessionStorage.getItem(
-            "parent_national_id"
-          )
-        : null;
-
-    const parentEmail =
-      typeof window !== "undefined"
-        ? window.sessionStorage.getItem(
-            "parent_email"
-          )
-        : null;
-
-    if (!parentNationalId || !parentEmail) {
-      setMessage(
-        "انتهت جلسة ولي الأمر. يرجى تسجيل الدخول مرة أخرى."
-      );
-      return;
-    }
 
     try {
       setSaving(true);
       setMessage("");
 
-      /*
-       * طلب المتابعة أيضًا يتم من خلال RPC
-       * حتى لا يستطيع ولي الأمر تعديل شكوى لا تخصه.
-       */
-      const { data: resultRaw, error } =
-        await supabase.rpc(
-          "parent_request_follow_up",
-          {
-            p_national_id: parentNationalId,
-            p_email: parentEmail,
-            p_complaint_id: complaint.id,
-          }
-        );
+      const { error } = await supabase
+        .from("parent_complaints")
+        .update({
+          parent_follow_up_requested: true,
+          parent_follow_up_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", complaint.id)
+        .eq("parent_id", profile.id);
 
       if (error) {
         console.error(error);
-        setMessage(
-          `تعذر تسجيل طلب المتابعة: ${error.message}`
-        );
+        setMessage(`تعذر تسجيل طلب المتابعة: ${error.message}`);
         return;
       }
 
-      const result = parseRpcResult(resultRaw);
+      await supabase.from("parent_complaint_updates").insert({
+        complaint_id: complaint.id,
+        actor_id: profile.id,
+        actor_role: profile.role,
+        action: "parent_follow_up",
+        note: "طلب ولي الأمر متابعة الشكوى.",
+      });
 
-      if (!result?.success) {
-        setMessage(
-          result?.message ||
-            "تعذر تسجيل طلب المتابعة."
-        );
-        return;
-      }
-
-      setMessage(
-        "تم تسجيل طلب المتابعة."
-      );
-
+      setMessage("تم تسجيل طلب المتابعة.");
       await loadData();
     } finally {
       setSaving(false);
     }
   }
 
-  function getStatusDescription(
-    status: Complaint["status"]
-  ) {
+  function getStatusDescription(status: Complaint["status"]) {
     switch (status) {
       case "new":
         return "تم استلام الشكوى ولم تبدأ المعالجة بعد.";
-
       case "under_review":
         return "المعهد يراجع تفاصيل الشكوى.";
-
       case "in_progress":
         return "المعهد يعمل حاليًا على معالجة الشكوى.";
-
       case "resolved":
         return "تم حل الشكوى بواسطة المعهد.";
-
       case "escalated":
         return "تم تصعيد الشكوى إلى مدير الإدارة للتدخل الرسمي.";
-
       case "admin_review":
         return "مدير الإدارة يراجع الشكوى ويتخذ الإجراء المناسب.";
-
       case "admin_resolved":
         return "تم إغلاق الشكوى بإجراء من مدير الإدارة.";
     }
   }
 
-  return (
-    <div
-      dir="rtl"
-      className="min-h-screen bg-slate-50 p-4 md:p-6"
-    >
-      <div className="mx-auto max-w-7xl space-y-6">
+  function handlePrintParentComplaints() {
+    if (filteredComplaints.length === 0) { alert("لا توجد شكاوى مطابقة للفلاتر الحالية للطباعة."); return; }
+    const escapeHtml = (value: unknown) => String(value ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;");
+    const total = filteredComplaints.length;
+    const newCount = filteredComplaints.filter(c => c.status === "new").length;
+    const processingCount = filteredComplaints.filter(c => ["under_review","in_progress","admin_review"].includes(c.status)).length;
+    const escalatedCount = filteredComplaints.filter(c => c.status === "escalated").length;
+    const resolvedCount = filteredComplaints.filter(c => ["resolved","admin_resolved"].includes(c.status)).length;
+    const filterText = statusFilter !== "all" ? `الحالة: ${escapeHtml(statusLabels[statusFilter as Complaint["status"]] || statusFilter)}${searchTerm.trim() ? ` — البحث: ${escapeHtml(searchTerm.trim())}` : ""}` : (searchTerm.trim() ? `البحث: ${escapeHtml(searchTerm.trim())}` : "بدون فلاتر إضافية");
+    const rows = filteredComplaints.map((c,i) => `<tr><td>${i+1}</td><td class="title-cell">${escapeHtml(c.title)}</td><td>${escapeHtml(c.student?.full_name || "—")}</td><td>${escapeHtml(c.institute?.name || "—")}</td><td>${escapeHtml(priorityLabels[c.priority])}</td><td>${escapeHtml(statusLabels[c.status])}</td><td>${escapeHtml(c.complaint_type)}</td><td>${escapeHtml(formatDate(c.created_at))}</td><td>${escapeHtml(formatDate(c.updated_at))}</td></tr>`).join("");
+    const w = window.open("", "_blank", "width=1400,height=900");
+    if (!w) { alert("تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة للموقع."); return; }
+    w.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>تقرير شكاوى أولياء الأمور</title><style>@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#111827;font-family:Arial,Tahoma,"Segoe UI",sans-serif;direction:rtl}.header{border-bottom:3px solid #111827;padding-bottom:14px;margin-bottom:16px}.title{margin:0 0 5px;font-size:24px;font-weight:800}.subtitle{margin:0;color:#475569;font-size:14px}.meta,.stats{display:grid;gap:10px;margin-bottom:14px}.meta{grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:repeat(5,1fr)}.box,.stat{border:1px solid #cbd5e1;border-radius:8px;padding:10px;background:#f8fafc}.label{font-size:11px;color:#64748b;margin-bottom:4px}.value{font-size:13px;font-weight:700}.stat{text-align:center;background:#fff}.number{font-size:20px;font-weight:800}.stat-label{font-size:11px;color:#64748b;margin-top:3px}.filters{margin-bottom:14px;padding:9px 12px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:8px;font-size:12px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #cbd5e1;padding:7px 6px;font-size:9.5px;vertical-align:middle;text-align:right;word-break:break-word}th{background:#e2e8f0;font-weight:800}tbody tr:nth-child(even){background:#f8fafc}th:first-child,td:first-child{width:4%;text-align:center}.title-cell{width:20%;font-weight:700}.footer{margin-top:15px;padding-top:9px;border-top:1px solid #cbd5e1;display:flex;justify-content:space-between;font-size:10px;color:#64748b}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><div class="header"><h1 class="title">نظام إدارة المعاهد الأزهرية</h1><p class="subtitle">تقرير شكاوى أولياء الأمور</p></div><div class="meta"><div class="box"><div class="label">الفلاتر الحالية</div><div class="value">${filterText}</div></div><div class="box"><div class="label">تاريخ الطباعة</div><div class="value">${escapeHtml(formatDate(new Date().toISOString()))}</div></div></div><div class="stats"><div class="stat"><div class="number">${total}</div><div class="stat-label">إجمالي النتائج</div></div><div class="stat"><div class="number">${newCount}</div><div class="stat-label">جديدة</div></div><div class="stat"><div class="number">${processingCount}</div><div class="stat-label">قيد المعالجة</div></div><div class="stat"><div class="number">${escalatedCount}</div><div class="stat-label">مصعدة للمدير</div></div><div class="stat"><div class="number">${resolvedCount}</div><div class="stat-label">تم الحل</div></div></div><div class="filters"><strong>نطاق البيانات المطبوعة:</strong> ${filterText}</div><table><thead><tr><th>م</th><th>عنوان الشكوى</th><th>الطالب</th><th>المعهد</th><th>الأولوية</th><th>الحالة</th><th>النوع</th><th>تاريخ الإنشاء</th><th>آخر تحديث</th></tr></thead><tbody>${rows}</tbody></table><div class="footer"><span>نظام إدارة المعاهد الأزهرية</span><span>عدد السجلات المطبوعة: ${total}</span></div></body></html>`);
+    w.document.close(); setTimeout(() => { w.focus(); w.print(); }, 400);
+  }
 
+  return (
+    <div dir="rtl" className="min-h-screen bg-slate-50 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         {/* Header */}
         <div className="rounded-3xl bg-gradient-to-l from-indigo-700 via-indigo-600 to-blue-600 p-6 text-white shadow-lg">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
@@ -1011,9 +731,9 @@ export default function ParentComplaintsPage() {
                   <h1 className="text-2xl font-bold">
                     شكاوى أولياء الأمور
                   </h1>
-
                   <p className="mt-1 text-sm text-blue-100">
-                    متابعة الشكوى من ولي الأمر حتى المعهد ثم مدير الإدارة عند الحاجة
+                    متابعة الشكوى من ولي الأمر حتى المعهد ثم مدير الإدارة عند
+                    الحاجة
                   </p>
                 </div>
               </div>
@@ -1091,9 +811,7 @@ export default function ParentComplaintsPage() {
 
               <input
                 value={searchTerm}
-                onChange={(e) =>
-                  setSearchTerm(e.target.value)
-                }
+                onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="بحث بعنوان الشكوى أو الطالب أو المعهد..."
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-4 pr-11 outline-none transition focus:border-indigo-400 focus:bg-white"
               />
@@ -1101,29 +819,29 @@ export default function ParentComplaintsPage() {
 
             <select
               value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value)
-              }
+              onChange={(e) => setStatusFilter(e.target.value)}
               className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-indigo-400"
             >
               <option value="all">كل الحالات</option>
-
-              {Object.entries(statusLabels).map(
-                ([value, label]) => (
-                  <option
-                    key={value}
-                    value={value}
-                  >
-                    {label}
-                  </option>
-                )
-              )}
+              {Object.entries(statusLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
             </select>
 
             <button
+              onClick={handlePrintParentComplaints}
+              disabled={loading || filteredComplaints.length === 0}
+              className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Printer size={18} />
+              طباعة
+            </button>
+
+            <button
               onClick={loadData}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               <RefreshCw size={18} />
               تحديث
@@ -1183,7 +901,6 @@ export default function ParentComplaintsPage() {
                 size={44}
                 className="mb-3 text-slate-300"
               />
-
               <p className="font-semibold text-slate-700">
                 لا توجد شكاوى لعرضها
               </p>
@@ -1199,198 +916,134 @@ export default function ParentComplaintsPage() {
               <table className="w-full min-w-[1000px] text-right">
                 <thead className="bg-slate-50 text-sm text-slate-600">
                   <tr>
-                    <th className="px-5 py-4">
-                      الشكوى
-                    </th>
-
-                    <th className="px-5 py-4">
-                      الطالب
-                    </th>
-
-                    <th className="px-5 py-4">
-                      المعهد
-                    </th>
-
-                    <th className="px-5 py-4">
-                      الأولوية
-                    </th>
-
-                    <th className="px-5 py-4">
-                      الحالة
-                    </th>
-
-                    <th className="px-5 py-4">
-                      التاريخ
-                    </th>
-
-                    <th className="px-5 py-4">
-                      إجراء
-                    </th>
+                    <th className="px-5 py-4">الشكوى</th>
+                    <th className="px-5 py-4">الطالب</th>
+                    <th className="px-5 py-4">المعهد</th>
+                    <th className="px-5 py-4">الأولوية</th>
+                    <th className="px-5 py-4">الحالة</th>
+                    <th className="px-5 py-4">التاريخ</th>
+                    <th className="px-5 py-4">إجراء</th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {filteredComplaints.map(
-                    (complaint) => (
-                      <tr
-                        key={complaint.id}
-                        className="transition hover:bg-slate-50"
-                      >
-                        <td className="px-5 py-4">
+                  {filteredComplaints.map((complaint) => (
+                    <tr
+                      key={complaint.id}
+                      className="transition hover:bg-slate-50"
+                    >
+                      <td className="px-5 py-4">
+                        <div>
+                          <p className="font-bold text-slate-900">
+                            {complaint.title}
+                          </p>
+
+                          <p className="mt-1 max-w-xs truncate text-sm text-slate-500">
+                            {complaint.description}
+                          </p>
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <UserRound size={17} className="text-slate-400" />
                           <div>
-                            <p className="font-bold text-slate-900">
-                              {complaint.title}
+                            <p className="font-semibold text-slate-800">
+                              {complaint.student?.full_name || "—"}
                             </p>
 
-                            <p className="mt-1 max-w-xs truncate text-sm text-slate-500">
-                              {complaint.description}
-                            </p>
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2">
-                            <UserRound
-                              size={17}
-                              className="text-slate-400"
-                            />
-
-                            <div>
-                              <p className="font-semibold text-slate-800">
-                                {complaint.student?.full_name ||
-                                  "—"}
+                            {complaint.student?.student_code && (
+                              <p className="text-xs text-slate-500">
+                                {complaint.student.student_code}
                               </p>
-
-                              {complaint.student
-                                ?.student_code && (
-                                <p className="text-xs text-slate-500">
-                                  {
-                                    complaint.student
-                                      .student_code
-                                  }
-                                </p>
-                              )}
-                            </div>
+                            )}
                           </div>
-                        </td>
+                        </div>
+                      </td>
 
-                        <td className="px-5 py-4 text-sm text-slate-700">
-                          {complaint.institute?.name ||
-                            "—"}
-                        </td>
+                      <td className="px-5 py-4 text-sm text-slate-700">
+                        {complaint.institute?.name || "—"}
+                      </td>
 
-                        <td className="px-5 py-4">
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                            {
-                              priorityLabels[
-                                complaint.priority
-                              ]
-                            }
-                          </span>
-                        </td>
+                      <td className="px-5 py-4">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                          {priorityLabels[complaint.priority]}
+                        </span>
+                      </td>
 
-                        <td className="px-5 py-4">
-                          <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusClasses[complaint.status]}`}
+                      <td className="px-5 py-4">
+                        <span
+                          className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusClasses[complaint.status]}`}
+                        >
+                          {statusLabels[complaint.status]}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 text-xs text-slate-500">
+                        {formatDate(complaint.created_at)}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setSelectedComplaint(complaint)}
+                            className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                           >
-                            {
-                              statusLabels[
-                                complaint.status
-                              ]
-                            }
-                          </span>
-                        </td>
+                            <Eye size={15} />
+                            التفاصيل
+                          </button>
 
-                        <td className="px-5 py-4 text-xs text-slate-500">
-                          {formatDate(
-                            complaint.created_at
-                          )}
-                        </td>
+                          {isInstituteUser &&
+                            !["resolved", "escalated", "admin_review", "admin_resolved"].includes(
+                              complaint.status
+                            ) && (
+                              <button
+                                onClick={() =>
+                                  openInstituteModal(complaint)
+                                }
+                                className="flex items-center gap-1 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700"
+                              >
+                                متابعة المعهد
+                              </button>
+                            )}
 
-                        <td className="px-5 py-4">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() =>
-                                setSelectedComplaint(
-                                  complaint
-                                )
-                              }
-                              className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                              <Eye size={15} />
-                              التفاصيل
-                            </button>
+                          {isDirector &&
+                            ["escalated", "admin_review"].includes(
+                              complaint.status
+                            ) && (
+                              <button
+                                onClick={() => openAdminModal(complaint)}
+                                className="flex items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700"
+                              >
+                                <ShieldCheck size={15} />
+                                تدخل المدير
+                              </button>
+                            )}
 
-                            {isInstituteUser &&
-                              ![
-                                "resolved",
-                                "escalated",
-                                "admin_review",
-                                "admin_resolved",
-                              ].includes(
-                                complaint.status
-                              ) && (
-                                <button
-                                  onClick={() =>
-                                    openInstituteModal(
-                                      complaint
-                                    )
-                                  }
-                                  className="flex items-center gap-1 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700"
-                                >
-                                  متابعة المعهد
-                                </button>
-                              )}
-
-                            {isDirector &&
-                              [
-                                "escalated",
-                                "admin_review",
-                              ].includes(
-                                complaint.status
-                              ) && (
-                                <button
-                                  onClick={() =>
-                                    openAdminModal(
-                                      complaint
-                                    )
-                                  }
-                                  className="flex items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700"
-                                >
-                                  <ShieldCheck
-                                    size={15}
-                                  />
-                                  تدخل المدير
-                                </button>
-                              )}
-
-                            {isParent &&
-                              complaint.status !==
-                                "admin_resolved" && (
-                                <button
-                                  onClick={() =>
-                                    requestFollowUp(
-                                      complaint
-                                    )
-                                  }
-                                  disabled={
-                                    complaint.parent_follow_up_requested ||
-                                    saving
-                                  }
-                                  className="flex items-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  <Send size={14} />
-
-                                  {complaint.parent_follow_up_requested
-                                    ? "تم طلب المتابعة"
-                                    : "طلب متابعة"}
-                                </button>
-                              )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  )}
+                          {isParent &&
+                            !["admin_resolved"].includes(
+                              complaint.status
+                            ) && (
+                              <button
+                                onClick={() =>
+                                  requestFollowUp(complaint)
+                                }
+                                disabled={
+                                  complaint.parent_follow_up_requested ||
+                                  saving
+                                }
+                                className="flex items-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <Send size={14} />
+                                {complaint.parent_follow_up_requested
+                                  ? "تم طلب المتابعة"
+                                  : "طلب متابعة"}
+                              </button>
+                            )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1404,9 +1057,7 @@ export default function ParentComplaintsPage() {
         !showAdminModal && (
           <Modal
             title="تفاصيل الشكوى"
-            onClose={() =>
-              setSelectedComplaint(null)
-            }
+            onClose={() => setSelectedComplaint(null)}
           >
             <div className="space-y-5">
               <div>
@@ -1418,43 +1069,28 @@ export default function ParentComplaintsPage() {
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-bold ${statusClasses[selectedComplaint.status]}`}
                   >
-                    {
-                      statusLabels[
-                        selectedComplaint.status
-                      ]
-                    }
+                    {statusLabels[selectedComplaint.status]}
                   </span>
 
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                     الأولوية:{" "}
-                    {
-                      priorityLabels[
-                        selectedComplaint.priority
-                      ]
-                    }
+                    {priorityLabels[selectedComplaint.priority]}
                   </span>
 
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    النوع:{" "}
-                    {selectedComplaint.complaint_type}
+                    النوع: {selectedComplaint.complaint_type}
                   </span>
                 </div>
               </div>
 
               <InfoBox
                 label="الطالب"
-                value={
-                  selectedComplaint.student
-                    ?.full_name || "—"
-                }
+                value={selectedComplaint.student?.full_name || "—"}
               />
 
               <InfoBox
                 label="المعهد"
-                value={
-                  selectedComplaint.institute
-                    ?.name || "—"
-                }
+                value={selectedComplaint.institute?.name || "—"}
               />
 
               <div>
@@ -1471,11 +1107,8 @@ export default function ParentComplaintsPage() {
                 <p className="mb-1 text-sm font-bold text-blue-900">
                   حالة الشكوى
                 </p>
-
                 <p className="text-sm leading-6 text-blue-800">
-                  {getStatusDescription(
-                    selectedComplaint.status
-                  )}
+                  {getStatusDescription(selectedComplaint.status)}
                 </p>
               </div>
 
@@ -1484,17 +1117,11 @@ export default function ParentComplaintsPage() {
                   <p className="mb-2 font-bold text-indigo-900">
                     رد المعهد
                   </p>
-
                   <p className="whitespace-pre-wrap text-sm leading-7 text-indigo-800">
-                    {
-                      selectedComplaint.institute_response
-                    }
+                    {selectedComplaint.institute_response}
                   </p>
-
                   <p className="mt-2 text-xs text-indigo-500">
-                    {formatDate(
-                      selectedComplaint.institute_responded_at
-                    )}
+                    {formatDate(selectedComplaint.institute_responded_at)}
                   </p>
                 </div>
               )}
@@ -1504,17 +1131,11 @@ export default function ParentComplaintsPage() {
                   <p className="mb-2 font-bold text-red-900">
                     سبب التصعيد
                   </p>
-
                   <p className="whitespace-pre-wrap text-sm leading-7 text-red-800">
-                    {
-                      selectedComplaint.escalation_reason
-                    }
+                    {selectedComplaint.escalation_reason}
                   </p>
-
                   <p className="mt-2 text-xs text-red-500">
-                    {formatDate(
-                      selectedComplaint.escalated_at
-                    )}
+                    {formatDate(selectedComplaint.escalated_at)}
                   </p>
                 </div>
               )}
@@ -1524,24 +1145,18 @@ export default function ParentComplaintsPage() {
                   <p className="mb-2 font-bold text-emerald-900">
                     إجراء مدير الإدارة
                   </p>
-
                   <p className="whitespace-pre-wrap text-sm leading-7 text-emerald-800">
                     {selectedComplaint.admin_response}
                   </p>
-
                   <p className="mt-2 text-xs text-emerald-600">
-                    {formatDate(
-                      selectedComplaint.admin_responded_at
-                    )}
+                    {formatDate(selectedComplaint.admin_responded_at)}
                   </p>
                 </div>
               )}
 
               <div className="flex justify-end">
                 <button
-                  onClick={() =>
-                    setSelectedComplaint(null)
-                  }
+                  onClick={() => setSelectedComplaint(null)}
                   className="rounded-xl border border-slate-200 px-5 py-2.5 font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   إغلاق
@@ -1568,22 +1183,13 @@ export default function ParentComplaintsPage() {
 
               <select
                 value={selectedStudentId}
-                onChange={(e) =>
-                  setSelectedStudentId(
-                    e.target.value
-                  )
-                }
+                onChange={(e) => setSelectedStudentId(e.target.value)}
                 className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
               >
-                <option value="">
-                  اختاري الطالب
-                </option>
+                <option value="">اختاري الطالب</option>
 
                 {students.map((student) => (
-                  <option
-                    key={student.id}
-                    value={student.id}
-                  >
+                  <option key={student.id} value={student.id}>
                     {student.full_name}
                     {student.student_code
                       ? ` — ${student.student_code}`
@@ -1600,9 +1206,7 @@ export default function ParentComplaintsPage() {
 
               <input
                 value={newTitle}
-                onChange={(e) =>
-                  setNewTitle(e.target.value)
-                }
+                onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="مثال: مشكلة في متابعة الحضور"
                 className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
               />
@@ -1616,18 +1220,12 @@ export default function ParentComplaintsPage() {
 
                 <select
                   value={newType}
-                  onChange={(e) =>
-                    setNewType(e.target.value)
-                  }
+                  onChange={(e) => setNewType(e.target.value)}
                   className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
                 >
-                  {complaintTypes.map(
-                    (type) => (
-                      <option key={type}>
-                        {type}
-                      </option>
-                    )
-                  )}
+                  {complaintTypes.map((type) => (
+                    <option key={type}>{type}</option>
+                  ))}
                 </select>
               </div>
 
@@ -1645,21 +1243,10 @@ export default function ParentComplaintsPage() {
                   }
                   className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
                 >
-                  <option value="low">
-                    منخفضة
-                  </option>
-
-                  <option value="normal">
-                    عادية
-                  </option>
-
-                  <option value="high">
-                    عالية
-                  </option>
-
-                  <option value="urgent">
-                    عاجلة
-                  </option>
+                  <option value="low">منخفضة</option>
+                  <option value="normal">عادية</option>
+                  <option value="high">عالية</option>
+                  <option value="urgent">عاجلة</option>
                 </select>
               </div>
             </div>
@@ -1671,11 +1258,7 @@ export default function ParentComplaintsPage() {
 
               <textarea
                 value={newDescription}
-                onChange={(e) =>
-                  setNewDescription(
-                    e.target.value
-                  )
-                }
+                onChange={(e) => setNewDescription(e.target.value)}
                 rows={6}
                 placeholder="اكتبي تفاصيل المشكلة بوضوح..."
                 className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
@@ -1683,9 +1266,8 @@ export default function ParentComplaintsPage() {
             </div>
 
             <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
-              سيتم إرسال الشكوى مباشرة إلى المعهد،
-              وستكون مرئية أيضًا لمدير الإدارة للمتابعة.
-              تدخل المدير الرسمي يبدأ فقط عند تصعيد الشكوى
+              سيتم إرسال الشكوى مباشرة إلى المعهد، وستكون مرئية أيضًا لمدير
+              الإدارة للمتابعة. تدخل المدير الرسمي يبدأ فقط عند تصعيد الشكوى
               من المعهد.
             </div>
 
@@ -1706,10 +1288,7 @@ export default function ParentComplaintsPage() {
                 className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 font-bold text-white disabled:opacity-50"
               >
                 <Send size={17} />
-
-                {saving
-                  ? "جارٍ الإرسال..."
-                  : "إرسال الشكوى"}
+                {saving ? "جارٍ الإرسال..." : "إرسال الشكوى"}
               </button>
             </div>
           </div>
@@ -1717,258 +1296,215 @@ export default function ParentComplaintsPage() {
       )}
 
       {/* Institute Modal */}
-      {showInstituteModal &&
-        selectedComplaint && (
-          <Modal
-            title="متابعة الشكوى من المعهد"
-            onClose={() => {
-              setShowInstituteModal(false);
-              setSelectedComplaint(null);
-            }}
-          >
-            <div className="space-y-5">
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="font-bold text-slate-900">
-                  {selectedComplaint.title}
-                </p>
+      {showInstituteModal && selectedComplaint && (
+        <Modal
+          title="متابعة الشكوى من المعهد"
+          onClose={() => {
+            setShowInstituteModal(false);
+            setSelectedComplaint(null);
+          }}
+        >
+          <div className="space-y-5">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="font-bold text-slate-900">
+                {selectedComplaint.title}
+              </p>
 
-                <p className="mt-2 text-sm text-slate-600">
-                  الطالب:{" "}
-                  <span className="font-semibold">
-                    {
-                      selectedComplaint.student
-                        ?.full_name || "—"
-                    }
-                  </span>
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">
-                  حالة المعالجة
-                </label>
-
-                <select
-                  value={instituteStatus}
-                  onChange={(e) =>
-                    setInstituteStatus(
-                      e.target.value as
-                        | "new"
-                        | "under_review"
-                        | "in_progress"
-                        | "resolved"
-                    )
-                  }
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
-                >
-                  <option value="new">
-                    جديدة
-                  </option>
-
-                  <option value="under_review">
-                    قيد المراجعة
-                  </option>
-
-                  <option value="in_progress">
-                    قيد المعالجة
-                  </option>
-
-                  <option value="resolved">
-                    تم الحل
-                  </option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">
-                  رد المعهد
-                </label>
-
-                <textarea
-                  value={instituteResponse}
-                  onChange={(e) =>
-                    setInstituteResponse(
-                      e.target.value
-                    )
-                  }
-                  rows={5}
-                  placeholder="اكتبي ما تم اتخاذه من إجراءات..."
-                  className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
-                />
-              </div>
-
-              <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
-                <p className="mb-2 font-bold text-red-900">
-                  تصعيد إلى مدير الإدارة
-                </p>
-
-                <p className="mb-3 text-sm leading-6 text-red-700">
-                  استخدمي التصعيد فقط إذا تعذر على
-                  المعهد حل المشكلة.
-                </p>
-
-                <textarea
-                  value={escalationReason}
-                  onChange={(e) =>
-                    setEscalationReason(
-                      e.target.value
-                    )
-                  }
-                  rows={3}
-                  placeholder="سبب التصعيد..."
-                  className="w-full resize-none rounded-2xl border border-red-200 bg-white px-4 py-3 outline-none focus:border-red-400"
-                />
-
-                <button
-                  onClick={escalateComplaint}
-                  disabled={saving}
-                  className="mt-3 flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-                >
-                  <ArrowUpCircle size={17} />
-                  تصعيد إلى مدير الإدارة
-                </button>
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setShowInstituteModal(false);
-                    setSelectedComplaint(null);
-                  }}
-                  className="rounded-xl border border-slate-200 px-5 py-2.5 font-semibold text-slate-700"
-                >
-                  إلغاء
-                </button>
-
-                <button
-                  onClick={updateInstituteComplaint}
-                  disabled={saving}
-                  className="rounded-xl bg-indigo-600 px-5 py-2.5 font-bold text-white disabled:opacity-50"
-                >
-                  {saving
-                    ? "جارٍ الحفظ..."
-                    : "حفظ تحديث المعهد"}
-                </button>
-              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                الطالب:{" "}
+                <span className="font-semibold">
+                  {selectedComplaint.student?.full_name || "—"}
+                </span>
+              </p>
             </div>
-          </Modal>
-        )}
+
+            <div>
+              <label className="mb-2 block text-sm font-bold text-slate-700">
+                حالة المعالجة
+              </label>
+
+              <select
+                value={instituteStatus}
+                onChange={(e) =>
+                  setInstituteStatus(
+                    e.target.value as
+                      | "new"
+                      | "under_review"
+                      | "in_progress"
+                      | "resolved"
+                  )
+                }
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
+              >
+                <option value="new">جديدة</option>
+                <option value="under_review">قيد المراجعة</option>
+                <option value="in_progress">قيد المعالجة</option>
+                <option value="resolved">تم الحل</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold text-slate-700">
+                رد المعهد
+              </label>
+
+              <textarea
+                value={instituteResponse}
+                onChange={(e) => setInstituteResponse(e.target.value)}
+                rows={5}
+                placeholder="اكتبي ما تم اتخاذه من إجراءات..."
+                className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-indigo-400"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
+              <p className="mb-2 font-bold text-red-900">
+                تصعيد إلى مدير الإدارة
+              </p>
+
+              <p className="mb-3 text-sm leading-6 text-red-700">
+                استخدمي التصعيد فقط إذا تعذر على المعهد حل المشكلة.
+              </p>
+
+              <textarea
+                value={escalationReason}
+                onChange={(e) => setEscalationReason(e.target.value)}
+                rows={3}
+                placeholder="سبب التصعيد..."
+                className="w-full resize-none rounded-2xl border border-red-200 bg-white px-4 py-3 outline-none focus:border-red-400"
+              />
+
+              <button
+                onClick={escalateComplaint}
+                disabled={saving}
+                className="mt-3 flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+              >
+                <ArrowUpCircle size={17} />
+                تصعيد إلى مدير الإدارة
+              </button>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowInstituteModal(false);
+                  setSelectedComplaint(null);
+                }}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 font-semibold text-slate-700"
+              >
+                إلغاء
+              </button>
+
+              <button
+                onClick={updateInstituteComplaint}
+                disabled={saving}
+                className="rounded-xl bg-indigo-600 px-5 py-2.5 font-bold text-white disabled:opacity-50"
+              >
+                {saving ? "جارٍ الحفظ..." : "حفظ تحديث المعهد"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Admin Modal */}
-      {showAdminModal &&
-        selectedComplaint && (
-          <Modal
-            title="تدخل مدير الإدارة"
-            onClose={() => {
-              setShowAdminModal(false);
-              setSelectedComplaint(null);
-            }}
-          >
-            <div className="space-y-5">
-              <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
-                <div className="flex items-center gap-2 font-bold text-red-900">
-                  <ShieldCheck size={20} />
-                  شكوى تم تصعيدها رسميًا
-                </div>
-
-                <p className="mt-2 text-sm leading-6 text-red-800">
-                  {selectedComplaint.escalation_reason ||
-                    "تم تصعيد الشكوى من المعهد."}
-                </p>
+      {showAdminModal && selectedComplaint && (
+        <Modal
+          title="تدخل مدير الإدارة"
+          onClose={() => {
+            setShowAdminModal(false);
+            setSelectedComplaint(null);
+          }}
+        >
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
+              <div className="flex items-center gap-2 font-bold text-red-900">
+                <ShieldCheck size={20} />
+                شكوى تم تصعيدها رسميًا
               </div>
 
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="font-bold text-slate-900">
-                  {selectedComplaint.title}
-                </p>
-
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {selectedComplaint.description}
-                </p>
-              </div>
-
-              {selectedComplaint.institute_response && (
-                <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
-                  <p className="mb-2 font-bold text-indigo-900">
-                    رد المعهد
-                  </p>
-
-                  <p className="whitespace-pre-wrap text-sm leading-6 text-indigo-800">
-                    {
-                      selectedComplaint.institute_response
-                    }
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">
-                  الإجراء
-                </label>
-
-                <select
-                  value={adminStatus}
-                  onChange={(e) =>
-                    setAdminStatus(
-                      e.target.value as
-                        | "admin_review"
-                        | "admin_resolved"
-                    )
-                  }
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-red-400"
-                >
-                  <option value="admin_review">
-                    قيد مراجعة المدير
-                  </option>
-
-                  <option value="admin_resolved">
-                    تم الحل إداريًا
-                  </option>
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">
-                  توجيه / رد مدير الإدارة
-                </label>
-
-                <textarea
-                  value={adminResponse}
-                  onChange={(e) =>
-                    setAdminResponse(
-                      e.target.value
-                    )
-                  }
-                  rows={6}
-                  placeholder="اكتبي توجيه مدير الإدارة أو الإجراء الذي تم اتخاذه..."
-                  className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-red-400"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setShowAdminModal(false);
-                    setSelectedComplaint(null);
-                  }}
-                  className="rounded-xl border border-slate-200 px-5 py-2.5 font-semibold text-slate-700"
-                >
-                  إلغاء
-                </button>
-
-                <button
-                  onClick={updateAdminComplaint}
-                  disabled={saving}
-                  className="rounded-xl bg-red-600 px-5 py-2.5 font-bold text-white disabled:opacity-50"
-                >
-                  {saving
-                    ? "جارٍ الحفظ..."
-                    : "حفظ إجراء المدير"}
-                </button>
-              </div>
+              <p className="mt-2 text-sm leading-6 text-red-800">
+                {selectedComplaint.escalation_reason ||
+                  "تم تصعيد الشكوى من المعهد."}
+              </p>
             </div>
-          </Modal>
-        )}
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="font-bold text-slate-900">
+                {selectedComplaint.title}
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {selectedComplaint.description}
+              </p>
+            </div>
+
+            {selectedComplaint.institute_response && (
+              <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                <p className="mb-2 font-bold text-indigo-900">
+                  رد المعهد
+                </p>
+                <p className="whitespace-pre-wrap text-sm leading-6 text-indigo-800">
+                  {selectedComplaint.institute_response}
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-2 block text-sm font-bold text-slate-700">
+                الإجراء
+              </label>
+
+              <select
+                value={adminStatus}
+                onChange={(e) =>
+                  setAdminStatus(
+                    e.target.value as "admin_review" | "admin_resolved"
+                  )
+                }
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-red-400"
+              >
+                <option value="admin_review">قيد مراجعة المدير</option>
+                <option value="admin_resolved">تم الحل إداريًا</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold text-slate-700">
+                توجيه / رد مدير الإدارة
+              </label>
+
+              <textarea
+                value={adminResponse}
+                onChange={(e) => setAdminResponse(e.target.value)}
+                rows={6}
+                placeholder="اكتبي توجيه مدير الإدارة أو الإجراء الذي تم اتخاذه..."
+                className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-red-400"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowAdminModal(false);
+                  setSelectedComplaint(null);
+                }}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 font-semibold text-slate-700"
+              >
+                إلغاء
+              </button>
+
+              <button
+                onClick={updateAdminComplaint}
+                disabled={saving}
+                className="rounded-xl bg-red-600 px-5 py-2.5 font-bold text-white disabled:opacity-50"
+              >
+                {saving ? "جارٍ الحفظ..." : "حفظ إجراء المدير"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1986,13 +1522,8 @@ function StatCard({
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-slate-500">
-            {title}
-          </p>
-
-          <p className="mt-2 text-3xl font-bold text-slate-900">
-            {value}
-          </p>
+          <p className="text-sm text-slate-500">{title}</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
         </div>
 
         <div className="rounded-2xl bg-indigo-50 p-3 text-indigo-600">
@@ -2019,14 +1550,10 @@ function WorkflowStep({
           {number}
         </div>
 
-        <h3 className="font-bold text-slate-900">
-          {title}
-        </h3>
+        <h3 className="font-bold text-slate-900">{title}</h3>
       </div>
 
-      <p className="text-sm leading-6 text-slate-600">
-        {text}
-      </p>
+      <p className="text-sm leading-6 text-slate-600">{text}</p>
     </div>
   );
 }
@@ -2040,13 +1567,8 @@ function InfoBox({
 }) {
   return (
     <div className="rounded-2xl bg-slate-50 p-4">
-      <p className="text-xs font-bold text-slate-500">
-        {label}
-      </p>
-
-      <p className="mt-1 font-semibold text-slate-900">
-        {value}
-      </p>
+      <p className="text-xs font-bold text-slate-500">{label}</p>
+      <p className="mt-1 font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -2064,9 +1586,7 @@ function Modal({
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
-          <h2 className="text-lg font-bold text-slate-900">
-            {title}
-          </h2>
+          <h2 className="text-lg font-bold text-slate-900">{title}</h2>
 
           <button
             onClick={onClose}
@@ -2076,9 +1596,7 @@ function Modal({
           </button>
         </div>
 
-        <div className="p-5">
-          {children}
-        </div>
+        <div className="p-5">{children}</div>
       </div>
     </div>
   );
