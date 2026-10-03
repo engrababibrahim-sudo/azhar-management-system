@@ -17,6 +17,7 @@ import {
   X,
   BookOpenCheck,
   MessageSquareWarning,
+  ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -58,6 +59,13 @@ const allMenuItems = [
     title: "إدارة المعاهد",
     href: "/institutes",
     icon: Building2,
+    roles: ["director", "deputy", "super_admin"],
+  },
+
+  {
+    title: "مركز القيادة والمتابعة",
+    href: "/command-center",
+    icon: ShieldAlert,
     roles: ["director", "deputy", "super_admin"],
   },
 
