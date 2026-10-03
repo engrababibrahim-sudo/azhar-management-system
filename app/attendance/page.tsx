@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabase/client";
 
-type Role = "super_admin" | "sheikh" | "it_admin";
+type Role = "super_admin" | "director" | "deputy" | "sheikh" | "it_admin";
 
 type Profile = {
   role: Role;
@@ -110,8 +110,12 @@ export default function AttendancePage() {
   const canEdit =
     profile?.role === "it_admin";
 
-  const isSuperAdmin =
-    profile?.role === "super_admin";
+  const isCentralManager =
+    profile?.role === "super_admin" ||
+    profile?.role === "director" ||
+    profile?.role === "deputy";
+
+  const isSuperAdmin = isCentralManager;
 
   const isReadOnly =
     profile?.role === "super_admin" ||
@@ -536,8 +540,9 @@ export default function AttendancePage() {
        */
 
       if (
-        currentProfile.role ===
-        "super_admin"
+        currentProfile.role === "super_admin" ||
+        currentProfile.role === "director" ||
+        currentProfile.role === "deputy"
       ) {
         if (
           !currentProfile.directorate_id
