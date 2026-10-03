@@ -67,11 +67,6 @@ export default function StudentsPage() {
   const [students, setStudents] =
     useState<Student[]>([]);
 
-  /*
-   * المعهد القادم من رابط صفحة تفاصيل المعهد
-   * مثال:
-   * /students?instituteId=xxxxxxxx
-   */
   const [requestedInstituteId, setRequestedInstituteId] =
     useState<string | null>(null);
 
@@ -155,37 +150,10 @@ export default function StudentsPage() {
     profile?.role === "it_admin";
 
   const canManageStudents =
-    !!isCentralManager ||
-    !!isInstituteUser;
+    !!isCentralManager || !!isInstituteUser;
 
   // =====================================================
-  // هل الصفحة مفتوحة لمعهد محدد؟
-  // =====================================================
-
-  const isScopedToInstitute =
-    !!requestedInstituteId;
-
-  // =====================================================
-  // الطباعة
-  // =====================================================
-
-  function handlePrintStudents() {
-    if (filteredStudents.length === 0) {
-      setError(
-        "لا توجد بيانات طلاب متاحة للطباعة."
-      );
-      return;
-    }
-
-    setError("");
-
-    setTimeout(() => {
-      window.print();
-    }, 100);
-  }
-
-  // =====================================================
-  // قراءة instituteId من الرابط
+  // قراءة المعهد من الرابط
   // =====================================================
 
   function getRequestedInstituteFromUrl() {
@@ -205,12 +173,15 @@ export default function StudentsPage() {
   // =====================================================
 
   function getInstituteName(
-    instituteId: string
+    instituteId: string | null
   ) {
+    if (!instituteId) {
+      return "غير محدد";
+    }
+
     return (
       institutes.find(
-        (item) =>
-          item.id === instituteId
+        (item) => item.id === instituteId
       )?.name || "غير محدد"
     );
   }
@@ -230,9 +201,9 @@ export default function StudentsPage() {
       return;
     }
 
-    // ---------------------------------------------
+    // -----------------------------------------
     // الفصول
-    // ---------------------------------------------
+    // -----------------------------------------
 
     const {
       data: classesData,
@@ -246,10 +217,7 @@ export default function StudentsPage() {
         "institute_id",
         instituteIds
       )
-      .eq(
-        "is_active",
-        true
-      )
+      .eq("is_active", true)
       .order("name");
 
     if (classesError) {
@@ -263,9 +231,9 @@ export default function StudentsPage() {
       (classesData || []) as ClassItem[]
     );
 
-    // ---------------------------------------------
+    // -----------------------------------------
     // الطلاب
-    // ---------------------------------------------
+    // -----------------------------------------
 
     const {
       data: studentsData,
@@ -305,7 +273,7 @@ export default function StudentsPage() {
   }
 
   // =====================================================
-  // تحميل بيانات المستخدم والمعهد
+  // تحميل بيانات المستخدم
   // =====================================================
 
   async function loadUserAndInstitute() {
@@ -321,9 +289,9 @@ export default function StudentsPage() {
         requestedId
       );
 
-      // ---------------------------------------------
+      // -----------------------------------------
       // المستخدم الحالي
-      // ---------------------------------------------
+      // -----------------------------------------
 
       const {
         data: { user },
@@ -342,9 +310,9 @@ export default function StudentsPage() {
         );
       }
 
-      // ---------------------------------------------
+      // -----------------------------------------
       // Profile
-      // ---------------------------------------------
+      // -----------------------------------------
 
       const {
         data: profileData,
@@ -354,10 +322,7 @@ export default function StudentsPage() {
         .select(
           "id, full_name, role, institute_id, directorate_id"
         )
-        .eq(
-          "id",
-          user.id
-        )
+        .eq("id", user.id)
         .maybeSingle();
 
       if (profileError) {
@@ -376,7 +341,7 @@ export default function StudentsPage() {
       setProfile(profileData);
 
       // =================================================
-      // شيخ المعهد / مسؤول IT
+      // الشيخ / IT Admin
       // =================================================
 
       if (
@@ -396,9 +361,7 @@ export default function StudentsPage() {
           error: instituteError,
         } = await supabase
           .from("institutes")
-          .select(
-            "id, name, code"
-          )
+          .select("id, name, code")
           .eq(
             "id",
             profileData.institute_id
@@ -418,9 +381,7 @@ export default function StudentsPage() {
           );
         }
 
-        setInstitute(
-          instituteData
-        );
+        setInstitute(instituteData);
 
         setInstitutes([
           instituteData,
@@ -434,6 +395,7 @@ export default function StudentsPage() {
           instituteData.id
         );
 
+        // الشيخ يرى معهد حسابه فقط
         await loadClassesAndStudents([
           instituteData.id,
         ]);
@@ -456,9 +418,9 @@ export default function StudentsPage() {
           );
         }
 
-        // ---------------------------------------------
-        // تحميل المعاهد المسموح بها
-        // ---------------------------------------------
+        // -----------------------------------------
+        // تحميل معاهد الإدارة الحالية فقط
+        // -----------------------------------------
 
         const {
           data: institutesData,
@@ -498,12 +460,9 @@ export default function StudentsPage() {
           const selectedInstituteData =
             loadedInstitutes.find(
               (item) =>
-                item.id ===
-                requestedId
+                item.id === requestedId
             );
 
-          // حماية:
-          // لا يمكن فتح معهد خارج إدارة المستخدم
           if (!selectedInstituteData) {
             throw new Error(
               "المعهد المطلوب غير موجود ضمن الإدارة التعليمية الحالية."
@@ -522,9 +481,10 @@ export default function StudentsPage() {
             selectedInstituteData.id
           );
 
-          // ---------------------------------------------
+          // -----------------------------------------
+          // أهم سطر:
           // تحميل طلاب المعهد المحدد فقط
-          // ---------------------------------------------
+          // -----------------------------------------
 
           await loadClassesAndStudents([
             selectedInstituteData.id,
@@ -534,9 +494,9 @@ export default function StudentsPage() {
         }
 
         // =================================================
-        // لا يوجد instituteId
-        // السلوك الطبيعي:
-        // المدير يرى كل معاهد الإدارة
+        // إذا دخل من القائمة الجانبية بدون instituteId
+        // يرجع للسلوك الطبيعي:
+        // جميع معاهد الإدارة
         // =================================================
 
         setInstitute(null);
@@ -579,10 +539,6 @@ export default function StudentsPage() {
       setLoading(false);
     }
   }
-
-  // =====================================================
-  // التشغيل الأول
-  // =====================================================
 
   useEffect(() => {
     loadUserAndInstitute();
@@ -674,6 +630,28 @@ export default function StudentsPage() {
   }
 
   // =====================================================
+  // الطباعة
+  // =====================================================
+
+  function handlePrintStudents() {
+    if (
+      filteredStudents.length ===
+      0
+    ) {
+      setError(
+        "لا توجد بيانات طلاب متاحة للطباعة."
+      );
+      return;
+    }
+
+    setError("");
+
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  }
+
+  // =====================================================
   // البحث عن ولي الأمر
   // =====================================================
 
@@ -692,7 +670,8 @@ export default function StudentsPage() {
     }
 
     if (
-      normalizedPhone.length < 8
+      normalizedPhone.length <
+      8
     ) {
       setParentLookupMessage(
         "أدخل رقم هاتف ولي الأمر بشكل كامل للبحث عن الحساب."
@@ -705,9 +684,7 @@ export default function StudentsPage() {
       return;
     }
 
-    setParentLookupLoading(
-      true
-    );
+    setParentLookupLoading(true);
 
     try {
       const {
@@ -747,13 +724,10 @@ export default function StudentsPage() {
         return;
       }
 
-      setParentId(
-        data.id
-      );
+      setParentId(data.id);
 
       setGuardianName(
-        data.full_name ||
-          ""
+        data.full_name || ""
       );
 
       setGuardianPhone(
@@ -762,10 +736,7 @@ export default function StudentsPage() {
       );
 
       setParentLookupMessage(
-        `تم العثور على حساب ولي الأمر "${
-          data.full_name ||
-          "ولي الأمر"
-        }" وربط الطالب به تلقائيًا.`
+        `تم العثور على حساب ولي الأمر "${data.full_name || "ولي الأمر"}" وربط الطالب به تلقائيًا.`
       );
 
       setParentLookupType(
@@ -802,48 +773,39 @@ export default function StudentsPage() {
     );
 
     setStudentCode(
-      student.student_code ||
-        ""
+      student.student_code || ""
     );
 
     setNationalId(
-      student.national_id ||
-        ""
+      student.national_id || ""
     );
 
     setStudentName(
-      student.full_name ||
-        ""
+      student.full_name || ""
     );
 
     setGender(
-      student.gender ||
-        ""
+      student.gender || ""
     );
 
     setPhone(
-      student.phone ||
-        ""
+      student.phone || ""
     );
 
     setGuardianName(
-      student.guardian_name ||
-        ""
+      student.guardian_name || ""
     );
 
     setGuardianPhone(
-      student.guardian_phone ||
-        ""
+      student.guardian_phone || ""
     );
 
     setClassId(
-      student.class_id ||
-        ""
+      student.class_id || ""
     );
 
     setParentId(
-      student.parent_id ||
-        ""
+      student.parent_id || ""
     );
 
     setFormInstituteId(
@@ -884,11 +846,8 @@ export default function StudentsPage() {
     setClassId("");
     setParentId("");
 
-    // ---------------------------------------------
-    // إذا كانت الصفحة مفتوحة لمعهد محدد
-    // نثبت المعهد على هذا المعهد
-    // ---------------------------------------------
-
+    // عند فتح الصفحة من تفاصيل معهد:
+    // لا نسمح بتغيير المعهد
     if (
       requestedInstituteId &&
       institutes.some(
@@ -900,57 +859,31 @@ export default function StudentsPage() {
       setFormInstituteId(
         requestedInstituteId
       );
-    }
-
-    // ---------------------------------------------
-    // مدير اختار معهدًا
-    // ---------------------------------------------
-
-    else if (
+    } else if (
       isCentralManager &&
       selectedInstitute !== "all"
     ) {
       setFormInstituteId(
         selectedInstitute
       );
-    }
-
-    // ---------------------------------------------
-    // مدير بدون معهد محدد
-    // ---------------------------------------------
-
-    else if (
+    } else if (
       isCentralManager &&
       institutes.length > 0
     ) {
       setFormInstituteId(
         institutes[0].id
       );
-    }
-
-    // ---------------------------------------------
-    // مستخدم المعهد
-    // ---------------------------------------------
-
-    else if (
+    } else if (
       profile?.institute_id
     ) {
       setFormInstituteId(
         profile.institute_id
       );
-    }
-
-    // ---------------------------------------------
-    // المعهد الحالي
-    // ---------------------------------------------
-
-    else if (institute) {
+    } else if (institute) {
       setFormInstituteId(
         institute.id
       );
-    }
-
-    else {
+    } else {
       setFormInstituteId("");
     }
 
@@ -962,13 +895,9 @@ export default function StudentsPage() {
       ""
     );
 
-    setParentLookupType(
-      ""
-    );
+    setParentLookupType("");
 
-    setEditingStudentId(
-      null
-    );
+    setEditingStudentId(null);
   }
 
   // =====================================================
@@ -989,14 +918,13 @@ export default function StudentsPage() {
       return "الرقم القومي للطالب يجب أن يتكون من 14 رقمًا بالضبط.";
     }
 
-    let query =
-      supabase
-        .from("students")
-        .select("id")
-        .eq(
-          "national_id",
-          normalizedNationalId
-        );
+    let query = supabase
+      .from("students")
+      .select("id")
+      .eq(
+        "national_id",
+        normalizedNationalId
+      );
 
     if (editingStudentId) {
       query = query.neq(
@@ -1008,8 +936,7 @@ export default function StudentsPage() {
     const {
       data,
       error: nationalIdError,
-    } =
-      await query.maybeSingle();
+    } = await query.maybeSingle();
 
     if (nationalIdError) {
       return (
@@ -1041,7 +968,6 @@ export default function StudentsPage() {
       setError(
         "ليس لديك صلاحية إضافة أو تعديل الطلاب."
       );
-
       return;
     }
 
@@ -1052,7 +978,6 @@ export default function StudentsPage() {
       setError(
         "من فضلك اختر المعهد أولًا."
       );
-
       return;
     }
 
@@ -1065,25 +990,20 @@ export default function StudentsPage() {
       setError(
         "لم يتم تحديد المعهد المرتبط بالحساب."
       );
-
       return;
     }
 
-    /*
-     * حماية إضافية:
-     * إذا كانت الصفحة مفتوحة من تفاصيل معهد،
-     * لا نسمح بتغيير المعهد المستهدف.
-     */
+    // حماية إضافية:
+    // إذا الصفحة مفتوحة من تفاصيل معهد
+    // يجب أن يكون الحفظ داخل نفس المعهد فقط
     if (
-      isCentralManager &&
       requestedInstituteId &&
       targetInstituteId !==
         requestedInstituteId
     ) {
       setError(
-        "لا يمكن إضافة الطالب إلى معهد مختلف أثناء فتح صفحة المعهد المحدد."
+        "لا يمكن إضافة الطالب خارج المعهد المحدد."
       );
-
       return;
     }
 
@@ -1091,7 +1011,6 @@ export default function StudentsPage() {
       setError(
         "من فضلك أدخل اسم الطالب."
       );
-
       return;
     }
 
@@ -1106,7 +1025,6 @@ export default function StudentsPage() {
       setError(
         "الرقم القومي للطالب يجب أن يتكون من 14 رقمًا بالضبط."
       );
-
       return;
     }
 
@@ -1124,10 +1042,6 @@ export default function StudentsPage() {
         );
       }
 
-      // ---------------------------------------------
-      // ولي الأمر
-      // ---------------------------------------------
-
       let resolvedParentId =
         parentId;
 
@@ -1141,21 +1055,20 @@ export default function StudentsPage() {
         const {
           data: parentData,
           error: parentError,
-        } =
-          await supabase
-            .from("profiles")
-            .select(
-              "id, full_name, phone, email"
-            )
-            .eq(
-              "role",
-              "parent"
-            )
-            .eq(
-              "phone",
-              normalizedPhone
-            )
-            .maybeSingle();
+        } = await supabase
+          .from("profiles")
+          .select(
+            "id, full_name, phone, email"
+          )
+          .eq(
+            "role",
+            "parent"
+          )
+          .eq(
+            "phone",
+            normalizedPhone
+          )
+          .maybeSingle();
 
         if (parentError) {
           throw new Error(
@@ -1178,10 +1091,6 @@ export default function StudentsPage() {
           );
         }
       }
-
-      // ---------------------------------------------
-      // بيانات الطالب
-      // ---------------------------------------------
 
       const studentPayload = {
         institute_id:
@@ -1228,18 +1137,17 @@ export default function StudentsPage() {
         const {
           data,
           error: updateError,
-        } =
-          await supabase
-            .from("students")
-            .update(
-              studentPayload
-            )
-            .eq(
-              "id",
-              editingStudentId
-            )
-            .select()
-            .maybeSingle();
+        } = await supabase
+          .from("students")
+          .update(
+            studentPayload
+          )
+          .eq(
+            "id",
+            editingStudentId
+          )
+          .select()
+          .maybeSingle();
 
         if (updateError) {
           throw new Error(
@@ -1274,15 +1182,14 @@ export default function StudentsPage() {
         const {
           data,
           error: insertError,
-        } =
-          await supabase
-            .from("students")
-            .insert({
-              ...studentPayload,
-              is_active: true,
-            })
-            .select()
-            .maybeSingle();
+        } = await supabase
+          .from("students")
+          .insert({
+            ...studentPayload,
+            is_active: true,
+          })
+          .select()
+          .maybeSingle();
 
         if (insertError) {
           throw new Error(
@@ -1337,10 +1244,6 @@ export default function StudentsPage() {
     setError("");
 
     try {
-      // =================================================
-      // مدير / نائب / Super Admin
-      // =================================================
-
       if (
         isCentralManager &&
         profile.directorate_id
@@ -1348,17 +1251,16 @@ export default function StudentsPage() {
         const {
           data: institutesData,
           error: institutesError,
-        } =
-          await supabase
-            .from("institutes")
-            .select(
-              "id, name, code"
-            )
-            .eq(
-              "directorate_id",
-              profile.directorate_id
-            )
-            .order("name");
+        } = await supabase
+          .from("institutes")
+          .select(
+            "id, name, code"
+          )
+          .eq(
+            "directorate_id",
+            profile.directorate_id
+          )
+          .order("name");
 
         if (institutesError) {
           throw new Error(
@@ -1377,9 +1279,9 @@ export default function StudentsPage() {
         const urlInstituteId =
           getRequestedInstituteFromUrl();
 
-        // =================================================
-        // إعادة تحميل معهد محدد
-        // =================================================
+        // =============================================
+        // صفحة معهد محدد
+        // =============================================
 
         if (urlInstituteId) {
           const selected =
@@ -1399,9 +1301,7 @@ export default function StudentsPage() {
             urlInstituteId
           );
 
-          setInstitute(
-            selected
-          );
+          setInstitute(selected);
 
           setSelectedInstitute(
             selected.id
@@ -1416,9 +1316,9 @@ export default function StudentsPage() {
           ]);
         }
 
-        // =================================================
-        // تحميل كل المعاهد
-        // =================================================
+        // =============================================
+        // الصفحة العامة
+        // =============================================
 
         else {
           setRequestedInstituteId(
@@ -1433,16 +1333,15 @@ export default function StudentsPage() {
 
           await loadClassesAndStudents(
             loadedInstitutes.map(
-              (item) =>
-                item.id
+              (item) => item.id
             )
           );
         }
       }
 
-      // =================================================
+      // ===============================================
       // مستخدم المعهد
-      // =================================================
+      // ===============================================
 
       else if (
         profile.institute_id
@@ -1450,17 +1349,16 @@ export default function StudentsPage() {
         const {
           data: instituteData,
           error: instituteError,
-        } =
-          await supabase
-            .from("institutes")
-            .select(
-              "id, name, code"
-            )
-            .eq(
-              "id",
-              profile.institute_id
-            )
-            .maybeSingle();
+        } = await supabase
+          .from("institutes")
+          .select(
+            "id, name, code"
+          )
+          .eq(
+            "id",
+            profile.institute_id
+          )
+          .maybeSingle();
 
         if (instituteError) {
           throw new Error(
@@ -1506,7 +1404,7 @@ export default function StudentsPage() {
   }
 
   // =====================================================
-  // شاشة التحميل
+  // Loading
   // =====================================================
 
   if (loading) {
@@ -1537,9 +1435,7 @@ export default function StudentsPage() {
     >
       <div className="max-w-7xl mx-auto">
 
-        {/* =================================================
-            PRINT HEADER
-        ================================================= */}
+        {/* PRINT HEADER */}
 
         <div className="hidden print:block mb-6 text-center border-b-2 border-slate-800 pb-4">
           <h1 className="text-2xl font-bold text-slate-900">
@@ -1571,9 +1467,7 @@ export default function StudentsPage() {
           </p>
         </div>
 
-        {/* =================================================
-            HEADER
-        ================================================= */}
+        {/* HEADER */}
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6 print:hidden">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -1601,45 +1495,36 @@ export default function StudentsPage() {
 
                   {requestedInstituteId &&
                     isCentralManager && (
-                      <p className="text-xs text-blue-600 mt-1">
+                      <p className="text-xs text-blue-600 mt-1 font-medium">
                         يتم عرض طلاب المعهد المحدد فقط
                       </p>
                     )}
 
                 </div>
+
               </div>
             </div>
 
             <div className="flex gap-2">
 
-              {/* تحديث */}
-
               <button
                 type="button"
-                onClick={
-                  handleRefresh
-                }
+                onClick={handleRefresh}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition"
               >
                 <RefreshCw className="w-4 h-4" />
                 تحديث
               </button>
 
-              {/* طباعة */}
-
               <button
                 type="button"
-                onClick={
-                  handlePrintStudents
-                }
+                onClick={handlePrintStudents}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 hover:text-blue-700 transition"
                 title="طباعة قائمة الطلاب"
               >
                 <Printer className="w-4 h-4" />
                 طباعة
               </button>
-
-              {/* إضافة */}
 
               {canManageStudents && (
                 <button
@@ -1661,9 +1546,7 @@ export default function StudentsPage() {
           </div>
         </div>
 
-        {/* =================================================
-            ALERTS
-        ================================================= */}
+        {/* ALERTS */}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-5 print:hidden">
@@ -1677,13 +1560,9 @@ export default function StudentsPage() {
           </div>
         )}
 
-        {/* =================================================
-            STATISTICS
-        ================================================= */}
+        {/* STATISTICS */}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 print:hidden">
-
-          {/* إجمالي الطلاب */}
 
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center justify-between">
@@ -1694,9 +1573,7 @@ export default function StudentsPage() {
                 </p>
 
                 <p className="text-3xl font-bold text-slate-800 mt-2">
-                  {
-                    filteredStudents.length
-                  }
+                  {filteredStudents.length}
                 </p>
               </div>
 
@@ -1706,8 +1583,6 @@ export default function StudentsPage() {
 
             </div>
           </div>
-
-          {/* الفصول */}
 
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center justify-between">
@@ -1728,8 +1603,6 @@ export default function StudentsPage() {
 
             </div>
           </div>
-
-          {/* الطلاب النشطون */}
 
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center justify-between">
@@ -1758,9 +1631,7 @@ export default function StudentsPage() {
 
         </div>
 
-        {/* =================================================
-            SEARCH / FILTERS
-        ================================================= */}
+        {/* SEARCH */}
 
         <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6 shadow-sm print:hidden">
 
@@ -1771,8 +1642,6 @@ export default function StudentsPage() {
                 : "md:grid-cols-2"
             } gap-4`}
           >
-
-            {/* البحث */}
 
             <div className="relative">
 
@@ -1792,12 +1661,12 @@ export default function StudentsPage() {
 
             </div>
 
-            {/* المعهد */}
-
             {isCentralManager && (
               <select
                 value={
-                  selectedInstitute
+                  requestedInstituteId
+                    ? requestedInstituteId
+                    : selectedInstitute
                 }
                 disabled={
                   !!requestedInstituteId
@@ -1814,9 +1683,11 @@ export default function StudentsPage() {
                 className="w-full border border-slate-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-slate-100 disabled:text-slate-500"
               >
 
-                <option value="all">
-                  جميع المعاهد
-                </option>
+                {!requestedInstituteId && (
+                  <option value="all">
+                    جميع المعاهد
+                  </option>
+                )}
 
                 {institutes.map(
                   (item) => (
@@ -1832,12 +1703,8 @@ export default function StudentsPage() {
               </select>
             )}
 
-            {/* الفصل */}
-
             <select
-              value={
-                selectedClass
-              }
+              value={selectedClass}
               onChange={(e) =>
                 setSelectedClass(
                   e.target.value
@@ -1874,9 +1741,7 @@ export default function StudentsPage() {
           </div>
         </div>
 
-        {/* =================================================
-            STUDENTS TABLE
-        ================================================= */}
+        {/* TABLE */}
 
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
@@ -1888,9 +1753,7 @@ export default function StudentsPage() {
 
             <p className="text-sm text-slate-500 mt-1">
               عدد النتائج:{" "}
-              {
-                filteredStudents.length
-              }
+              {filteredStudents.length}
             </p>
 
           </div>
@@ -1915,9 +1778,7 @@ export default function StudentsPage() {
                   type="button"
                   onClick={() => {
                     resetForm();
-                    setShowForm(
-                      true
-                    );
+                    setShowForm(true);
                   }}
                   className="mt-5 bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 print:hidden"
                 >
@@ -1991,24 +1852,19 @@ export default function StudentsPage() {
 
                   {filteredStudents.map(
                     (student) => (
+
                       <tr
-                        key={
-                          student.id
-                        }
+                        key={student.id}
                         className="border-t border-slate-100 hover:bg-slate-50"
                       >
-
-                        {/* المعهد */}
 
                         {isCentralManager && (
                           <td className="px-5 py-4 text-sm text-slate-600">
 
                             <div className="font-medium text-slate-700">
-                              {
-                                getInstituteName(
-                                  student.institute_id
-                                )
-                              }
+                              {getInstituteName(
+                                student.institute_id
+                              )}
                             </div>
 
                             <div className="text-xs text-slate-400 mt-1">
@@ -2024,69 +1880,42 @@ export default function StudentsPage() {
                           </td>
                         )}
 
-                        {/* الكود */}
-
                         <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
-                          {
-                            student.student_code ||
-                            "-"
-                          }
+                          {student.student_code ||
+                            "-"}
                         </td>
-
-                        {/* الرقم القومي */}
 
                         <td className="px-5 py-4 text-sm text-slate-700 font-medium whitespace-nowrap">
-                          {
-                            student.national_id ||
-                            "غير مسجل"
-                          }
+                          {student.national_id ||
+                            "غير مسجل"}
                         </td>
-
-                        {/* الاسم */}
 
                         <td className="px-5 py-4">
-
                           <div className="font-semibold text-slate-800 whitespace-nowrap">
-                            {
-                              student.full_name
-                            }
+                            {student.full_name}
                           </div>
-
                         </td>
-
-                        {/* الجنس */}
 
                         <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
-                          {
-                            student.gender ||
-                            "-"
-                          }
+                          {student.gender ||
+                            "-"}
                         </td>
-
-                        {/* الفصل */}
 
                         <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
-                          {
-                            getClassName(
-                              student.class_id
-                            )
-                          }
+                          {getClassName(
+                            student.class_id
+                          )}
                         </td>
-
-                        {/* ولي الأمر */}
 
                         <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
-                          {
-                            student.guardian_name ||
-                            "-"
-                          }
+                          {student.guardian_name ||
+                            "-"}
                         </td>
-
-                        {/* الحساب */}
 
                         <td className="px-5 py-4 whitespace-nowrap print:hidden">
 
                           {student.parent_id ? (
+
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
 
                               <UserRound className="w-3.5 h-3.5" />
@@ -2094,41 +1923,40 @@ export default function StudentsPage() {
                               مرتبط تلقائيًا
 
                             </span>
+
                           ) : (
+
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
                               غير مرتبط
                             </span>
+
                           )}
 
                         </td>
 
-                        {/* الهاتف */}
-
                         <td className="px-5 py-4 text-sm text-slate-600 whitespace-nowrap">
-                          {
-                            student.guardian_phone ||
+                          {student.guardian_phone ||
                             student.phone ||
-                            "-"
-                          }
+                            "-"}
                         </td>
-
-                        {/* الحالة */}
 
                         <td className="px-5 py-4 whitespace-nowrap">
 
                           {student.is_active ? (
+
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
                               نشط
                             </span>
+
                           ) : (
+
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
                               غير نشط
                             </span>
+
                           )}
 
                         </td>
-
-                        {/* الإجراءات */}
 
                         <td className="px-5 py-4 whitespace-nowrap print:hidden">
 
@@ -2142,17 +1970,15 @@ export default function StudentsPage() {
                               }
                               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition"
                             >
-
                               <Pencil className="w-4 h-4" />
-
                               تعديل
-
                             </button>
                           )}
 
                         </td>
 
                       </tr>
+
                     )
                   )}
 
@@ -2168,15 +1994,13 @@ export default function StudentsPage() {
       </div>
 
       {/* =================================================
-          ADD / EDIT MODAL
+          MODAL
       ================================================= */}
 
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 print:hidden">
 
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-
-            {/* Modal Header */}
 
             <div className="flex items-center justify-between p-5 border-b border-slate-200">
 
@@ -2189,11 +2013,9 @@ export default function StudentsPage() {
                 </h2>
 
                 <p className="text-sm text-slate-500 mt-1">
-                  {
-                    getInstituteName(
-                      formInstituteId
-                    )
-                  }
+                  {getInstituteName(
+                    formInstituteId
+                  )}
                 </p>
 
               </div>
@@ -2201,9 +2023,7 @@ export default function StudentsPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setShowForm(
-                    false
-                  );
+                  setShowForm(false);
                   resetForm();
                 }}
                 className="p-2 rounded-lg hover:bg-slate-100"
@@ -2213,8 +2033,6 @@ export default function StudentsPage() {
 
             </div>
 
-            {/* Form */}
-
             <form
               onSubmit={
                 handleAddStudent
@@ -2223,8 +2041,6 @@ export default function StudentsPage() {
             >
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                {/* المعهد */}
 
                 {isCentralManager && (
                   <div className="md:col-span-2">
@@ -2242,9 +2058,7 @@ export default function StudentsPage() {
                           e.target.value
                         );
 
-                        setClassId(
-                          ""
-                        );
+                        setClassId("");
                       }}
                       disabled={
                         !!editingStudentId ||
@@ -2260,16 +2074,10 @@ export default function StudentsPage() {
                       {institutes.map(
                         (item) => (
                           <option
-                            key={
-                              item.id
-                            }
-                            value={
-                              item.id
-                            }
+                            key={item.id}
+                            value={item.id}
                           >
-                            {
-                              item.name
-                            }
+                            {item.name}
                           </option>
                         )
                       )}
@@ -2278,8 +2086,6 @@ export default function StudentsPage() {
 
                   </div>
                 )}
-
-                {/* الاسم */}
 
                 <div className="md:col-span-2">
 
@@ -2302,8 +2108,6 @@ export default function StudentsPage() {
                   />
 
                 </div>
-
-                {/* الرقم القومي */}
 
                 <div>
 
@@ -2330,9 +2134,7 @@ export default function StudentsPage() {
                       );
                     }}
                     placeholder="14 رقمًا"
-                    maxLength={
-                      14
-                    }
+                    maxLength={14}
                     inputMode="numeric"
                     required
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
@@ -2343,8 +2145,6 @@ export default function StudentsPage() {
                   </p>
 
                 </div>
-
-                {/* الكود */}
 
                 <div>
 
@@ -2367,8 +2167,6 @@ export default function StudentsPage() {
 
                 </div>
 
-                {/* الجنس */}
-
                 <div>
 
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2376,9 +2174,7 @@ export default function StudentsPage() {
                   </label>
 
                   <select
-                    value={
-                      gender
-                    }
+                    value={gender}
                     onChange={(e) =>
                       setGender(
                         e.target.value
@@ -2403,8 +2199,6 @@ export default function StudentsPage() {
 
                 </div>
 
-                {/* الفصل */}
-
                 <div>
 
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2412,9 +2206,7 @@ export default function StudentsPage() {
                   </label>
 
                   <select
-                    value={
-                      classId
-                    }
+                    value={classId}
                     onChange={(e) =>
                       setClassId(
                         e.target.value
@@ -2436,16 +2228,10 @@ export default function StudentsPage() {
                       .map(
                         (item) => (
                           <option
-                            key={
-                              item.id
-                            }
-                            value={
-                              item.id
-                            }
+                            key={item.id}
+                            value={item.id}
                           >
-                            {
-                              item.name
-                            }
+                            {item.name}
                           </option>
                         )
                       )}
@@ -2456,16 +2242,13 @@ export default function StudentsPage() {
                     (item) =>
                       item.institute_id ===
                       formInstituteId
-                  ).length ===
-                    0 && (
+                  ).length === 0 && (
                     <p className="text-xs text-amber-600 mt-2">
                       لا توجد فصول معرفة لهذا المعهد حاليًا.
                     </p>
                   )}
 
                 </div>
-
-                {/* ولي الأمر */}
 
                 <div className="md:col-span-2">
 
@@ -2490,9 +2273,7 @@ export default function StudentsPage() {
                             e.target.value
                           );
 
-                          setParentId(
-                            ""
-                          );
+                          setParentId("");
 
                           setParentLookupMessage(
                             ""
@@ -2551,8 +2332,6 @@ export default function StudentsPage() {
 
                 </div>
 
-                {/* هاتف الطالب */}
-
                 <div>
 
                   <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -2573,8 +2352,6 @@ export default function StudentsPage() {
                   />
 
                 </div>
-
-                {/* اسم ولي الأمر */}
 
                 <div>
 
@@ -2599,31 +2376,23 @@ export default function StudentsPage() {
 
               </div>
 
-              {/* أزرار */}
-
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
 
                 <button
                   type="button"
                   onClick={() => {
-                    setShowForm(
-                      false
-                    );
+                    setShowForm(false);
                     resetForm();
                   }}
                   className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50"
-                  disabled={
-                    saving
-                  }
+                  disabled={saving}
                 >
                   إلغاء
                 </button>
 
                 <button
                   type="submit"
-                  disabled={
-                    saving
-                  }
+                  disabled={saving}
                   className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-6 py-2.5 rounded-xl"
                 >
 
@@ -2644,6 +2413,7 @@ export default function StudentsPage() {
             </form>
 
           </div>
+
         </div>
       )}
 
