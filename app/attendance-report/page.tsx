@@ -19,6 +19,7 @@ import {
 import { supabase } from "../../lib/supabase/client";
 
 type Profile = {
+  id: string;
   role: string;
   institute_id: string | null;
   directorate_id: string | null;
@@ -27,7 +28,8 @@ type Profile = {
 type Institute = {
   id: string;
   name: string;
-  code: string;
+  code?: string | null;
+  directorate_id?: string | null;
 };
 
 type ClassItem = {
@@ -39,20 +41,36 @@ type ClassItem = {
 type Student = {
   id: string;
   full_name: string;
-  student_code: string | null;
   class_id: string | null;
   institute_id: string;
+  national_id: string | null;
+  phone: string | null;
 };
 
 type AttendanceRow = {
+  id: string;
   student_id: string;
+  institute_id: string;
+  class_id: string | null;
   attendance_date: string;
-  status: "present" | "absent" | "late" | "excused";
-  institute_id?: string;
+  status: string;
+};
+
+type ReportRow = {
+  student: Student;
+  className: string;
+  instituteName: string;
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+  total: number;
+  percentage: number;
 };
 
 type InstituteSummary = {
-  institute: Institute;
+  instituteId: string;
+  instituteName: string;
   students: number;
   present: number;
   absent: number;
@@ -62,15 +80,8 @@ type InstituteSummary = {
   percentage: number;
 };
 
-type ReportRow = {
-  student: Student;
-  present: number;
-  absent: number;
-  late: number;
-  excused: number;
-  total: number;
-  percentage: number;
-};
+const CENTRAL_ROLES = ["director", "super_admin"];
+const ALLOWED_ROLES = ["sheikh", "director", "super_admin", "it_admin"];
 
 export default function AttendanceReportPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -83,53 +94,84 @@ export default function AttendanceReportPage() {
   const [selectedInstitute, setSelectedInstitute] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
 
-  const [fromDate, setFromDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-  const [toDate, setToDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
-
-  const [searchTerm, setSearchTerm] = useState("");
+  const [search, setSearch] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const allowedRoles = [
-    "sheikh",
-    "director",
-    "super_admin",
-    "it_admin",
-  ];
-
   const isCentralManager =
-    profile?.role === "director" ||
-    profile?.role === "super_admin";
+    !!profile && CENTRAL_ROLES.includes(profile.role);
 
   const isInstituteUser =
-    profile?.role === "sheikh" ||
-    profile?.role === "it_admin";
+    !!profile && ["sheikh", "it_admin"].includes(profile.role);
 
-  /*
-   * تحميل الحساب والمعاهد أولًا
-   */
+  // =========================================================
+  // قراءة instituteId من الرابط بدون useSearchParams
+  // =========================================================
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const instituteIdFromUrl = params.get("instituteId");
+
+    if (instituteIdFromUrl) {
+      setSelectedInstitute(instituteIdFromUrl);
+    }
+  }, []);
+
+  // =========================================================
+  // تحميل البيانات الأولية
+  // =========================================================
   useEffect(() => {
     loadInitialData();
   }, []);
 
-  async function loadInitialData() {
-    setLoading(true);
-    setMessage("");
+  // =========================================================
+  // عند تغير المعهد أو الفترة
+  // =========================================================
+  useEffect(() => {
+    if (!profile) return;
 
+    if (isInstituteUser) {
+      if (profile.institute_id) {
+        loadInstituteData(profile.institute_id);
+      }
+      return;
+    }
+
+    if (isCentralManager) {
+      if (selectedInstitute) {
+        loadInstituteData(selectedInstitute);
+      } else {
+        loadDirectorateData();
+      }
+    }
+  }, [
+    profile,
+    selectedInstitute,
+    fromDate,
+    toDate,
+  ]);
+
+  // =========================================================
+  // تحميل المستخدم الحالي
+  // =========================================================
+  async function loadInitialData() {
     try {
+      setLoading(true);
+      setMessage("");
+
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
+      if (userError) throw userError;
+
       if (!user) {
-        setMessage("يجب تسجيل الدخول أولًا");
+        setMessage("يجب تسجيل الدخول أولًا.");
         setLoading(false);
         return;
       }
@@ -137,537 +179,473 @@ export default function AttendanceReportPage() {
       const { data: profileData, error: profileError } =
         await supabase
           .from("profiles")
-          .select(
-            "role, institute_id, directorate_id"
-          )
+          .select("id, role, institute_id, directorate_id")
           .eq("id", user.id)
-          .maybeSingle();
+          .single();
 
-      if (profileError || !profileData) {
-        console.error(profileError);
-        setMessage("لم يتم العثور على بيانات المستخدم");
+      if (profileError) throw profileError;
+
+      if (!profileData) {
+        setMessage("لم يتم العثور على بيانات المستخدم.");
         setLoading(false);
         return;
       }
 
-      if (!allowedRoles.includes(profileData.role)) {
-        setMessage(
-          "ليس لديك صلاحية لعرض تقارير الحضور"
-        );
+      if (!ALLOWED_ROLES.includes(profileData.role)) {
+        setMessage("ليس لديك صلاحية لعرض تقرير الحضور.");
         setLoading(false);
         return;
       }
 
-      setProfile(profileData);
+      const currentProfile = profileData as Profile;
 
-      /*
-       * شيخ المعهد + مسؤول IT
-       * كل واحد يرى معهده فقط.
-       */
+      setProfile(currentProfile);
+
+      // -------------------------------------------------------
+      // شيخ / IT Admin
+      // -------------------------------------------------------
       if (
-        profileData.role === "sheikh" ||
-        profileData.role === "it_admin"
+        ["sheikh", "it_admin"].includes(currentProfile.role) &&
+        currentProfile.institute_id
       ) {
-        if (!profileData.institute_id) {
-          setMessage("لم يتم ربط الحساب بمعهد");
-          setLoading(false);
-          return;
+        const { data: instituteData, error: instituteError } =
+          await supabase
+            .from("institutes")
+            .select("id, name, code, directorate_id")
+            .eq("id", currentProfile.institute_id)
+            .maybeSingle();
+
+        if (instituteError) throw instituteError;
+
+        setInstitutes(instituteData ? [instituteData] : []);
+
+        setSelectedInstitute(currentProfile.institute_id);
+      }
+
+      // -------------------------------------------------------
+      // المدير / Super Admin
+      // -------------------------------------------------------
+      if (
+        ["director", "super_admin"].includes(currentProfile.role)
+      ) {
+        let instituteQuery = supabase
+          .from("institutes")
+          .select("id, name, code, directorate_id")
+          .eq("is_active", true)
+          .order("name");
+
+        if (currentProfile.directorate_id) {
+          instituteQuery = instituteQuery.eq(
+            "directorate_id",
+            currentProfile.directorate_id
+          );
         }
 
         const {
           data: instituteData,
           error: instituteError,
-        } = await supabase
-          .from("institutes")
-          .select("id, name, code")
-          .eq("id", profileData.institute_id)
-          .maybeSingle();
+        } = await instituteQuery;
 
-        if (instituteError || !instituteData) {
-          console.error(instituteError);
-          setMessage("تعذر تحميل بيانات المعهد");
-          setLoading(false);
-          return;
-        }
+        if (instituteError) throw instituteError;
 
-        setInstitutes([instituteData]);
-        setSelectedInstitute(instituteData.id);
+        setInstitutes(instituteData || []);
 
-        return;
-      }
+        // إذا كان instituteId موجود في الرابط نحافظ عليه
+        const params = new URLSearchParams(
+          window.location.search
+        );
 
-      /*
-       * مدير الإدارة
-       * يرى جميع المعاهد التابعة للإدارة التعليمية.
-       */
-      if (
-        profileData.role === "director" ||
-        profileData.role === "super_admin"
-      ) {
-        if (!profileData.directorate_id) {
-          setMessage(
-            "لم يتم ربط مدير الإدارة بالإدارة التعليمية"
-          );
-          setLoading(false);
-          return;
-        }
+        const instituteIdFromUrl = params.get("instituteId");
 
-        const {
-          data: institutesData,
-          error: institutesError,
-        } = await supabase
-          .from("institutes")
-          .select("id, name, code")
-          .eq(
-            "directorate_id",
-            profileData.directorate_id
+        if (
+          instituteIdFromUrl &&
+          (instituteData || []).some(
+            (item) => item.id === instituteIdFromUrl
           )
-          .order("name");
-
-        if (institutesError) {
-          console.error(institutesError);
-          setMessage("تعذر تحميل المعاهد");
-          setLoading(false);
-          return;
+        ) {
+          setSelectedInstitute(instituteIdFromUrl);
         }
-
-        const loadedInstitutes =
-          institutesData || [];
-
-        setInstitutes(loadedInstitutes);
-
-        /*
-         * مدير الإدارة يبدأ على جميع المعاهد.
-         */
-        setSelectedInstitute("");
       }
-    } catch (error) {
-      console.error(error);
-      setMessage("حدث خطأ غير متوقع");
+    } catch (error: any) {
+      console.error("loadInitialData error:", error);
+      setMessage(
+        error?.message ||
+          "حدث خطأ أثناء تحميل بيانات التقرير."
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  /*
-   * مهم:
-   * ننتظر أن تصبح المعاهد محملة فعلًا قبل تحميل التقرير.
-   */
-  useEffect(() => {
-    if (!profile) return;
-
-    if (
-      (profile.role === "sheikh" ||
-        profile.role === "it_admin") &&
-      selectedInstitute
-    ) {
-      loadInstituteData(selectedInstitute);
-      return;
-    }
-
-    if (
-      (profile.role === "director" ||
-        profile.role === "super_admin") &&
-      institutes.length > 0
-    ) {
-      loadDirectorateData();
-    }
-  }, [
-    profile,
-    selectedInstitute,
-    fromDate,
-    toDate,
-    institutes.length,
-  ]);
-
-  /*
-   * تحميل بيانات معهد واحد
-   */
-  async function loadInstituteData(
-    instituteId: string
-  ) {
-    setReportLoading(true);
-    setMessage("");
-
+  // =========================================================
+  // تحميل بيانات معهد واحد
+  // =========================================================
+  async function loadInstituteData(instituteId: string) {
     try {
-      /*
-       * الفصول
-       */
+      setReportLoading(true);
+      setMessage("");
+
+      // -------------------------------------------------------
+      // Classes
+      // -------------------------------------------------------
       const {
-        data: classesData,
-        error: classesError,
+        data: classData,
+        error: classError,
       } = await supabase
         .from("classes")
-        .select(
-          "id, name, institute_id"
-        )
+        .select("id, name, institute_id")
         .eq("institute_id", instituteId)
         .eq("is_active", true)
         .order("name");
 
-      if (classesError) {
-        console.error(classesError);
-        setMessage(
-          "حدث خطأ أثناء تحميل الفصول"
-        );
+      if (classError) throw classError;
 
-        setClasses([]);
-      } else {
-        setClasses(classesData || []);
-      }
+      setClasses(classData || []);
 
-      /*
-       * الطلاب
-       *
-       * مهم:
-       * لا نربط الطلاب بتاريخ الحضور.
-       * الطالب يجب أن يظهر حتى لو لم يسجل له حضور.
-       */
+      // -------------------------------------------------------
+      // Students
+      // IMPORTANT:
+      // students.full_name وليس students.name
+      // -------------------------------------------------------
       const {
-        data: studentsData,
-        error: studentsError,
+        data: studentData,
+        error: studentError,
       } = await supabase
         .from("students")
         .select(
-          "id, full_name, student_code, class_id, institute_id"
+          "id, full_name, class_id, institute_id, national_id, phone"
         )
         .eq("institute_id", instituteId)
+        .eq("is_active", true)
         .order("full_name");
 
-      if (studentsError) {
-        console.error(
-          "STUDENTS REPORT ERROR:",
-          studentsError
-        );
+      if (studentError) throw studentError;
 
-        setStudents([]);
+      setStudents(studentData || []);
 
-        setMessage(
-          "تعذر تحميل الطلاب من قاعدة البيانات"
-        );
+      // -------------------------------------------------------
+      // Attendance
+      // -------------------------------------------------------
+      await loadAttendance(
+        [instituteId],
+        studentData || []
+      );
+    } catch (error: any) {
+      console.error("loadInstituteData error:", error);
 
-        setReportLoading(false);
-        return;
-      }
+      setStudents([]);
+      setClasses([]);
+      setAttendance([]);
 
-      setStudents(studentsData || []);
-
-      /*
-       * الحضور منفصل عن الطلاب.
-       */
-      await loadAttendance(instituteId);
-    } catch (error) {
-      console.error(error);
-      setMessage("حدث خطأ غير متوقع");
+      setMessage(
+        error?.message ||
+          "حدث خطأ أثناء تحميل بيانات المعهد."
+      );
     } finally {
       setReportLoading(false);
     }
   }
 
-  /*
-   * تحميل بيانات جميع معاهد الإدارة
-   */
+  // =========================================================
+  // تحميل بيانات جميع المعاهد
+  // =========================================================
   async function loadDirectorateData() {
-    setReportLoading(true);
-    setMessage("");
-
     try {
-      /*
-       * إذا اختار المدير معهدًا محددًا
-       */
-      if (selectedInstitute) {
-        await loadInstituteData(
-          selectedInstitute
-        );
+      setReportLoading(true);
+      setMessage("");
+
+      if (!profile?.directorate_id) {
+        setClasses([]);
+        setStudents([]);
+        setAttendance([]);
+        setReportLoading(false);
         return;
       }
 
-      /*
-       * نستخدم institutes الحالية
-       * بعد التأكد أنها محملة.
-       */
-      const currentInstitutes = institutes;
-
-      const instituteIds =
-        currentInstitutes.map(
-          (item) => item.id
-        );
+      const instituteIds = institutes.map(
+        (institute) => institute.id
+      );
 
       if (instituteIds.length === 0) {
         setClasses([]);
         setStudents([]);
         setAttendance([]);
-
         setReportLoading(false);
         return;
       }
 
-      /*
-       * الفصول
-       */
+      // -------------------------------------------------------
+      // Classes
+      // -------------------------------------------------------
       const {
-        data: classesData,
-        error: classesError,
+        data: classData,
+        error: classError,
       } = await supabase
         .from("classes")
-        .select(
-          "id, name, institute_id"
-        )
-        .in(
-          "institute_id",
-          instituteIds
-        )
+        .select("id, name, institute_id")
+        .in("institute_id", instituteIds)
         .eq("is_active", true)
         .order("name");
 
-      if (classesError) {
-        console.error(
-          "CLASSES REPORT ERROR:",
-          classesError
-        );
+      if (classError) throw classError;
 
-        setClasses([]);
-      } else {
-        setClasses(classesData || []);
-      }
+      setClasses(classData || []);
 
-      /*
-       * الطلاب
-       *
-       * نقرأ الطلاب من كل معهد مباشرة.
-       */
-      const studentResults =
-        await Promise.all(
-          currentInstitutes.map(
-            async (institute) => {
-              const {
-                data,
-                error,
-              } = await supabase
-                .from("students")
-                .select(
-                  "id, full_name, student_code, class_id, institute_id"
-                )
-                .eq(
-                  "institute_id",
-                  institute.id
-                )
-                .order("full_name");
-
-              if (error) {
-                console.error(
-                  `STUDENTS ERROR - ${institute.name}:`,
-                  error
-                );
-
-                return [];
-              }
-
-              return data || [];
-            }
-          )
-        );
-
-      const allStudents =
-        studentResults.flat();
-
-      setStudents(allStudents);
-
-      /*
-       * سجلات الحضور منفصلة.
-       */
+      // -------------------------------------------------------
+      // Students
+      // -------------------------------------------------------
       const {
-        data: attendanceData,
-        error: attendanceError,
+        data: studentData,
+        error: studentError,
       } = await supabase
-        .from("attendance")
+        .from("students")
         .select(
-          "student_id, attendance_date, status, institute_id"
+          "id, full_name, class_id, institute_id, national_id, phone"
         )
-        .in(
-          "institute_id",
-          instituteIds
-        )
-        .gte(
-          "attendance_date",
-          fromDate
-        )
-        .lte(
-          "attendance_date",
-          toDate
-        );
+        .in("institute_id", instituteIds)
+        .eq("is_active", true)
+        .order("full_name");
 
-      if (attendanceError) {
-        console.error(
-          "ATTENDANCE REPORT ERROR:",
-          attendanceError
-        );
+      if (studentError) throw studentError;
 
-        setAttendance([]);
+      setStudents(studentData || []);
 
-        setMessage(
-          "تم تحميل الطلاب، لكن تعذر تحميل سجلات الحضور"
-        );
-
-        setReportLoading(false);
-        return;
-      }
-
-      setAttendance(
-        attendanceData || []
+      // -------------------------------------------------------
+      // Attendance
+      // -------------------------------------------------------
+      await loadAttendance(
+        instituteIds,
+        studentData || []
       );
-    } catch (error) {
-      console.error(error);
-      setMessage("حدث خطأ غير متوقع");
+    } catch (error: any) {
+      console.error(
+        "loadDirectorateData error:",
+        error
+      );
+
+      setStudents([]);
+      setClasses([]);
+      setAttendance([]);
+
+      setMessage(
+        error?.message ||
+          "حدث خطأ أثناء تحميل بيانات الإدارة التعليمية."
+      );
     } finally {
       setReportLoading(false);
     }
   }
 
-  /*
-   * تحميل الحضور لمعهد واحد
-   */
+  // =========================================================
+  // تحميل الحضور
+  // =========================================================
   async function loadAttendance(
-    instituteId: string
+    instituteIds: string[],
+    currentStudents: Student[]
   ) {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from("attendance")
-      .select(
-        "student_id, attendance_date, status, institute_id"
-      )
-      .eq(
-        "institute_id",
-        instituteId
-      )
-      .gte(
-        "attendance_date",
-        fromDate
-      )
-      .lte(
-        "attendance_date",
-        toDate
+    try {
+      if (instituteIds.length === 0) {
+        setAttendance([]);
+        return;
+      }
+
+      const studentIds = currentStudents.map(
+        (student) => student.id
       );
 
-    if (error) {
-      console.error(
-        "ATTENDANCE ERROR:",
-        error
-      );
+      if (studentIds.length === 0) {
+        setAttendance([]);
+        return;
+      }
+
+      let query = supabase
+        .from("attendance")
+        .select(
+          "id, student_id, institute_id, class_id, attendance_date, status"
+        )
+        .in("institute_id", instituteIds)
+        .in("student_id", studentIds)
+        .order("attendance_date", {
+          ascending: false,
+        });
+
+      if (fromDate) {
+        query = query.gte(
+          "attendance_date",
+          fromDate
+        );
+      }
+
+      if (toDate) {
+        query = query.lte(
+          "attendance_date",
+          toDate
+        );
+      }
+
+      const {
+        data,
+        error,
+      } = await query;
+
+      if (error) throw error;
+
+      setAttendance(data || []);
+    } catch (error: any) {
+      console.error("loadAttendance error:", error);
 
       setAttendance([]);
 
       setMessage(
-        "تم تحميل الطلاب، لكن تعذر تحميل سجلات الحضور"
+        error?.message ||
+          "حدث خطأ أثناء تحميل سجلات الحضور."
       );
-
-      return;
     }
-
-    setAttendance(data || []);
   }
 
+  // =========================================================
+  // تحديث التقرير
+  // =========================================================
   async function refreshReport() {
-    if (fromDate > toDate) {
-      setMessage(
-        "تاريخ البداية يجب أن يكون قبل تاريخ النهاية"
-      );
+    if (!profile) return;
+
+    if (isInstituteUser && profile.institute_id) {
+      await loadInstituteData(profile.institute_id);
       return;
     }
 
-    if (!profile) return;
-
-    setReportLoading(true);
-
-    try {
-      if (
-        profile.role === "sheikh" ||
-        profile.role === "it_admin"
-      ) {
-        if (selectedInstitute) {
-          await loadInstituteData(
-            selectedInstitute
-          );
-        }
+    if (isCentralManager) {
+      if (selectedInstitute) {
+        await loadInstituteData(selectedInstitute);
       } else {
         await loadDirectorateData();
       }
-    } finally {
-      setReportLoading(false);
     }
   }
 
-  /*
-   * التقرير التفصيلي للطلاب
-   */
+  // =========================================================
+  // البيانات حسب المعهد المختار
+  // =========================================================
+  const filteredClasses = useMemo(() => {
+    if (!selectedInstitute) {
+      return classes;
+    }
+
+    return classes.filter(
+      (item) =>
+        item.institute_id === selectedInstitute
+    );
+  }, [classes, selectedInstitute]);
+
+  // =========================================================
+  // التقرير الرئيسي
+  // =========================================================
   const report = useMemo<ReportRow[]>(() => {
-    let filteredStudents = students;
+    const classMap = new Map<string, string>();
 
-    if (selectedClass) {
-      filteredStudents =
-        filteredStudents.filter(
-          (student) =>
-            student.class_id ===
-            selectedClass
-        );
-    }
+    classes.forEach((item) => {
+      classMap.set(item.id, item.name);
+    });
 
-    if (searchTerm.trim()) {
-      const search =
-        searchTerm
-          .trim()
-          .toLowerCase();
+    const instituteMap = new Map<string, string>();
 
-      filteredStudents =
-        filteredStudents.filter(
-          (student) =>
-            student.full_name
-              .toLowerCase()
-              .includes(search) ||
-            (student.student_code || "")
-              .toLowerCase()
-              .includes(search)
-        );
-    }
+    institutes.forEach((item) => {
+      instituteMap.set(item.id, item.name);
+    });
 
-    return filteredStudents.map(
-      (student) => {
+    const attendanceByStudent = new Map<
+      string,
+      AttendanceRow[]
+    >();
+
+    attendance.forEach((row) => {
+      const existing =
+        attendanceByStudent.get(row.student_id) || [];
+
+      existing.push(row);
+
+      attendanceByStudent.set(
+        row.student_id,
+        existing
+      );
+    });
+
+    return students
+      .filter((student) => {
+        if (
+          selectedInstitute &&
+          student.institute_id !== selectedInstitute
+        ) {
+          return false;
+        }
+
+        if (
+          selectedClass &&
+          student.class_id !== selectedClass
+        ) {
+          return false;
+        }
+
+        if (search.trim()) {
+          const value = search
+            .trim()
+            .toLowerCase();
+
+          const fullName =
+            student.full_name?.toLowerCase() || "";
+
+          const nationalId =
+            student.national_id?.toLowerCase() || "";
+
+          const phone =
+            student.phone?.toLowerCase() || "";
+
+          if (
+            !fullName.includes(value) &&
+            !nationalId.includes(value) &&
+            !phone.includes(value)
+          ) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .map((student) => {
         const records =
-          attendance.filter(
-            (record) =>
-              record.student_id ===
-              student.id
-          );
+          attendanceByStudent.get(student.id) || [];
 
-        const present =
-          records.filter(
-            (record) =>
-              record.status ===
-              "present"
-          ).length;
+        let present = 0;
+        let absent = 0;
+        let late = 0;
+        let excused = 0;
 
-        const absent =
-          records.filter(
-            (record) =>
-              record.status ===
-              "absent"
-          ).length;
+        records.forEach((record) => {
+          const status =
+            record.status?.toLowerCase();
 
-        const late =
-          records.filter(
-            (record) =>
-              record.status ===
-              "late"
-          ).length;
-
-        const excused =
-          records.filter(
-            (record) =>
-              record.status ===
-              "excused"
-          ).length;
+          if (
+            status === "present" ||
+            status === "حاضر"
+          ) {
+            present++;
+          } else if (
+            status === "absent" ||
+            status === "غائب"
+          ) {
+            absent++;
+          } else if (
+            status === "late" ||
+            status === "متأخر"
+          ) {
+            late++;
+          } else if (
+            status === "excused" ||
+            status === "معذور"
+          ) {
+            excused++;
+          }
+        });
 
         const total =
           present +
@@ -675,19 +653,26 @@ export default function AttendanceReportPage() {
           late +
           excused;
 
+        const attended =
+          present + late + excused;
+
         const percentage =
           total > 0
             ? Math.round(
-                ((present +
-                  late +
-                  excused) /
-                  total) *
-                  100
+                (attended / total) * 100
               )
             : 0;
 
         return {
           student,
+          className: student.class_id
+            ? classMap.get(student.class_id) ||
+              "بدون فصل"
+            : "بدون فصل",
+          instituteName:
+            instituteMap.get(
+              student.institute_id
+            ) || "غير محدد",
           present,
           absent,
           late,
@@ -695,28 +680,29 @@ export default function AttendanceReportPage() {
           total,
           percentage,
         };
-      }
-    );
+      });
   }, [
     students,
     attendance,
+    classes,
+    institutes,
+    selectedInstitute,
     selectedClass,
-    searchTerm,
+    search,
   ]);
 
-  /*
-   * إجمالي التقرير
-   */
+  // =========================================================
+  // إجماليات التقرير
+  // =========================================================
   const totals = useMemo(() => {
     return report.reduce(
       (acc, row) => {
-        acc.students += 1;
+        acc.students++;
         acc.present += row.present;
         acc.absent += row.absent;
         acc.late += row.late;
         acc.excused += row.excused;
         acc.total += row.total;
-
         return acc;
       },
       {
@@ -741,102 +727,67 @@ export default function AttendanceReportPage() {
         )
       : 0;
 
-  /*
-   * ملخص المعاهد
-   */
+  // =========================================================
+  // ملخص حسب المعهد
+  // =========================================================
   const instituteSummary =
     useMemo<InstituteSummary[]>(() => {
-      return institutes.map(
-        (institute) => {
-          const instituteStudents =
-            students.filter(
-              (student) =>
-                student.institute_id ===
-                institute.id
-            );
+      const grouped = new Map<
+        string,
+        InstituteSummary
+      >();
 
-          const studentIds =
-            new Set(
-              instituteStudents.map(
-                (student) =>
-                  student.id
-              )
-            );
+      report.forEach((row) => {
+        const instituteId =
+          row.student.institute_id;
 
-          const records =
-            attendance.filter(
-              (record) =>
-                studentIds.has(
-                  record.student_id
-                )
-            );
+        const existing = grouped.get(
+          instituteId
+        );
 
-          const present =
-            records.filter(
-              (record) =>
-                record.status ===
-                "present"
-            ).length;
+        if (existing) {
+          existing.present += row.present;
+          existing.absent += row.absent;
+          existing.late += row.late;
+          existing.excused += row.excused;
+          existing.total += row.total;
+          return;
+        }
 
-          const absent =
-            records.filter(
-              (record) =>
-                record.status ===
-                "absent"
-            ).length;
+        grouped.set(instituteId, {
+          instituteId,
+          instituteName: row.instituteName,
+          students: 1,
+          present: row.present,
+          absent: row.absent,
+          late: row.late,
+          excused: row.excused,
+          total: row.total,
+          percentage: 0,
+        });
+      });
 
-          const late =
-            records.filter(
-              (record) =>
-                record.status ===
-                "late"
-            ).length;
-
-          const excused =
-            records.filter(
-              (record) =>
-                record.status ===
-                "excused"
-            ).length;
-
-          const total =
-            present +
-            absent +
-            late +
-            excused;
-
-          const percentage =
-            total > 0
+      return Array.from(grouped.values()).map(
+        (item) => ({
+          ...item,
+          percentage:
+            item.total > 0
               ? Math.round(
-                  ((present +
-                    late +
-                    excused) /
-                    total) *
+                  ((item.present +
+                    item.late +
+                    item.excused) /
+                    item.total) *
                     100
                 )
-              : 0;
-
-          return {
-            institute,
-            students:
-              instituteStudents.length,
-            present,
-            absent,
-            late,
-            excused,
-            total,
-            percentage,
-          };
-        }
+              : 0,
+        })
       );
-    }, [
-      institutes,
-      students,
-      attendance,
-    ]);
+    }, [report]);
 
-
-  function escapeHtml(value: string | null | undefined) {
+  // =========================================================
+  // HTML escaping للطباعة
+  // =========================================================
+  function escapeHtml(value: unknown) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -845,293 +796,568 @@ export default function AttendanceReportPage() {
       .replace(/'/g, "&#039;");
   }
 
-  function formatDateForPrint(date: string) {
-    if (!date) return "-";
-    const [year, month, day] = date.split("-");
-    return `${day}/${month}/${year}`;
+  // =========================================================
+  // تنسيق التاريخ
+  // =========================================================
+  function formatDateForPrint(
+    value: string
+  ) {
+    if (!value) return "—";
+
+    const date = new Date(
+      `${value}T00:00:00`
+    );
+
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    return date.toLocaleDateString("ar-EG", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
   }
 
+  // =========================================================
+  // طباعة التقرير
+  // =========================================================
   function handlePrintReport() {
-    if (report.length === 0 && instituteSummary.length === 0) {
-      setMessage("لا توجد بيانات متاحة للطباعة");
-      return;
-    }
+    const instituteName = selectedInstitute
+      ? institutes.find(
+          (item) =>
+            item.id === selectedInstitute
+        )?.name || "المعهد"
+      : "جميع المعاهد";
 
-    const printWindow = window.open("", "_blank", "width=1200,height=800");
+    const className = selectedClass
+      ? classes.find(
+          (item) =>
+            item.id === selectedClass
+        )?.name || "الفصل"
+      : "جميع الفصول";
+
+    const rowsHtml = report
+      .map(
+        (row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(
+              row.student.full_name
+            )}</td>
+            <td>${escapeHtml(
+              row.instituteName
+            )}</td>
+            <td>${escapeHtml(
+              row.className
+            )}</td>
+            <td>${row.present}</td>
+            <td>${row.absent}</td>
+            <td>${row.late}</td>
+            <td>${row.excused}</td>
+            <td>${row.total}</td>
+            <td>${row.percentage}%</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const summaryHtml =
+      instituteSummary
+        .map(
+          (item) => `
+            <tr>
+              <td>${escapeHtml(
+                item.instituteName
+              )}</td>
+              <td>${item.students}</td>
+              <td>${item.present}</td>
+              <td>${item.absent}</td>
+              <td>${item.late}</td>
+              <td>${item.excused}</td>
+              <td>${item.percentage}%</td>
+            </tr>
+          `
+        )
+        .join("");
+
+    const printWindow =
+      window.open(
+        "",
+        "_blank",
+        "width=1400,height=900"
+      );
+
     if (!printWindow) {
-      setMessage("تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة.");
+      setMessage(
+        "تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة."
+      );
       return;
     }
 
-    const instituteTitle = selectedInstitute
-      ? institutes.find((item) => item.id === selectedInstitute)?.name || "-"
-      : "جميع المعاهد التابعة للإدارة";
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="ar" dir="rtl">
+      <head>
+        <meta charset="UTF-8" />
 
-    const classTitle = selectedClass
-      ? classes.find((item) => item.id === selectedClass)?.name || "-"
-      : "كل الفصول";
+        <title>
+          تقرير الحضور والغياب
+        </title>
 
-    const searchTitle = searchTerm.trim() || "بدون بحث";
+        <style>
+          @page {
+            size: A4 landscape;
+            margin: 12mm;
+          }
 
-    const summarySection =
-      isCentralManager && selectedInstitute === "" && instituteSummary.length > 0
-        ? `
-          <section class="section">
-            <h2>ملخص أداء المعاهد</h2>
-            <table>
-              <thead><tr>
-                <th>المعهد</th><th>الطلاب</th><th>الحضور</th><th>الغياب</th>
-                <th>التأخير</th><th>المعذور</th><th>نسبة الحضور</th>
-              </tr></thead>
-              <tbody>
-                ${instituteSummary.map((row) => `
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            font-family:
+              "Segoe UI",
+              Tahoma,
+              Arial,
+              sans-serif;
+
+            direction: rtl;
+            color: #111827;
+            margin: 0;
+            background: #fff;
+          }
+
+          .header {
+            text-align: center;
+            margin-bottom: 20px;
+          }
+
+          .header h1 {
+            margin: 0 0 8px;
+            font-size: 24px;
+          }
+
+          .header p {
+            margin: 4px 0;
+            color: #4b5563;
+            font-size: 13px;
+          }
+
+          .filters {
+            display: grid;
+            grid-template-columns:
+              repeat(4, 1fr);
+
+            gap: 8px;
+
+            margin-bottom: 16px;
+          }
+
+          .filter {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 8px;
+            background: #f9fafb;
+          }
+
+          .filter strong {
+            display: block;
+            font-size: 11px;
+            color: #6b7280;
+            margin-bottom: 3px;
+          }
+
+          .stats {
+            display: grid;
+            grid-template-columns:
+              repeat(5, 1fr);
+
+            gap: 8px;
+            margin-bottom: 20px;
+          }
+
+          .stat {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+          }
+
+          .stat strong {
+            display: block;
+            font-size: 18px;
+            margin-top: 4px;
+          }
+
+          h2 {
+            font-size: 17px;
+            margin:
+              20px 0
+              10px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+
+          th,
+          td {
+            border: 1px solid #d1d5db;
+            padding: 7px 6px;
+            text-align: center;
+            font-size: 11px;
+          }
+
+          th {
+            background: #f3f4f6;
+            font-weight: 700;
+          }
+
+          tbody tr:nth-child(even) {
+            background: #fafafa;
+          }
+
+          .footer {
+            margin-top: 20px;
+            display: flex;
+            justify-content:
+              space-between;
+
+            font-size: 11px;
+            color: #6b7280;
+          }
+
+          .empty {
+            text-align: center;
+            padding: 30px;
+            border: 1px solid #d1d5db;
+          }
+        </style>
+      </head>
+
+      <body>
+
+        <div class="header">
+          <h1>
+            تقرير الحضور والغياب
+          </h1>
+
+          <p>
+            منصة الإدارة والمتابعة التعليمية الأزهرية
+          </p>
+
+          <p>
+            تقرير متابعة وتحليل حضور الطلاب
+          </p>
+        </div>
+
+        <div class="filters">
+
+          <div class="filter">
+            <strong>المعهد</strong>
+            ${escapeHtml(
+              instituteName
+            )}
+          </div>
+
+          <div class="filter">
+            <strong>الفصل</strong>
+            ${escapeHtml(
+              className
+            )}
+          </div>
+
+          <div class="filter">
+            <strong>من تاريخ</strong>
+            ${escapeHtml(
+              fromDate
+                ? formatDateForPrint(
+                    fromDate
+                  )
+                : "كل التواريخ"
+            )}
+          </div>
+
+          <div class="filter">
+            <strong>إلى تاريخ</strong>
+            ${escapeHtml(
+              toDate
+                ? formatDateForPrint(
+                    toDate
+                  )
+                : "كل التواريخ"
+            )}
+          </div>
+
+        </div>
+
+        <div class="stats">
+
+          <div class="stat">
+            الطلاب
+            <strong>
+              ${totals.students}
+            </strong>
+          </div>
+
+          <div class="stat">
+            حاضر
+            <strong>
+              ${totals.present}
+            </strong>
+          </div>
+
+          <div class="stat">
+            غائب
+            <strong>
+              ${totals.absent}
+            </strong>
+          </div>
+
+          <div class="stat">
+            متأخر
+            <strong>
+              ${totals.late}
+            </strong>
+          </div>
+
+          <div class="stat">
+            نسبة الحضور
+            <strong>
+              ${overallPercentage}%
+            </strong>
+          </div>
+
+        </div>
+
+        ${
+          instituteSummary.length > 0
+            ? `
+              <h2>
+                ملخص الحضور حسب المعهد
+              </h2>
+
+              <table>
+                <thead>
                   <tr>
-                    <td><strong>${escapeHtml(row.institute.name)}</strong><br><small>${escapeHtml(row.institute.code)}</small></td>
-                    <td>${row.students}</td><td>${row.present}</td><td>${row.absent}</td>
-                    <td>${row.late}</td><td>${row.excused}</td><td>${row.percentage}%</td>
-                  </tr>`).join("")}
-              </tbody>
-            </table>
-          </section>`
-        : "";
+                    <th>المعهد</th>
+                    <th>الطلاب</th>
+                    <th>حاضر</th>
+                    <th>غائب</th>
+                    <th>متأخر</th>
+                    <th>معذور</th>
+                    <th>نسبة الحضور</th>
+                  </tr>
+                </thead>
 
-    const studentSection = report.length > 0
-      ? `
-        <section class="section">
-          <h2>التقرير التفصيلي للطلاب</h2>
-          <table>
-            <thead><tr>
-              ${selectedInstitute === "" && isCentralManager ? "<th>المعهد</th>" : ""}
-              <th>م</th><th>الطالب</th><th>الكود</th><th>الحضور</th>
-              <th>الغياب</th><th>التأخير</th><th>المعذور</th>
-              <th>إجمالي السجلات</th><th>نسبة الحضور</th>
-            </tr></thead>
-            <tbody>
-              ${report.map((row, index) => {
-                const institute = institutes.find((item) => item.id === row.student.institute_id);
-                return `<tr>
-                  ${selectedInstitute === "" && isCentralManager ? `<td>${escapeHtml(institute?.name || "-")}</td>` : ""}
-                  <td>${index + 1}</td>
-                  <td><strong>${escapeHtml(row.student.full_name)}</strong></td>
-                  <td>${escapeHtml(row.student.student_code || "-")}</td>
-                  <td>${row.present}</td><td>${row.absent}</td><td>${row.late}</td>
-                  <td>${row.excused}</td><td>${row.total}</td><td><strong>${row.percentage}%</strong></td>
-                </tr>`;
-              }).join("")}
-            </tbody>
-          </table>
-        </section>`
-      : `<div class="empty">لا توجد بيانات طلاب مطابقة للفلاتر المحددة.</div>`;
+                <tbody>
+                  ${summaryHtml}
+                </tbody>
+              </table>
+            `
+            : ""
+        }
 
-    printWindow.document.write(`<!doctype html>
-<html lang="ar" dir="rtl"><head><meta charset="utf-8"/>
-<title>تقرير الحضور والإحصائيات</title>
-<style>
-@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}
-body{font-family:Arial,Tahoma,sans-serif;direction:rtl;color:#1f2937;margin:0}
-.header{text-align:center;border-bottom:2px solid #1d4ed8;padding-bottom:14px;margin-bottom:16px}
-h1{margin:0 0 6px;font-size:24px}.subtitle{color:#4b5563;font-size:15px}
-.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 18px}
-.meta div{border:1px solid #d1d5db;border-radius:7px;padding:8px;font-size:12px;background:#f9fafb}
-.meta strong{display:block;margin-bottom:3px}.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:18px}
-.stat{border:1px solid #d1d5db;border-radius:7px;padding:9px;text-align:center}
-.stat .label{font-size:11px;color:#6b7280}.stat .value{font-size:18px;font-weight:bold;margin-top:4px}
-.section{margin-top:18px}h2{font-size:17px;margin:0 0 9px}
-table{width:100%;border-collapse:collapse;font-size:10px}
-th,td{border:1px solid #cbd5e1;padding:6px 5px;text-align:center;vertical-align:middle}
-th{background:#f1f5f9;font-weight:bold}td:first-child,th:first-child{text-align:right}
-small{color:#64748b}.empty{text-align:center;border:1px solid #d1d5db;padding:25px;margin-top:20px}
-.footer{margin-top:18px;padding-top:8px;border-top:1px solid #d1d5db;font-size:10px;color:#6b7280;text-align:center}
-@media print{.section{break-inside:avoid}tr{break-inside:avoid}}
-</style></head><body>
-<div class="header"><h1>نظام إدارة المعاهد الأزهرية</h1><div class="subtitle">تقرير الحضور والإحصائيات</div></div>
-<div class="meta">
-<div><strong>المعهد</strong>${escapeHtml(instituteTitle)}</div>
-<div><strong>الفصل</strong>${escapeHtml(classTitle)}</div>
-<div><strong>الفترة</strong>${formatDateForPrint(fromDate)} إلى ${formatDateForPrint(toDate)}</div>
-<div><strong>البحث</strong>${escapeHtml(searchTitle)}</div>
-</div>
-<div class="stats">
-<div class="stat"><div class="label">المعاهد</div><div class="value">${isCentralManager ? institutes.length : 1}</div></div>
-<div class="stat"><div class="label">الطلاب</div><div class="value">${totals.students}</div></div>
-<div class="stat"><div class="label">الحضور</div><div class="value">${totals.present}</div></div>
-<div class="stat"><div class="label">الغياب</div><div class="value">${totals.absent}</div></div>
-<div class="stat"><div class="label">التأخير</div><div class="value">${totals.late}</div></div>
-<div class="stat"><div class="label">نسبة الحضور</div><div class="value">${overallPercentage}%</div></div>
-</div>
-${summarySection}${studentSection}
-<div class="footer">تم إنشاء التقرير بتاريخ ${new Date().toLocaleString("ar-EG")}</div>
-</body></html>`);
+        <h2>
+          تفاصيل حضور الطلاب
+        </h2>
+
+        ${
+          report.length > 0
+            ? `
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>اسم الطالب</th>
+                    <th>المعهد</th>
+                    <th>الفصل</th>
+                    <th>حاضر</th>
+                    <th>غائب</th>
+                    <th>متأخر</th>
+                    <th>معذور</th>
+                    <th>الإجمالي</th>
+                    <th>نسبة الحضور</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  ${rowsHtml}
+                </tbody>
+              </table>
+            `
+            : `
+              <div class="empty">
+                لا توجد بيانات مطابقة للفلاتر المحددة.
+              </div>
+            `
+        }
+
+        <div class="footer">
+          <span>
+            تاريخ الطباعة:
+            ${new Date().toLocaleString(
+              "ar-EG"
+            )}
+          </span>
+
+          <span>
+            نظام إدارة المعاهد الأزهرية
+          </span>
+        </div>
+
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+
+      </body>
+      </html>
+    `);
+
     printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 300);
   }
 
-  /*
-   * Loading
-   */
+  // =========================================================
+  // Loading
+  // =========================================================
   if (loading) {
     return (
       <main
-        className="min-h-screen bg-gray-50 p-8"
         dir="rtl"
+        className="min-h-screen bg-slate-50 p-6"
       >
-        <div className="max-w-7xl mx-auto text-center py-20">
-          <RefreshCw
-            className="mx-auto animate-spin mb-4 text-blue-600"
-            size={32}
-          />
+        <div className="mx-auto max-w-7xl">
+          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+            <RefreshCw className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-600" />
 
-          <p className="text-gray-600">
-            جاري تحميل تقرير الحضور والإحصائيات...
-          </p>
+            <p className="text-slate-600">
+              جاري تحميل تقرير الحضور والغياب...
+            </p>
+          </div>
         </div>
       </main>
     );
   }
 
-  /*
-   * الحماية النهائية
-   */
-  if (
-    !profile ||
-    !allowedRoles.includes(
-      profile.role
-    )
-  ) {
-    return (
-      <main
-        className="min-h-screen bg-gray-50 p-8"
-        dir="rtl"
-      >
-        <div className="max-w-3xl mx-auto bg-white rounded-2xl p-8 text-center">
-          <ShieldCheck
-            className="mx-auto text-red-500 mb-4"
-            size={48}
-          />
-
-          <h1 className="text-2xl font-bold text-gray-800">
-            غير مصرح
-          </h1>
-
-          <p className="text-gray-500 mt-2">
-            ليس لديك صلاحية لعرض هذه الصفحة.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  const isAllInstitutes =
-    isCentralManager &&
-    selectedInstitute === "";
-
+  // =========================================================
+  // UI
+  // =========================================================
   return (
     <main
-      className="min-h-screen bg-gray-50 p-6 md:p-8"
       dir="rtl"
+      className="min-h-screen bg-slate-50 p-4 md:p-6"
     >
-      <div className="max-w-7xl mx-auto">
+      <div className="mx-auto max-w-7xl space-y-6">
 
         {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
-          <div>
-            <div className="flex items-center gap-3">
-              <BarChart3
-                size={32}
-                className="text-blue-600"
-              />
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
 
-              <div>
-                <h1 className="text-3xl font-bold text-gray-800">
-                  التقارير والإحصائيات
-                </h1>
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
 
-                <p className="text-gray-500 mt-1">
-                  {isCentralManager
-                    ? "لوحة المتابعة المركزية للإدارة التعليمية الأزهرية"
-                    : profile.role ===
-                      "it_admin"
-                      ? "تقارير وإحصائيات معهدك"
-                      : "متابعة وتحليل حضور الطلاب خلال الفترة المحددة"}
-                </p>
+            <div>
+              <div className="mb-2 flex items-center gap-3">
+
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                  <BarChart3 className="h-6 w-6" />
+                </div>
+
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900">
+                    تقرير الحضور والغياب
+                  </h1>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    متابعة وتحليل حضور الطلاب خلال الفترة المحددة
+                  </p>
+                </div>
+
               </div>
             </div>
-          </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <button
-              onClick={handlePrintReport}
-              disabled={report.length === 0 && instituteSummary.length === 0}
-              className="flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 px-5 py-3 rounded-xl font-semibold"
-            >
-              <Printer size={19} />
-              طباعة
-            </button>
+            <div className="flex flex-wrap gap-2">
 
-            <button
-              onClick={refreshReport}
-              disabled={reportLoading}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-5 py-3 rounded-xl font-semibold"
-            >
-              <RefreshCw
-                size={19}
-                className={reportLoading ? "animate-spin" : ""}
-              />
-              تحديث التقرير
-            </button>
+              <button
+                type="button"
+                onClick={refreshReport}
+                disabled={reportLoading}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${
+                    reportLoading
+                      ? "animate-spin"
+                      : ""
+                  }`}
+                />
+
+                تحديث التقرير
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePrintReport}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                <Printer className="h-4 w-4" />
+                طباعة التقرير
+              </button>
+
+            </div>
+
           </div>
-        </div>
+        </section>
 
         {/* Message */}
         {message && (
-          <div className="mb-6 bg-white border border-blue-200 text-blue-700 rounded-xl p-4">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             {message}
           </div>
         )}
 
         {/* Filters */}
-        <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
-          <div className="flex items-center gap-2 mb-5">
-            <CalendarDays
-              size={21}
-              className="text-blue-600"
-            />
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
 
-            <h2 className="font-bold text-gray-800">
-              الفلاتر والتقرير الزمني
-            </h2>
+          <div className="mb-5 flex items-center gap-3">
+
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+
+            <div>
+              <h2 className="font-bold text-slate-900">
+                خيارات التقرير
+              </h2>
+
+              <p className="text-xs text-slate-500">
+                حدد المعهد والفصل والفترة الزمنية
+              </p>
+            </div>
+
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
 
             {/* Institute */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
                 المعهد
               </label>
 
               <select
-                value={
-                  selectedInstitute
-                }
-                onChange={(e) => {
-                  if (
-                    isInstituteUser
-                  ) {
-                    return;
-                  }
-
+                value={selectedInstitute}
+                onChange={(event) => {
                   setSelectedInstitute(
-                    e.target.value
+                    event.target.value
                   );
-
                   setSelectedClass("");
                 }}
-                disabled={
-                  isInstituteUser
-                }
-                className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                disabled={isInstituteUser}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
               >
                 {isCentralManager && (
                   <option value="">
@@ -1142,16 +1368,10 @@ ${summarySection}${studentSection}
                 {institutes.map(
                   (institute) => (
                     <option
-                      key={
-                        institute.id
-                      }
-                      value={
-                        institute.id
-                      }
+                      key={institute.id}
+                      value={institute.id}
                     >
-                      {
-                        institute.name
-                      }
+                      {institute.name}
                     </option>
                   )
                 )}
@@ -1160,38 +1380,30 @@ ${summarySection}${studentSection}
 
             {/* Class */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
                 الفصل
               </label>
 
               <select
-                value={
-                  selectedClass
-                }
-                onChange={(e) =>
+                value={selectedClass}
+                onChange={(event) =>
                   setSelectedClass(
-                    e.target.value
+                    event.target.value
                   )
                 }
-                className="w-full border border-gray-300 rounded-xl py-3 px-3 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="">
-                  كل الفصول
+                  جميع الفصول
                 </option>
 
-                {classes.map(
-                  (classItem) => (
+                {filteredClasses.map(
+                  (item) => (
                     <option
-                      key={
-                        classItem.id
-                      }
-                      value={
-                        classItem.id
-                      }
+                      key={item.id}
+                      value={item.id}
                     >
-                      {
-                        classItem.name
-                      }
+                      {item.name}
                     </option>
                   )
                 )}
@@ -1200,551 +1412,497 @@ ${summarySection}${studentSection}
 
             {/* From */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
                 من تاريخ
               </label>
 
-              <div className="relative">
-                <CalendarDays
-                  size={19}
-                  className="absolute right-3 top-3 text-gray-400"
-                />
-
-                <input
-                  type="date"
-                  value={
-                    fromDate
-                  }
-                  onChange={(e) =>
-                    setFromDate(
-                      e.target.value
-                    )
-                  }
-                  className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(event) =>
+                  setFromDate(
+                    event.target.value
+                  )
+                }
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
             </div>
 
             {/* To */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
                 إلى تاريخ
               </label>
 
-              <div className="relative">
-                <CalendarDays
-                  size={19}
-                  className="absolute right-3 top-3 text-gray-400"
-                />
-
-                <input
-                  type="date"
-                  value={
-                    toDate
-                  }
-                  onChange={(e) =>
-                    setToDate(
-                      e.target.value
-                    )
-                  }
-                  className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="mt-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              البحث عن طالب
-            </label>
-
-            <div className="relative max-w-md">
-              <Search
-                size={19}
-                className="absolute right-3 top-3 text-gray-400"
-              />
-
               <input
-                type="text"
-                value={
-                  searchTerm
-                }
-                onChange={(e) =>
-                  setSearchTerm(
-                    e.target.value
+                type="date"
+                value={toDate}
+                onChange={(event) =>
+                  setToDate(
+                    event.target.value
                   )
                 }
-                placeholder="اسم الطالب أو كود الطالب..."
-                className="w-full border border-gray-300 rounded-xl py-3 pr-10 pl-3 outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
-          </div>
-        </div>
 
-        {/* Statistics */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+            {/* Search */}
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                بحث
+              </label>
 
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <Building2
-              className="text-blue-600 mb-3"
-              size={25}
-            />
+              <div className="relative">
 
-            <p className="text-gray-500 text-sm">
-              المعاهد
-            </p>
+                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
-            <p className="text-2xl font-bold text-gray-800">
-              {isCentralManager
-                ? institutes.length
-                : 1}
-            </p>
-          </div>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(
+                      event.target.value
+                    )
+                  }
+                  placeholder="اسم الطالب أو الرقم القومي..."
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pr-9 pl-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
 
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <Users
-              className="text-indigo-600 mb-3"
-              size={25}
-            />
-
-            <p className="text-gray-500 text-sm">
-              الطلاب
-            </p>
-
-            <p className="text-2xl font-bold text-gray-800">
-              {totals.students}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <CheckCircle2
-              className="text-green-600 mb-3"
-              size={25}
-            />
-
-            <p className="text-gray-500 text-sm">
-              الحضور
-            </p>
-
-            <p className="text-2xl font-bold text-gray-800">
-              {totals.present}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <XCircle
-              className="text-red-600 mb-3"
-              size={25}
-            />
-
-            <p className="text-gray-500 text-sm">
-              الغياب
-            </p>
-
-            <p className="text-2xl font-bold text-gray-800">
-              {totals.absent}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <Clock3
-              className="text-yellow-600 mb-3"
-              size={25}
-            />
-
-            <p className="text-gray-500 text-sm">
-              التأخير
-            </p>
-
-            <p className="text-2xl font-bold text-gray-800">
-              {totals.late}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <TrendingUp
-              className="text-purple-600 mb-3"
-              size={25}
-            />
-
-            <p className="text-gray-500 text-sm">
-              نسبة الحضور
-            </p>
-
-            <p className="text-2xl font-bold text-gray-800">
-              {overallPercentage}%
-            </p>
-          </div>
-        </div>
-
-        {/* Institute Summary */}
-        {isCentralManager &&
-          isAllInstitutes && (
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-6">
-
-              <div className="p-6 border-b">
-                <div className="flex items-center gap-3">
-                  <Building2
-                    size={24}
-                    className="text-blue-600"
-                  />
-
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-800">
-                      ملخص أداء المعاهد
-                    </h2>
-
-                    <p className="text-gray-500 text-sm mt-1">
-                      مقارنة مؤشرات الحضور والطلاب بين المعاهد التابعة للإدارة
-                    </p>
-                  </div>
-                </div>
               </div>
-
-              {instituteSummary.length ===
-              0 ? (
-                <div className="text-center py-14 text-gray-500">
-                  لا توجد معاهد مسجلة
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="text-right px-5 py-4">
-                          المعهد
-                        </th>
-
-                        <th className="text-center px-5 py-4">
-                          الطلاب
-                        </th>
-
-                        <th className="text-center px-5 py-4">
-                          الحضور
-                        </th>
-
-                        <th className="text-center px-5 py-4">
-                          الغياب
-                        </th>
-
-                        <th className="text-center px-5 py-4">
-                          التأخير
-                        </th>
-
-                        <th className="text-center px-5 py-4">
-                          المعذور
-                        </th>
-
-                        <th className="text-center px-5 py-4">
-                          نسبة الحضور
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody className="divide-y">
-                      {instituteSummary.map(
-                        (row) => (
-                          <tr
-                            key={
-                              row.institute
-                                .id
-                            }
-                            className="hover:bg-gray-50"
-                          >
-                            <td className="px-5 py-5">
-                              <div className="font-semibold text-gray-800">
-                                {
-                                  row
-                                    .institute
-                                    .name
-                                }
-                              </div>
-
-                              <div className="text-xs text-gray-400 mt-1">
-                                {
-                                  row
-                                    .institute
-                                    .code
-                                }
-                              </div>
-                            </td>
-
-                            <td className="px-5 py-5 text-center font-semibold">
-                              {
-                                row.students
-                              }
-                            </td>
-
-                            <td className="px-5 py-5 text-center">
-                              <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">
-                                {
-                                  row.present
-                                }
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-5 text-center">
-                              <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-red-50 text-red-700 font-semibold">
-                                {
-                                  row.absent
-                                }
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-5 text-center">
-                              <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">
-                                {
-                                  row.late
-                                }
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-5 text-center">
-                              <span className="inline-flex min-w-10 justify-center px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
-                                {
-                                  row.excused
-                                }
-                              </span>
-                            </td>
-
-                            <td className="px-5 py-5 text-center">
-                              <span
-                                className={`inline-flex px-3 py-1 rounded-lg font-bold ${
-                                  row.percentage >=
-                                  90
-                                    ? "bg-green-50 text-green-700"
-                                    : row.percentage >=
-                                      75
-                                      ? "bg-yellow-50 text-yellow-700"
-                                      : "bg-red-50 text-red-700"
-                                }`}
-                              >
-                                {
-                                  row.percentage
-                                }
-                                %
-                              </span>
-                            </td>
-                          </tr>
-                        )
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
-          )}
 
-        {/* Student Details */}
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          </div>
 
-          <div className="p-6 border-b">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        </section>
+
+        {/* Stats */}
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
+          {/* Students */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
 
               <div>
-                <h2 className="text-xl font-bold text-gray-800">
-                  تفاصيل الطلاب
-                </h2>
+                <p className="text-sm text-slate-500">
+                  الطلاب
+                </p>
 
-                <p className="text-gray-500 text-sm mt-1">
-                  {isAllInstitutes
-                    ? "تفاصيل الطلاب في جميع المعاهد التابعة للإدارة"
-                    : profile.role ===
-                      "it_admin"
-                      ? "تفاصيل طلاب المعهد التابع للحساب"
-                      : "التقرير حسب الفترة والفصل المحددين"}
+                <p className="mt-2 text-2xl font-bold text-slate-900">
+                  {totals.students}
                 </p>
               </div>
 
-              <div className="text-sm text-gray-500">
-                عدد النتائج:
-                <span className="font-bold text-gray-800 mr-1">
-                  {
-                    report.length
-                  }
-                </span>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                <Users className="h-5 w-5" />
               </div>
 
             </div>
           </div>
 
-          {report.length ===
-          0 ? (
-            <div className="text-center py-16 text-gray-500">
-              لا توجد بيانات مطابقة للفترة أو البحث المحدد
+          {/* Present */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+
+              <div>
+                <p className="text-sm text-slate-500">
+                  حاضر
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-emerald-600">
+                  {totals.present}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+
             </div>
-          ) : (
+          </div>
+
+          {/* Absent */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+
+              <div>
+                <p className="text-sm text-slate-500">
+                  غائب
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-red-600">
+                  {totals.absent}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                <XCircle className="h-5 w-5" />
+              </div>
+
+            </div>
+          </div>
+
+          {/* Late */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+
+              <div>
+                <p className="text-sm text-slate-500">
+                  متأخر
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-amber-600">
+                  {totals.late}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                <Clock3 className="h-5 w-5" />
+              </div>
+
+            </div>
+          </div>
+
+          {/* Percentage */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+
+              <div>
+                <p className="text-sm text-slate-500">
+                  نسبة الحضور
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-indigo-600">
+                  {overallPercentage}%
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+
+            </div>
+          </div>
+
+        </section>
+
+        {/* Institute Summary */}
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+
+          <div className="mb-5 flex items-center gap-3">
+
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Building2 className="h-5 w-5" />
+            </div>
+
+            <div>
+              <h2 className="font-bold text-slate-900">
+                ملخص الحضور حسب المعهد
+              </h2>
+
+              <p className="text-xs text-slate-500">
+                مقارنة مؤشرات الحضور بين المعاهد
+              </p>
+            </div>
+
+          </div>
+
+          {instituteSummary.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full">
 
-                <thead className="bg-gray-50">
-                  <tr>
+              <table className="w-full min-w-[800px] border-collapse">
 
-                    {isAllInstitutes && (
-                      <th className="text-right px-5 py-4">
-                        المعهد
-                      </th>
-                    )}
+                <thead>
+                  <tr className="border-b border-slate-200 text-right">
 
-                    <th className="text-right px-5 py-4">
-                      الطالب
+                    <th className="px-4 py-3 text-sm font-bold text-slate-700">
+                      المعهد
                     </th>
 
-                    <th className="text-right px-5 py-4">
-                      الكود
+                    <th className="px-4 py-3 text-center text-sm font-bold text-slate-700">
+                      الطلاب
                     </th>
 
-                    <th className="text-center px-5 py-4">
-                      الحضور
+                    <th className="px-4 py-3 text-center text-sm font-bold text-emerald-700">
+                      حاضر
                     </th>
 
-                    <th className="text-center px-5 py-4">
-                      الغياب
+                    <th className="px-4 py-3 text-center text-sm font-bold text-red-700">
+                      غائب
                     </th>
 
-                    <th className="text-center px-5 py-4">
-                      التأخير
+                    <th className="px-4 py-3 text-center text-sm font-bold text-amber-700">
+                      متأخر
                     </th>
 
-                    <th className="text-center px-5 py-4">
-                      المعذور
+                    <th className="px-4 py-3 text-center text-sm font-bold text-slate-700">
+                      معذور
                     </th>
 
-                    <th className="text-center px-5 py-4">
-                      إجمالي السجلات
-                    </th>
-
-                    <th className="text-center px-5 py-4">
+                    <th className="px-4 py-3 text-center text-sm font-bold text-blue-700">
                       نسبة الحضور
                     </th>
 
                   </tr>
                 </thead>
 
-                <tbody className="divide-y">
+                <tbody>
 
-                  {report.map(
-                    (row) => {
-                      const institute =
-                        institutes.find(
-                          (item) =>
-                            item.id ===
-                            row
-                              .student
-                              .institute_id
-                        );
+                  {instituteSummary.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.instituteId
+                        }
+                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                      >
 
-                      return (
-                        <tr
-                          key={
-                            row
-                              .student
-                              .id
-                          }
-                          className="hover:bg-gray-50"
-                        >
+                        <td className="px-4 py-4 font-semibold text-slate-900">
+                          {item.instituteName}
+                        </td>
 
-                          {isAllInstitutes && (
-                            <td className="px-5 py-5">
-                              <div className="text-sm font-semibold text-gray-700">
-                                {
-                                  institute?.name ||
-                                  "-"
-                                }
-                              </div>
-                            </td>
-                          )}
+                        <td className="px-4 py-4 text-center text-slate-700">
+                          {item.students}
+                        </td>
 
-                          <td className="px-5 py-5">
-                            <div className="font-semibold text-gray-800">
-                              {
-                                row
-                                  .student
-                                  .full_name
-                              }
-                            </div>
-                          </td>
+                        <td className="px-4 py-4 text-center font-semibold text-emerald-600">
+                          {item.present}
+                        </td>
 
-                          <td className="px-5 py-5 text-gray-500">
-                            {
-                              row
-                                .student
-                                .student_code ||
-                              "-"
-                            }
-                          </td>
+                        <td className="px-4 py-4 text-center font-semibold text-red-600">
+                          {item.absent}
+                        </td>
 
-                          <td className="px-5 py-5 text-center">
-                            <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-green-50 text-green-700 font-semibold">
-                              {
-                                row.present
-                              }
-                            </span>
-                          </td>
+                        <td className="px-4 py-4 text-center font-semibold text-amber-600">
+                          {item.late}
+                        </td>
 
-                          <td className="px-5 py-5 text-center">
-                            <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-red-50 text-red-700 font-semibold">
-                              {
-                                row.absent
-                              }
-                            </span>
-                          </td>
+                        <td className="px-4 py-4 text-center text-slate-700">
+                          {item.excused}
+                        </td>
 
-                          <td className="px-5 py-5 text-center">
-                            <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">
-                              {
-                                row.late
-                              }
-                            </span>
-                          </td>
+                        <td className="px-4 py-4 text-center">
 
-                          <td className="px-5 py-5 text-center">
-                            <span className="inline-flex items-center justify-center min-w-10 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold">
-                              {
-                                row.excused
-                              }
-                            </span>
-                          </td>
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                              item.percentage >=
+                              90
+                                ? "bg-emerald-50 text-emerald-700"
+                                : item.percentage >=
+                                  75
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {item.percentage}%
+                          </span>
 
-                          <td className="px-5 py-5 text-center font-semibold">
-                            {
-                              row.total
-                            }
-                          </td>
+                        </td>
 
-                          <td className="px-5 py-5 text-center">
-                            <span
-                              className={`inline-flex px-3 py-1 rounded-lg font-bold ${
-                                row.percentage >=
-                                90
-                                  ? "bg-green-50 text-green-700"
-                                  : row.percentage >=
-                                    75
-                                    ? "bg-yellow-50 text-yellow-700"
-                                    : "bg-red-50 text-red-700"
-                              }`}
-                            >
-                              {
-                                row.percentage
-                              }
-                              %
-                            </span>
-                          </td>
-
-                        </tr>
-                      );
-                    }
+                      </tr>
+                    )
                   )}
 
                 </tbody>
 
               </table>
+
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+              لا توجد بيانات حضور لعرضها.
             </div>
           )}
 
-        </div>
+        </section>
+
+        {/* Student Details */}
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+
+            <div className="flex items-center gap-3">
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2 className="font-bold text-slate-900">
+                  تفاصيل حضور الطلاب
+                </h2>
+
+                <p className="text-xs text-slate-500">
+                  عدد النتائج: {report.length}
+                </p>
+              </div>
+
+            </div>
+
+            {reportLoading && (
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+
+                <RefreshCw className="h-4 w-4 animate-spin" />
+
+                جاري تحديث البيانات...
+
+              </div>
+            )}
+
+          </div>
+
+          {report.length > 0 ? (
+            <div className="overflow-x-auto">
+
+              <table className="w-full min-w-[1000px] border-collapse">
+
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-right">
+
+                    <th className="px-3 py-3 text-xs font-bold text-slate-700">
+                      #
+                    </th>
+
+                    <th className="px-3 py-3 text-xs font-bold text-slate-700">
+                      اسم الطالب
+                    </th>
+
+                    <th className="px-3 py-3 text-xs font-bold text-slate-700">
+                      المعهد
+                    </th>
+
+                    <th className="px-3 py-3 text-xs font-bold text-slate-700">
+                      الفصل
+                    </th>
+
+                    <th className="px-3 py-3 text-center text-xs font-bold text-emerald-700">
+                      حاضر
+                    </th>
+
+                    <th className="px-3 py-3 text-center text-xs font-bold text-red-700">
+                      غائب
+                    </th>
+
+                    <th className="px-3 py-3 text-center text-xs font-bold text-amber-700">
+                      متأخر
+                    </th>
+
+                    <th className="px-3 py-3 text-center text-xs font-bold text-slate-700">
+                      معذور
+                    </th>
+
+                    <th className="px-3 py-3 text-center text-xs font-bold text-slate-700">
+                      الإجمالي
+                    </th>
+
+                    <th className="px-3 py-3 text-center text-xs font-bold text-blue-700">
+                      نسبة الحضور
+                    </th>
+
+                  </tr>
+                </thead>
+
+                <tbody>
+
+                  {report.map(
+                    (row, index) => (
+                      <tr
+                        key={
+                          row.student.id
+                        }
+                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                      >
+
+                        <td className="px-3 py-3 text-xs text-slate-500">
+                          {index + 1}
+                        </td>
+
+                        <td className="px-3 py-3">
+
+                          <div className="font-semibold text-slate-900">
+                            {row.student.full_name}
+                          </div>
+
+                          {row.student.national_id && (
+                            <div className="mt-1 text-[11px] text-slate-400">
+                              {row.student.national_id}
+                            </div>
+                          )}
+
+                        </td>
+
+                        <td className="px-3 py-3 text-xs text-slate-600">
+                          {row.instituteName}
+                        </td>
+
+                        <td className="px-3 py-3 text-xs text-slate-600">
+                          {row.className}
+                        </td>
+
+                        <td className="px-3 py-3 text-center font-semibold text-emerald-600">
+                          {row.present}
+                        </td>
+
+                        <td className="px-3 py-3 text-center font-semibold text-red-600">
+                          {row.absent}
+                        </td>
+
+                        <td className="px-3 py-3 text-center font-semibold text-amber-600">
+                          {row.late}
+                        </td>
+
+                        <td className="px-3 py-3 text-center text-slate-600">
+                          {row.excused}
+                        </td>
+
+                        <td className="px-3 py-3 text-center font-semibold text-slate-800">
+                          {row.total}
+                        </td>
+
+                        <td className="px-3 py-3 text-center">
+
+                          <span
+                            className={`inline-flex min-w-[60px] justify-center rounded-full px-2.5 py-1 text-xs font-bold ${
+                              row.percentage >=
+                              90
+                                ? "bg-emerald-50 text-emerald-700"
+                                : row.percentage >=
+                                  75
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {row.percentage}%
+                          </span>
+
+                        </td>
+
+                      </tr>
+                    )
+                  )}
+
+                </tbody>
+
+              </table>
+
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center">
+
+              <Users className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+
+              <p className="font-semibold text-slate-600">
+                لا توجد بيانات مطابقة
+              </p>
+
+              <p className="mt-1 text-xs text-slate-400">
+                جرّبي تغيير المعهد أو الفصل أو الفترة الزمنية أو كلمة البحث.
+              </p>
+
+            </div>
+          )}
+
+        </section>
+
       </div>
     </main>
   );
