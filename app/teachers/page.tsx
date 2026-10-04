@@ -65,10 +65,8 @@ export default function TeachersPage() {
   const [teacherCode, setTeacherCode] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [specialization, setSpecialization] =
-    useState("");
-  const [qualification, setQualification] =
-    useState("");
+  const [specialization, setSpecialization] = useState("");
+  const [qualification, setQualification] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   const [saving, setSaving] = useState(false);
@@ -76,14 +74,8 @@ export default function TeachersPage() {
 
   /*
    * ============================================
-   * قراءة المعهد المطلوب من الرابط
+   * معرفة المعهد القادم من الرابط
    * ============================================
-   *
-   * مثال:
-   * /teachers?instituteId=xxxxxxxx
-   *
-   * لا نستخدم useSearchParams حتى لا يحدث
-   * خطأ Next.js أثناء build / prerender.
    */
   function getRequestedInstituteFromUrl() {
     if (typeof window === "undefined") {
@@ -97,44 +89,53 @@ export default function TeachersPage() {
     return params.get("instituteId");
   }
 
-  useEffect(() => {
-    const requestedId =
-      getRequestedInstituteFromUrl();
-
-    setRequestedInstituteId(requestedId);
-  }, []);
-
+  /*
+   * ============================================
+   * تحميل بيانات المستخدم والمعاهد
+   * ============================================
+   */
   useEffect(() => {
     loadProfile();
   }, []);
 
   /*
-   * بعد تحميل الـ profile:
+   * ============================================
+   * تحميل المدرسين
    *
-   * إذا كان هناك instituteId في الرابط،
-   * يتم التحقق منه وتحميل المعهد المحدد فقط.
+   * مهم:
+   * لا يتم تحميل المدرسين إذا كان هناك
+   * instituteId في الرابط ولم يتم تثبيته
+   * بعد.
+   * ============================================
    */
   useEffect(() => {
-    if (
-      profile &&
-      requestedInstituteId !== undefined
-    ) {
-      loadRequestedInstitute();
+    if (!profile || requestedInstituteId === undefined) {
+      return;
     }
-  }, [profile, requestedInstituteId]);
+
+    /*
+     * إذا فتحنا الصفحة من ملف معهد محدد
+     * يجب تثبيت المعهد أولًا.
+     */
+    if (
+      requestedInstituteId &&
+      !selectedInstitute
+    ) {
+      return;
+    }
+
+    loadTeachers();
+  }, [
+    profile,
+    selectedInstitute,
+    requestedInstituteId,
+  ]);
 
   /*
-   * تحميل المدرسين بعد تحديد المعهد.
+   * ============================================
+   * تحميل Profile
+   * ============================================
    */
-  useEffect(() => {
-    if (
-      profile &&
-      requestedInstituteId !== undefined
-    ) {
-      loadTeachers();
-    }
-  }, [profile, selectedInstitute, requestedInstituteId]);
-
   async function loadProfile() {
     setLoading(true);
     setMessage("");
@@ -145,14 +146,39 @@ export default function TeachersPage() {
         error: authError,
       } = await supabase.auth.getUser();
 
-      if (authError) throw authError;
+      if (authError) {
+        throw authError;
+      }
 
       if (!user) {
         window.location.href = "/login";
         return;
       }
 
-      const { data, error } = await supabase
+      /*
+       * نقرأ instituteId من الرابط هنا مباشرة.
+       *
+       * مثال:
+       * /teachers?instituteId=xxxxxxxx
+       */
+      const urlInstituteId =
+        typeof window !== "undefined"
+          ? new URLSearchParams(
+              window.location.search
+            ).get("instituteId")
+          : null;
+
+      setRequestedInstituteId(
+        urlInstituteId
+      );
+
+      /*
+       * تحميل Profile
+       */
+      const {
+        data,
+        error,
+      } = await supabase
         .from("profiles")
         .select(
           "id, full_name, role, institute_id, directorate_id"
@@ -160,7 +186,9 @@ export default function TeachersPage() {
         .eq("id", user.id)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       setProfile(data);
 
@@ -191,10 +219,18 @@ export default function TeachersPage() {
           .eq("id", data.institute_id)
           .single();
 
-        if (instituteError) throw instituteError;
+        if (instituteError) {
+          throw instituteError;
+        }
 
         setInstitutes([institute]);
-        setSelectedInstitute(institute.id);
+
+        /*
+         * حساب المعهد يستخدم معهده فقط.
+         */
+        setSelectedInstitute(
+          data.institute_id
+        );
 
         return;
       }
@@ -210,9 +246,11 @@ export default function TeachersPage() {
         .order("name");
 
       if (
-        (data.role === "super_admin" ||
+        (
+          data.role === "super_admin" ||
           data.role === "director" ||
-          data.role === "deputy") &&
+          data.role === "deputy"
+        ) &&
         data.directorate_id
       ) {
         query = query.eq(
@@ -226,14 +264,74 @@ export default function TeachersPage() {
         error: institutesError,
       } = await query;
 
-      if (institutesError) throw institutesError;
+      if (institutesError) {
+        throw institutesError;
+      }
 
-      setInstitutes(instituteData || []);
+      const availableInstitutes =
+        instituteData || [];
 
       /*
-       * الحسابات المركزية تبدأ بعرض كل المعاهد
-       * إذا لم يوجد instituteId في الرابط.
+       * ============================================
+       * إذا جاء instituteId من ملف المعهد
+       * ============================================
        */
+      if (urlInstituteId) {
+        const requestedInstitute =
+          availableInstitutes.find(
+            (institute) =>
+              institute.id ===
+              urlInstituteId
+          );
+
+        /*
+         * المعهد غير موجود أو ليس تابعًا
+         * للإدارة الحالية.
+         */
+        if (!requestedInstitute) {
+          setInstitutes(
+            availableInstitutes
+          );
+
+          setSelectedInstitute("");
+
+          setMessage(
+            "هذا المعهد غير تابع للإدارة التعليمية الحالية."
+          );
+
+          return;
+        }
+
+        /*
+         * المعهد صحيح.
+         *
+         * هنا النقطة الأساسية:
+         * نثبت المعهد القادم من الرابط
+         * قبل تحميل المدرسين.
+         */
+        setInstitutes(
+          availableInstitutes
+        );
+
+        setSelectedInstitute(
+          requestedInstitute.id
+        );
+
+        return;
+      }
+
+      /*
+       * ============================================
+       * لا يوجد instituteId في الرابط
+       *
+       * يسمح للمدير باختيار المعهد
+       * أو عرض جميع المعاهد.
+       * ============================================
+       */
+      setInstitutes(
+        availableInstitutes
+      );
+
       setSelectedInstitute("");
     } catch (error) {
       console.error(error);
@@ -250,141 +348,13 @@ export default function TeachersPage() {
 
   /*
    * ============================================
-   * تحميل المعهد المطلوب من الرابط
+   * تحميل المدرسين
    * ============================================
    */
-  async function loadRequestedInstitute() {
-    if (!profile) return;
-
-    /*
-     * إذا لم يوجد معهد مطلوب في الرابط،
-     * لا نفعل شيئًا.
-     */
-    if (!requestedInstituteId) {
-      return;
-    }
-
-    /*
-     * ============================================
-     * حسابات المعهد
-     * ============================================
-     *
-     * ممنوع تغيير المعهد عن طريق URL.
-     */
-    if (
-      profile.role === "sheikh" ||
-      profile.role === "institute_deputy" ||
-      profile.role === "employee" ||
-      profile.role === "teacher" ||
-      profile.role === "it_admin"
-    ) {
-      if (
-        !profile.institute_id ||
-        requestedInstituteId !==
-          profile.institute_id
-      ) {
-        setSelectedInstitute(
-          profile.institute_id || ""
-        );
-
-        setMessage(
-          "لا يمكنك الوصول إلى بيانات هذا المعهد."
-        );
-
-        return;
-      }
-
-      setSelectedInstitute(
-        profile.institute_id
-      );
-
-      return;
-    }
-
-    /*
-     * ============================================
-     * الحسابات المركزية
-     * ============================================
-     */
-    if (
-      profile.role === "super_admin" ||
-      profile.role === "director" ||
-      profile.role === "deputy"
-    ) {
-      if (!profile.directorate_id) {
-        setMessage(
-          "الحساب غير مرتبط بإدارة تعليمية."
-        );
-        return;
-      }
-
-      /*
-       * نتأكد أن المعهد تابع للإدارة
-       * قبل السماح بعرض بياناته.
-       */
-      const { data: institute, error } =
-        await supabase
-          .from("institutes")
-          .select(
-            "id, name, code, directorate_id"
-          )
-          .eq("id", requestedInstituteId)
-          .eq(
-            "directorate_id",
-            profile.directorate_id
-          )
-          .maybeSingle();
-
-      if (error) {
-        console.error(error);
-
-        setMessage(
-          "حدث خطأ أثناء التحقق من المعهد."
-        );
-
-        return;
-      }
-
-      if (!institute) {
-        setMessage(
-          "هذا المعهد غير تابع للإدارة التعليمية الحالية."
-        );
-
-        setSelectedInstitute("");
-        return;
-      }
-
-      /*
-       * المعهد صحيح وتابع للإدارة.
-       */
-      setSelectedInstitute(institute.id);
-
-      /*
-       * نتأكد أن المعهد موجود في القائمة.
-       */
-      setInstitutes((current) => {
-        const exists = current.some(
-          (item) => item.id === institute.id
-        );
-
-        if (exists) {
-          return current;
-        }
-
-        return [
-          ...current,
-          {
-            id: institute.id,
-            name: institute.name,
-            code: institute.code,
-          },
-        ];
-      });
-    }
-  }
-
   async function loadTeachers() {
-    if (!profile) return;
+    if (!profile) {
+      return;
+    }
 
     setLoadingTeachers(true);
     setMessage("");
@@ -400,9 +370,9 @@ export default function TeachersPage() {
         });
 
       /*
-       * ==========================================
+       * ============================================
        * حسابات المعهد
-       * ==========================================
+       * ============================================
        */
       if (
         profile.role === "sheikh" ||
@@ -423,9 +393,9 @@ export default function TeachersPage() {
       }
 
       /*
-       * ==========================================
+       * ============================================
        * الحسابات المركزية
-       * ==========================================
+       * ============================================
        */
       else if (
         profile.role === "super_admin" ||
@@ -433,16 +403,20 @@ export default function TeachersPage() {
         profile.role === "deputy"
       ) {
         /*
-         * إذا تم فتح الصفحة من بطاقة معهد:
+         * ============================================
+         * الحالة الأولى:
+         * الصفحة مفتوحة من ملف معهد محدد
          *
-         * /teachers?instituteId=xxxx
-         *
-         * نعرض مدرسين هذا المعهد فقط.
+         * هنا لا نسمح أبدًا بعرض مدرسين
+         * من معهد آخر.
+         * ============================================
          */
-        if (
-          requestedInstituteId &&
-          selectedInstitute
-        ) {
+        if (requestedInstituteId) {
+          if (!selectedInstitute) {
+            setTeachers([]);
+            return;
+          }
+
           query = query.eq(
             "institute_id",
             selectedInstitute
@@ -450,7 +424,10 @@ export default function TeachersPage() {
         }
 
         /*
-         * إذا اختار المدير المعهد من القائمة.
+         * ============================================
+         * الحالة الثانية:
+         * المدير اختار معهدًا من القائمة.
+         * ============================================
          */
         else if (selectedInstitute) {
           query = query.eq(
@@ -460,8 +437,13 @@ export default function TeachersPage() {
         }
 
         /*
-         * إذا لم يتم اختيار معهد:
-         * عرض كل مدرسين معاهد الإدارة.
+         * ============================================
+         * الحالة الثالثة:
+         * لا يوجد معهد محدد.
+         *
+         * نعرض جميع المدرسين في معاهد
+         * الإدارة الحالية فقط.
+         * ============================================
          */
         else {
           if (!profile.directorate_id) {
@@ -489,7 +471,9 @@ export default function TeachersPage() {
               (item) => item.id
             ) || [];
 
-          if (instituteIds.length === 0) {
+          if (
+            instituteIds.length === 0
+          ) {
             setTeachers([]);
             return;
           }
@@ -501,10 +485,19 @@ export default function TeachersPage() {
         }
       }
 
-      const { data, error } =
-        await query;
+      /*
+       * ============================================
+       * تنفيذ الاستعلام
+       * ============================================
+       */
+      const {
+        data,
+        error,
+      } = await query;
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       setTeachers(data || []);
     } catch (error) {
@@ -522,108 +515,383 @@ export default function TeachersPage() {
     }
   }
 
-  function escapeHtml(value: string | null | undefined) {
+  /*
+   * ============================================
+   * حماية HTML للطباعة
+   * ============================================
+   */
+  function escapeHtml(
+    value: string | null | undefined
+  ) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+      .replace(
+        /</g,
+        "&lt;"
+      )
+      .replace(
+        />/g,
+        "&gt;"
+      )
+      .replace(
+        /"/g,
+        "&quot;"
+      )
+      .replace(
+        /'/g,
+        "&#039;"
+      );
   }
 
+  /*
+   * ============================================
+   * طباعة المدرسين
+   * ============================================
+   */
   function handlePrintTeachers() {
-    if (filteredTeachers.length === 0) {
-      setMessage("لا توجد بيانات مدرسين للطباعة.");
+    if (
+      filteredTeachers.length === 0
+    ) {
+      setMessage(
+        "لا توجد بيانات مدرسين للطباعة."
+      );
       return;
     }
 
-    const printWindow = window.open("", "_blank", "width=1200,height=800");
+    const printWindow = window.open(
+      "",
+      "_blank",
+      "width=1200,height=800"
+    );
 
     if (!printWindow) {
-      setMessage("تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة من المتصفح.");
+      setMessage(
+        "تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة من المتصفح."
+      );
       return;
     }
 
     const instituteTitle =
-      selectedInstituteName || "جميع معاهد الإدارة التعليمية الأزهرية";
+      selectedInstituteName ||
+      "جميع معاهد الإدارة التعليمية الأزهرية";
 
-    const printedAt = new Date().toLocaleString("ar-EG", {
-      dateStyle: "full",
-      timeStyle: "short",
-    });
+    const printedAt =
+      new Date().toLocaleString(
+        "ar-EG",
+        {
+          dateStyle: "full",
+          timeStyle: "short",
+        }
+      );
 
-    const rows = filteredTeachers.map((teacher, index) => `
+    const rows =
+      filteredTeachers
+        .map(
+          (
+            teacher,
+            index
+          ) => `
       <tr>
         <td>${index + 1}</td>
-        <td>${escapeHtml(teacher.teacher_code || "-")}</td>
-        <td class="name">${escapeHtml(teacher.full_name)}</td>
-        <td>${escapeHtml(teacher.phone || "-")}</td>
-        <td>${escapeHtml(teacher.email || "-")}</td>
-        <td>${escapeHtml(teacher.specialization || "-")}</td>
-        <td>${escapeHtml(teacher.qualification || "-")}</td>
-        <td><span class="${teacher.is_active ? "active" : "inactive"}">${teacher.is_active ? "نشط" : "غير نشط"}</span></td>
+        <td>${escapeHtml(
+          teacher.teacher_code || "-"
+        )}</td>
+        <td class="name">${escapeHtml(
+          teacher.full_name
+        )}</td>
+        <td>${escapeHtml(
+          teacher.phone || "-"
+        )}</td>
+        <td>${escapeHtml(
+          teacher.email || "-"
+        )}</td>
+        <td>${escapeHtml(
+          teacher.specialization || "-"
+        )}</td>
+        <td>${escapeHtml(
+          teacher.qualification || "-"
+        )}</td>
+        <td>
+          <span class="${
+            teacher.is_active
+              ? "active"
+              : "inactive"
+          }">
+            ${
+              teacher.is_active
+                ? "نشط"
+                : "غير نشط"
+            }
+          </span>
+        </td>
       </tr>
-    `).join("");
+    `
+        )
+        .join("");
 
-    printWindow.document.write(`<!DOCTYPE html>
+    printWindow.document.write(`
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8" />
-<title>كشف المدرسين - ${escapeHtml(instituteTitle)}</title>
+<title>
+كشف المدرسين - ${escapeHtml(
+      instituteTitle
+    )}
+</title>
+
 <style>
-@page { size: A4 landscape; margin: 12mm; }
-* { box-sizing: border-box; }
-body { margin:0; font-family:Arial,Tahoma,sans-serif; color:#172033; direction:rtl; }
-.header { text-align:center; border-bottom:2px solid #172033; padding-bottom:14px; margin-bottom:18px; }
-.title { font-size:24px; font-weight:700; margin:0 0 8px; }
-.subtitle { font-size:17px; font-weight:700; margin:0 0 6px; }
-.meta { font-size:12px; color:#526071; display:flex; justify-content:center; gap:28px; flex-wrap:wrap; }
-.summary { display:flex; justify-content:space-between; margin:0 0 14px; font-size:13px; }
-table { width:100%; border-collapse:collapse; font-size:11px; }
-th { background:#eef2f7; font-weight:700; padding:8px 6px; border:1px solid #b9c2cf; text-align:center; }
-td { padding:7px 6px; border:1px solid #cbd3dd; text-align:center; vertical-align:middle; }
-tr:nth-child(even) td { background:#f8fafc; }
-td.name { font-weight:700; text-align:right; }
-.active,.inactive { display:inline-block; padding:3px 9px; border-radius:999px; font-weight:700; }
-.active { color:#166534; background:#dcfce7; }
-.inactive { color:#991b1b; background:#fee2e2; }
-.footer { margin-top:18px; padding-top:10px; border-top:1px solid #d1d5db; display:flex; justify-content:space-between; font-size:11px; color:#64748b; }
+@page {
+  size: A4 landscape;
+  margin: 12mm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    Arial,
+    Tahoma,
+    sans-serif;
+  color: #172033;
+  direction: rtl;
+}
+
+.header {
+  text-align: center;
+  border-bottom: 2px solid #172033;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.subtitle {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.meta {
+  font-size: 12px;
+  color: #526071;
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.summary {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+th {
+  background: #eef2f7;
+  font-weight: 700;
+  padding: 8px 6px;
+  border: 1px solid #b9c2cf;
+  text-align: center;
+}
+
+td {
+  padding: 7px 6px;
+  border: 1px solid #cbd3dd;
+  text-align: center;
+  vertical-align: middle;
+}
+
+tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+td.name {
+  font-weight: 700;
+  text-align: right;
+}
+
+.active,
+.inactive {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.active {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.inactive {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.footer {
+  margin-top: 18px;
+  padding-top: 10px;
+  border-top: 1px solid #d1d5db;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748b;
+}
+
 @media print {
-  body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  thead { display:table-header-group; }
-  tr { break-inside:avoid; }
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
 }
 </style>
 </head>
+
 <body>
+
 <div class="header">
-<h1 class="title">نظام إدارة المعاهد الأزهرية</h1>
-<p class="subtitle">كشف المدرسين</p>
-<p class="subtitle">${escapeHtml(instituteTitle)}</p>
+
+<h1 class="title">
+نظام إدارة المعاهد الأزهرية
+</h1>
+
+<p class="subtitle">
+كشف المدرسين
+</p>
+
+<p class="subtitle">
+${escapeHtml(
+  instituteTitle
+)}
+</p>
+
 <div class="meta">
-<span>تاريخ الطباعة: ${escapeHtml(printedAt)}</span>
-<span>عدد النتائج: ${filteredTeachers.length}</span>
-${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : ""}
+
+<span>
+تاريخ الطباعة:
+${escapeHtml(
+  printedAt
+)}
+</span>
+
+<span>
+عدد النتائج:
+${filteredTeachers.length}
+</span>
+
+${
+  searchTerm.trim()
+    ? `
+<span>
+بحث:
+${escapeHtml(
+  searchTerm.trim()
+)}
+</span>
+`
+    : ""
+}
+
 </div>
+
 </div>
+
 <div class="summary">
-<span>إجمالي المدرسين المعروضين: <strong>${filteredTeachers.length}</strong></span>
-<span>النشطون: <strong>${filteredTeachers.filter((teacher) => teacher.is_active).length}</strong></span>
-<span>غير النشطين: <strong>${filteredTeachers.filter((teacher) => !teacher.is_active).length}</strong></span>
+
+<span>
+إجمالي المدرسين المعروضين:
+<strong>
+${filteredTeachers.length}
+</strong>
+</span>
+
+<span>
+النشطون:
+<strong>
+${
+  filteredTeachers.filter(
+    (teacher) =>
+      teacher.is_active
+  ).length
+}
+</strong>
+</span>
+
+<span>
+غير النشطين:
+<strong>
+${
+  filteredTeachers.filter(
+    (teacher) =>
+      !teacher.is_active
+  ).length
+}
+</strong>
+</span>
+
 </div>
+
 <table>
-<thead><tr>
-<th>م</th><th>كود المعلم</th><th>اسم المعلم</th><th>الهاتف</th>
-<th>البريد الإلكتروني</th><th>التخصص</th><th>المؤهل</th><th>الحالة</th>
-</tr></thead>
-<tbody>${rows}</tbody>
+
+<thead>
+
+<tr>
+<th>م</th>
+<th>كود المعلم</th>
+<th>اسم المعلم</th>
+<th>الهاتف</th>
+<th>البريد الإلكتروني</th>
+<th>التخصص</th>
+<th>المؤهل</th>
+<th>الحالة</th>
+</tr>
+
+</thead>
+
+<tbody>
+${rows}
+</tbody>
+
 </table>
+
 <div class="footer">
-<span>منصة الإدارة والمتابعة التعليمية الأزهرية</span>
-<span>كشف صادر من نظام إدارة المعاهد الأزهرية</span>
+
+<span>
+منصة الإدارة والمتابعة التعليمية الأزهرية
+</span>
+
+<span>
+كشف صادر من نظام إدارة المعاهد الأزهرية
+</span>
+
 </div>
+
 </body>
-</html>`);
+</html>
+`);
 
     printWindow.document.close();
     printWindow.focus();
@@ -633,6 +901,11 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     }, 300);
   }
 
+  /*
+   * ============================================
+   * إعادة ضبط نموذج المدرس
+   * ============================================
+   */
   function resetForm() {
     setFullName("");
     setTeacherCode("");
@@ -646,10 +919,13 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
 
   /*
    * ============================================
-   * فتح نافذة إضافة مدرس
+   * إضافة مدرس
    * ============================================
    */
   function openAddTeacherModal() {
+    /*
+     * حسابات المعهد
+     */
     if (
       profile?.role === "it_admin" ||
       profile?.role === "sheikh" ||
@@ -669,8 +945,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     }
 
     /*
-     * إذا فتح المدير الصفحة من بطاقة معهد،
-     * يظل المعهد المحدد كما هو.
+     * الحسابات المركزية:
+     * إذا كان المعهد قادمًا من الرابط
+     * يظل هذا المعهد مقفولًا.
      */
     if (
       requestedInstituteId &&
@@ -693,15 +970,14 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
 
   /*
    * ============================================
-   * فتح نافذة تعديل مدرس
+   * تعديل مدرس
    * ============================================
    */
   function openEditTeacherModal(
     teacher: Teacher
   ) {
     /*
-     * مسؤول IT لا يستطيع تعديل مدرس
-     * من معهد آخر.
+     * IT Admin
      */
     if (
       profile?.role === "it_admin" &&
@@ -715,7 +991,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     }
 
     /*
-     * حسابات المعهد لا تعدل إلا داخل معهدها.
+     * حسابات المعهد
      */
     if (
       (
@@ -733,9 +1009,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     }
 
     /*
-     * الحسابات المركزية:
-     * إذا كان هناك معهد محدد في الرابط،
-     * يجب أن يكون المدرس تابعًا له.
+     * الحسابات المركزية
      */
     if (
       (
@@ -753,7 +1027,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
       return;
     }
 
-    setEditingTeacher(teacher);
+    setEditingTeacher(
+      teacher
+    );
 
     setFullName(
       teacher.full_name || ""
@@ -789,7 +1065,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
 
   /*
    * ============================================
-   * إضافة مدرس جديد
+   * إضافة المدرس إلى قاعدة البيانات
    * ============================================
    */
   async function addTeacher() {
@@ -803,8 +1079,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     let targetInstituteId = "";
 
     /*
-     * حسابات المعهد:
-     * تستخدم معهد الحساب فقط.
+     * حسابات المعهد
      */
     if (
       profile.role === "it_admin" ||
@@ -824,8 +1099,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     }
 
     /*
-     * الحسابات المركزية:
-     * تستخدم المعهد المختار.
+     * الحسابات المركزية
      */
     else if (
       profile.role === "super_admin" ||
@@ -848,6 +1122,22 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
       return;
     }
 
+    /*
+     * حماية إضافية:
+     * إذا جاء المعهد من الرابط، لا نسمح
+     * بإضافة المدرس إلى معهد آخر.
+     */
+    if (
+      requestedInstituteId &&
+      targetInstituteId !==
+        requestedInstituteId
+    ) {
+      alert(
+        "لا يمكن إضافة المدرس إلا إلى المعهد المحدد."
+      );
+      return;
+    }
+
     if (!fullName.trim()) {
       alert(
         "اسم المعلم مطلوب."
@@ -859,42 +1149,46 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     setMessage("");
 
     try {
-      const { error } =
-        await supabase
-          .from("teachers")
-          .insert({
-            institute_id:
-              targetInstituteId,
+      const {
+        error,
+      } = await supabase
+        .from("teachers")
+        .insert({
+          institute_id:
+            targetInstituteId,
 
-            full_name:
-              fullName.trim(),
+          full_name:
+            fullName.trim(),
 
-            teacher_code:
-              teacherCode.trim() ||
-              null,
+          teacher_code:
+            teacherCode.trim() ||
+            null,
 
-            phone:
-              phone.trim() ||
-              null,
+          phone:
+            phone.trim() ||
+            null,
 
-            email:
-              email.trim() ||
-              null,
+          email:
+            email.trim() ||
+            null,
 
-            specialization:
-              specialization.trim() ||
-              null,
+          specialization:
+            specialization.trim() ||
+            null,
 
-            qualification:
-              qualification.trim() ||
-              null,
+          qualification:
+            qualification.trim() ||
+            null,
 
-            is_active: true,
-          });
+          is_active: true,
+        });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       setShowAddModal(false);
+
       resetForm();
 
       await loadTeachers();
@@ -943,7 +1237,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     }
 
     /*
-     * حماية إضافية من الواجهة.
+     * IT Admin
      */
     if (
       profile.role === "it_admin" &&
@@ -956,6 +1250,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
       return;
     }
 
+    /*
+     * حسابات المعهد
+     */
     if (
       (
         profile.role === "sheikh" ||
@@ -971,6 +1268,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
       return;
     }
 
+    /*
+     * الحسابات المركزية
+     */
     if (
       (
         profile.role === "super_admin" ||
@@ -987,56 +1287,71 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
       return;
     }
 
+    /*
+     * إذا كان المعهد قادمًا من الرابط
+     * يجب أن يظل المدرس تابعًا له.
+     */
+    if (
+      requestedInstituteId &&
+      editingTeacher.institute_id !==
+        requestedInstituteId
+    ) {
+      alert(
+        "المدرس لا يتبع المعهد المحدد."
+      );
+      return;
+    }
+
     setSaving(true);
     setMessage("");
 
     try {
-      /*
-       * لا نسمح من هذه الشاشة بتغيير
-       * institute_id.
-       */
-      const { error } =
-        await supabase
-          .from("teachers")
-          .update({
-            full_name:
-              fullName.trim(),
+      const {
+        error,
+      } = await supabase
+        .from("teachers")
+        .update({
+          full_name:
+            fullName.trim(),
 
-            teacher_code:
-              teacherCode.trim() ||
-              null,
+          teacher_code:
+            teacherCode.trim() ||
+            null,
 
-            phone:
-              phone.trim() ||
-              null,
+          phone:
+            phone.trim() ||
+            null,
 
-            email:
-              email.trim() ||
-              null,
+          email:
+            email.trim() ||
+            null,
 
-            specialization:
-              specialization.trim() ||
-              null,
+          specialization:
+            specialization.trim() ||
+            null,
 
-            qualification:
-              qualification.trim() ||
-              null,
+          qualification:
+            qualification.trim() ||
+            null,
 
-            is_active:
-              isActive,
-          })
-          .eq(
-            "id",
-            editingTeacher.id
-          )
-          .eq(
-            "institute_id",
-            editingTeacher.institute_id
-          );
+          is_active:
+            isActive,
+        })
+        .eq(
+          "id",
+          editingTeacher.id
+        )
+        .eq(
+          "institute_id",
+          editingTeacher.institute_id
+        );
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       setShowAddModal(false);
+
       resetForm();
 
       await loadTeachers();
@@ -1050,7 +1365,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
       setMessage(
         error instanceof Error
           ? error.message
-          : "حدث خطأ أثناء تعديل المدرس."
+          : "حدث خطأ أثناء تعديل بيانات المدرس."
       );
     } finally {
       setSaving(false);
@@ -1070,34 +1385,48 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     }
   }
 
+  /*
+   * ============================================
+   * البحث
+   * ============================================
+   */
   const filteredTeachers =
-    teachers.filter((teacher) => {
-      const search =
-        searchTerm
-          .trim()
-          .toLowerCase();
+    teachers.filter(
+      (teacher) => {
+        const search =
+          searchTerm
+            .trim()
+            .toLowerCase();
 
-      if (!search) return true;
+        if (!search) {
+          return true;
+        }
 
-      return (
-        teacher.full_name
-          ?.toLowerCase()
-          .includes(search) ||
-        teacher.teacher_code
-          ?.toLowerCase()
-          .includes(search) ||
-        teacher.phone
-          ?.toLowerCase()
-          .includes(search) ||
-        teacher.email
-          ?.toLowerCase()
-          .includes(search) ||
-        teacher.specialization
-          ?.toLowerCase()
-          .includes(search)
-      );
-    });
+        return (
+          teacher.full_name
+            ?.toLowerCase()
+            .includes(search) ||
+          teacher.teacher_code
+            ?.toLowerCase()
+            .includes(search) ||
+          teacher.phone
+            ?.toLowerCase()
+            .includes(search) ||
+          teacher.email
+            ?.toLowerCase()
+            .includes(search) ||
+          teacher.specialization
+            ?.toLowerCase()
+            .includes(search)
+        );
+      }
+    );
 
+  /*
+   * ============================================
+   * اسم المعهد الحالي
+   * ============================================
+   */
   const selectedInstituteName =
     institutes.find(
       (institute) =>
@@ -1106,7 +1435,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     )?.name || "";
 
   /*
-   * هل الحساب يستطيع إضافة مدرس؟
+   * ============================================
+   * الصلاحيات
+   * ============================================
    */
   const canAddTeacher =
     profile?.role === "super_admin" ||
@@ -1117,9 +1448,6 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     profile?.role === "employee" ||
     profile?.role === "it_admin";
 
-  /*
-   * هل الحساب يستطيع تعديل المدرسين؟
-   */
   const canEditTeacher =
     profile?.role === "super_admin" ||
     profile?.role === "director" ||
@@ -1130,7 +1458,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     profile?.role === "it_admin";
 
   /*
-   * حسابات المعاهد
+   * ============================================
+   * حساب المعهد
+   * ============================================
    */
   const isInstituteAccount =
     profile?.role === "it_admin" ||
@@ -1139,7 +1469,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
     profile?.role === "employee";
 
   /*
-   * هل المعهد جاء من بطاقة المعهد؟
+   * ============================================
+   * المعهد مقفول إذا جاء من ملف المعهد
+   * ============================================
    */
   const isInstituteLocked =
     !!requestedInstituteId &&
@@ -1149,6 +1481,11 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
       profile?.role === "deputy"
     );
 
+  /*
+   * ============================================
+   * شاشة التحميل
+   * ============================================
+   */
   if (loading) {
     return (
       <main
@@ -1156,6 +1493,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
         className="min-h-screen bg-slate-100 flex items-center justify-center"
       >
         <div className="bg-white rounded-2xl shadow p-8 text-center">
+
           <RefreshCw
             size={32}
             className="mx-auto mb-4 animate-spin"
@@ -1164,6 +1502,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
           <p className="text-slate-600">
             جاري تحميل بيانات المدرسين...
           </p>
+
         </div>
       </main>
     );
@@ -1175,19 +1514,26 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
         dir="rtl"
         className="min-h-screen bg-slate-100 text-slate-900"
       >
+
         <div className="max-w-7xl mx-auto px-6 py-8">
 
           {/* العنوان */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-8">
+
             <div>
+
               <div className="flex items-center gap-3">
+
                 <div className="bg-green-100 text-green-700 p-3 rounded-2xl">
+
                   <GraduationCap
                     size={30}
                   />
+
                 </div>
 
                 <div>
+
                   <h1 className="text-3xl font-bold">
                     المدرسون
                   </h1>
@@ -1195,16 +1541,23 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                   <p className="text-slate-500 mt-1">
                     إدارة ومتابعة بيانات المدرسين
                   </p>
+
                 </div>
+
               </div>
+
             </div>
 
             <div className="flex gap-3 flex-wrap">
+
               <button
                 onClick={loadTeachers}
-                disabled={loadingTeachers}
+                disabled={
+                  loadingTeachers
+                }
                 className="bg-white border border-slate-200 px-5 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-50"
               >
+
                 <RefreshCw
                   size={18}
                   className={
@@ -1215,16 +1568,25 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                 />
 
                 تحديث
+
               </button>
 
               <button
                 type="button"
-                onClick={handlePrintTeachers}
-                disabled={filteredTeachers.length === 0}
+                onClick={
+                  handlePrintTeachers
+                }
+                disabled={
+                  filteredTeachers.length ===
+                  0
+                }
                 className="bg-white border border-slate-200 px-5 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
+
                 <Printer size={18} />
+
                 طباعة
+
               </button>
 
               {canAddTeacher && (
@@ -1234,21 +1596,26 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                   }
                   className="bg-slate-900 text-white px-5 py-3 rounded-xl flex items-center gap-2 hover:bg-slate-800"
                 >
+
                   <Plus size={19} />
+
                   إضافة مدرس
+
                 </button>
               )}
+
             </div>
+
           </div>
 
-          {/* رسالة */}
+          {/* الرسالة */}
           {message && (
             <div className="bg-green-50 border border-green-200 text-green-800 rounded-2xl p-4 mb-6">
               {message}
             </div>
           )}
 
-          {/* اختيار المعهد للحسابات المركزية */}
+          {/* اختيار المعهد */}
           {profile &&
             !isInstituteAccount &&
             (
@@ -1256,8 +1623,10 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                 "director" ||
               profile.role ===
                 "super_admin" ||
-              profile.role === "deputy"
+              profile.role ===
+                "deputy"
             ) && (
+
               <div className="bg-white rounded-2xl border shadow-sm p-6 mb-6">
 
                 <label className="block font-bold mb-3">
@@ -1268,7 +1637,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                   value={
                     selectedInstitute
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setSelectedInstitute(
                       event.target.value
                     )
@@ -1282,6 +1653,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                       : ""
                   }`}
                 >
+
                   {!isInstituteLocked && (
                     <option value="">
                       جميع المعاهد
@@ -1289,18 +1661,28 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                   )}
 
                   {institutes.map(
-                    (institute) => (
+                    (
+                      institute
+                    ) => (
                       <option
-                        key={institute.id}
+                        key={
+                          institute.id
+                        }
                         value={
                           institute.id
                         }
                       >
-                        {institute.name} -{" "}
-                        {institute.code}
+                        {
+                          institute.name
+                        }{" "}
+                        -{" "}
+                        {
+                          institute.code
+                        }
                       </option>
                     )
                   )}
+
                 </select>
 
                 {isInstituteLocked ? (
@@ -1314,12 +1696,14 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     </p>
                   )
                 )}
+
               </div>
             )}
 
-          {/* معلومات المعهد */}
+          {/* المعهد الحالي */}
           {selectedInstituteName && (
             <div className="bg-white rounded-2xl border shadow-sm p-5 mb-6">
+
               <div className="flex items-center gap-3">
 
                 <div className="bg-blue-100 text-blue-700 p-3 rounded-xl">
@@ -1327,6 +1711,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                 </div>
 
                 <div>
+
                   <p className="text-sm text-slate-500">
                     المعهد الحالي
                   </p>
@@ -1334,9 +1719,11 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                   <p className="font-bold text-lg">
                     {selectedInstituteName}
                   </p>
+
                 </div>
 
               </div>
+
             </div>
           )}
 
@@ -1344,9 +1731,11 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
 
             <div className="bg-white rounded-2xl border shadow-sm p-6">
+
               <div className="flex items-center justify-between">
 
                 <div>
+
                   <p className="text-sm text-slate-500">
                     إجمالي المدرسين
                   </p>
@@ -1354,6 +1743,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                   <p className="text-3xl font-bold mt-2">
                     {teachers.length}
                   </p>
+
                 </div>
 
                 <div className="bg-blue-100 text-blue-700 p-3 rounded-xl">
@@ -1361,12 +1751,15 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                 </div>
 
               </div>
+
             </div>
 
             <div className="bg-white rounded-2xl border shadow-sm p-6">
+
               <div className="flex items-center justify-between">
 
                 <div>
+
                   <p className="text-sm text-slate-500">
                     المدرسون النشطون
                   </p>
@@ -1379,6 +1772,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                       ).length
                     }
                   </p>
+
                 </div>
 
                 <div className="bg-green-100 text-green-700 p-3 rounded-xl">
@@ -1386,12 +1780,15 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                 </div>
 
               </div>
+
             </div>
 
             <div className="bg-white rounded-2xl border shadow-sm p-6">
+
               <div className="flex items-center justify-between">
 
                 <div>
+
                   <p className="text-sm text-slate-500">
                     نتائج البحث
                   </p>
@@ -1401,6 +1798,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                       filteredTeachers.length
                     }
                   </p>
+
                 </div>
 
                 <div className="bg-purple-100 text-purple-700 p-3 rounded-xl">
@@ -1408,12 +1806,14 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                 </div>
 
               </div>
+
             </div>
 
           </div>
 
           {/* البحث */}
           <div className="bg-white rounded-2xl border shadow-sm p-5 mb-6">
+
             <div className="relative">
 
               <Search
@@ -1423,8 +1823,12 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
 
               <input
                 type="text"
-                value={searchTerm}
-                onChange={(event) =>
+                value={
+                  searchTerm
+                }
+                onChange={(
+                  event
+                ) =>
                   setSearchTerm(
                     event.target.value
                   )
@@ -1434,6 +1838,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
               />
 
             </div>
+
           </div>
 
           {/* جدول المدرسين */}
@@ -1446,13 +1851,13 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
               </h2>
 
               <p className="text-sm text-slate-500 mt-1">
-                البيانات المعروضة يتم تحميلها مباشرة من جدول
-                المدرسين في قاعدة البيانات.
+                البيانات المعروضة يتم تحميلها مباشرة من جدول المدرسين في قاعدة البيانات.
               </p>
 
             </div>
 
             {loadingTeachers ? (
+
               <div className="p-12 text-center">
 
                 <RefreshCw
@@ -1465,7 +1870,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                 </p>
 
               </div>
+
             ) : filteredTeachers.length === 0 ? (
+
               <div className="p-12 text-center">
 
                 <Users
@@ -1488,13 +1895,18 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     }
                     className="mt-5 bg-slate-900 text-white px-5 py-3 rounded-xl inline-flex items-center gap-2"
                   >
+
                     <Plus size={18} />
+
                     إضافة مدرس
+
                   </button>
                 )}
 
               </div>
+
             ) : (
+
               <div className="overflow-x-auto">
 
                 <table className="w-full text-right">
@@ -1502,6 +1914,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                   <thead className="bg-slate-50 border-b">
 
                     <tr>
+
                       <th className="p-4">
                         كود المعلم
                       </th>
@@ -1543,35 +1956,50 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                   <tbody>
 
                     {filteredTeachers.map(
-                      (teacher) => (
+                      (
+                        teacher
+                      ) => (
+
                         <tr
-                          key={teacher.id}
+                          key={
+                            teacher.id
+                          }
                           className="border-b last:border-b-0 hover:bg-slate-50"
                         >
 
                           <td className="p-4 font-medium">
-                            {teacher.teacher_code ||
-                              "-"}
+                            {
+                              teacher.teacher_code ||
+                              "-"
+                            }
                           </td>
 
                           <td className="p-4">
+
                             <div className="flex items-center gap-3">
 
                               <div className="bg-green-100 text-green-700 p-2 rounded-xl">
+
                                 <GraduationCap
                                   size={18}
                                 />
+
                               </div>
 
                               <span className="font-semibold">
-                                {teacher.full_name}
+                                {
+                                  teacher.full_name
+                                }
                               </span>
 
                             </div>
+
                           </td>
 
                           <td className="p-4">
+
                             {teacher.phone ? (
+
                               <div className="flex items-center gap-2">
 
                                 <Phone
@@ -1579,16 +2007,22 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                                   className="text-slate-400"
                                 />
 
-                                {teacher.phone}
+                                {
+                                  teacher.phone
+                                }
 
                               </div>
+
                             ) : (
                               "-"
                             )}
+
                           </td>
 
                           <td className="p-4">
+
                             {teacher.email ? (
+
                               <div className="flex items-center gap-2">
 
                                 <Mail
@@ -1596,34 +2030,48 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                                   className="text-slate-400"
                                 />
 
-                                {teacher.email}
+                                {
+                                  teacher.email
+                                }
 
                               </div>
+
                             ) : (
                               "-"
                             )}
+
                           </td>
 
                           <td className="p-4">
-                            {teacher.specialization ||
-                              "-"}
+                            {
+                              teacher.specialization ||
+                              "-"
+                            }
                           </td>
 
                           <td className="p-4">
-                            {teacher.qualification ||
-                              "-"}
+                            {
+                              teacher.qualification ||
+                              "-"
+                            }
                           </td>
 
                           <td className="p-4">
+
                             {teacher.is_active ? (
+
                               <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
                                 نشط
                               </span>
+
                             ) : (
+
                               <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">
                                 غير نشط
                               </span>
+
                             )}
+
                           </td>
 
                           {canEditTeacher && (
@@ -1637,17 +2085,20 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                                 }
                                 className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-xl hover:bg-blue-100 transition"
                               >
+
                                 <Pencil
                                   size={16}
                                 />
 
                                 تعديل
+
                               </button>
 
                             </td>
                           )}
 
                         </tr>
+
                       )
                     )}
 
@@ -1656,15 +2107,18 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                 </table>
 
               </div>
+
             )}
 
           </div>
+
         </div>
 
         {/* ============================================
-            نافذة إضافة / تعديل مدرس
+            نافذة الإضافة والتعديل
             ============================================ */}
         {showAddModal && (
+
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
 
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1674,14 +2128,20 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                 <div>
 
                   <h2 className="text-xl font-bold">
+
                     {editingTeacher
                       ? "تعديل بيانات المدرس"
                       : "إضافة مدرس جديد"}
+
                   </h2>
 
                   <p className="text-sm text-slate-500 mt-1">
-                    {selectedInstituteName ||
-                      "المعهد الحالي"}
+
+                    {
+                      selectedInstituteName ||
+                      "المعهد الحالي"
+                    }
+
                   </p>
 
                 </div>
@@ -1700,15 +2160,20 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
 
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                {/* اسم المدرس */}
+                {/* الاسم */}
                 <div>
+
                   <label className="block font-semibold mb-2">
                     اسم المعلم *
                   </label>
 
                   <input
-                    value={fullName}
-                    onChange={(event) =>
+                    value={
+                      fullName
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       setFullName(
                         event.target.value
                       )
@@ -1716,17 +2181,23 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     className="w-full border rounded-xl px-4 py-3"
                     placeholder="اسم المعلم"
                   />
+
                 </div>
 
-                {/* كود المدرس */}
+                {/* الكود */}
                 <div>
+
                   <label className="block font-semibold mb-2">
                     كود المعلم
                   </label>
 
                   <input
-                    value={teacherCode}
-                    onChange={(event) =>
+                    value={
+                      teacherCode
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       setTeacherCode(
                         event.target.value
                       )
@@ -1734,17 +2205,23 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     className="w-full border rounded-xl px-4 py-3"
                     placeholder="TCH-001"
                   />
+
                 </div>
 
                 {/* الهاتف */}
                 <div>
+
                   <label className="block font-semibold mb-2">
                     الهاتف
                   </label>
 
                   <input
-                    value={phone}
-                    onChange={(event) =>
+                    value={
+                      phone
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       setPhone(
                         event.target.value
                       )
@@ -1752,17 +2229,23 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     className="w-full border rounded-xl px-4 py-3"
                     placeholder="01xxxxxxxxx"
                   />
+
                 </div>
 
                 {/* البريد */}
                 <div>
+
                   <label className="block font-semibold mb-2">
                     البريد الإلكتروني
                   </label>
 
                   <input
-                    value={email}
-                    onChange={(event) =>
+                    value={
+                      email
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       setEmail(
                         event.target.value
                       )
@@ -1770,17 +2253,23 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     className="w-full border rounded-xl px-4 py-3"
                     placeholder="teacher@example.com"
                   />
+
                 </div>
 
                 {/* التخصص */}
                 <div>
+
                   <label className="block font-semibold mb-2">
                     التخصص
                   </label>
 
                   <input
-                    value={specialization}
-                    onChange={(event) =>
+                    value={
+                      specialization
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       setSpecialization(
                         event.target.value
                       )
@@ -1788,17 +2277,23 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     className="w-full border rounded-xl px-4 py-3"
                     placeholder="اللغة العربية"
                   />
+
                 </div>
 
                 {/* المؤهل */}
                 <div>
+
                   <label className="block font-semibold mb-2">
                     المؤهل
                   </label>
 
                   <input
-                    value={qualification}
-                    onChange={(event) =>
+                    value={
+                      qualification
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       setQualification(
                         event.target.value
                       )
@@ -1806,10 +2301,12 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     className="w-full border rounded-xl px-4 py-3"
                     placeholder="ليسانس..."
                   />
+
                 </div>
 
                 {/* الحالة */}
                 {editingTeacher && (
+
                   <div className="md:col-span-2">
 
                     <label className="block font-semibold mb-2">
@@ -1820,10 +2317,15 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
 
                       <input
                         type="checkbox"
-                        checked={isActive}
-                        onChange={(event) =>
+                        checked={
+                          isActive
+                        }
+                        onChange={(
+                          event
+                        ) =>
                           setIsActive(
-                            event.target.checked
+                            event.target
+                              .checked
                           )
                         }
                         className="w-5 h-5"
@@ -1836,6 +2338,7 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     </label>
 
                   </div>
+
                 )}
 
               </div>
@@ -1848,7 +2351,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     resetForm();
                   }}
                   className="px-5 py-3 rounded-xl border"
-                  disabled={saving}
+                  disabled={
+                    saving
+                  }
                 >
                   إلغاء
                 </button>
@@ -1857,7 +2362,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                   onClick={
                     handleSaveTeacher
                   }
-                  disabled={saving}
+                  disabled={
+                    saving
+                  }
                   className="bg-slate-900 text-white px-6 py-3 rounded-xl disabled:opacity-50 flex items-center gap-2"
                 >
 
@@ -1868,9 +2375,11 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
                     />
                   )}
 
-                  {editingTeacher
-                    ? "حفظ التعديلات"
-                    : "حفظ المدرس"}
+                  {
+                    editingTeacher
+                      ? "حفظ التعديلات"
+                      : "حفظ المدرس"
+                  }
 
                 </button>
 
@@ -1879,7 +2388,9 @@ ${searchTerm.trim() ? `<span>بحث: ${escapeHtml(searchTerm.trim())}</span>` : 
             </div>
 
           </div>
+
         )}
+
       </main>
     </AppShell>
   );
