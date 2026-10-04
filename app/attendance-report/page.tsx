@@ -81,43 +81,78 @@ type InstituteSummary = {
 };
 
 const CENTRAL_ROLES = ["director", "super_admin"];
-const ALLOWED_ROLES = ["sheikh", "director", "super_admin", "it_admin"];
+
+const ALLOWED_ROLES = [
+  "sheikh",
+  "director",
+  "super_admin",
+  "it_admin",
+];
 
 export default function AttendanceReportPage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
 
-  const [institutes, setInstitutes] = useState<Institute[]>([]);
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
+  const [institutes, setInstitutes] =
+    useState<Institute[]>([]);
 
-  const [selectedInstitute, setSelectedInstitute] = useState("");
-  const [selectedClass, setSelectedClass] = useState("");
+  const [classes, setClasses] =
+    useState<ClassItem[]>([]);
 
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [students, setStudents] =
+    useState<Student[]>([]);
 
-  const [search, setSearch] = useState("");
+  const [attendance, setAttendance] =
+    useState<AttendanceRow[]>([]);
 
-  const [loading, setLoading] = useState(true);
-  const [reportLoading, setReportLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [selectedInstitute, setSelectedInstitute] =
+    useState("");
+
+  const [selectedClass, setSelectedClass] =
+    useState("");
+
+  const [fromDate, setFromDate] =
+    useState("");
+
+  const [toDate, setToDate] =
+    useState("");
+
+  const [search, setSearch] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [reportLoading, setReportLoading] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
 
   const isCentralManager =
-    !!profile && CENTRAL_ROLES.includes(profile.role);
+    !!profile &&
+    CENTRAL_ROLES.includes(profile.role);
 
   const isInstituteUser =
-    !!profile && ["sheikh", "it_admin"].includes(profile.role);
+    !!profile &&
+    ["sheikh", "it_admin"].includes(
+      profile.role
+    );
 
   // =========================================================
-  // قراءة instituteId من الرابط بدون useSearchParams
+  // قراءة instituteId من الرابط
+  // بدون useSearchParams
   // =========================================================
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const instituteIdFromUrl = params.get("instituteId");
+    const params = new URLSearchParams(
+      window.location.search
+    );
 
-    if (instituteIdFromUrl) {
-      setSelectedInstitute(instituteIdFromUrl);
+    const instituteId =
+      params.get("instituteId");
+
+    if (instituteId) {
+      setSelectedInstitute(instituteId);
     }
   }, []);
 
@@ -129,21 +164,27 @@ export default function AttendanceReportPage() {
   }, []);
 
   // =========================================================
-  // عند تغير المعهد أو الفترة
+  // إعادة تحميل التقرير عند تغيير الفلاتر
   // =========================================================
   useEffect(() => {
     if (!profile) return;
 
-    if (isInstituteUser) {
-      if (profile.institute_id) {
-        loadInstituteData(profile.institute_id);
-      }
+    if (
+      isInstituteUser &&
+      profile.institute_id
+    ) {
+      loadInstituteData(
+        profile.institute_id
+      );
+
       return;
     }
 
     if (isCentralManager) {
       if (selectedInstitute) {
-        loadInstituteData(selectedInstitute);
+        loadInstituteData(
+          selectedInstitute
+        );
       } else {
         loadDirectorateData();
       }
@@ -156,7 +197,7 @@ export default function AttendanceReportPage() {
   ]);
 
   // =========================================================
-  // تحميل المستخدم الحالي
+  // تحميل المستخدم
   // =========================================================
   async function loadInitialData() {
     try {
@@ -168,74 +209,120 @@ export default function AttendanceReportPage() {
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError) throw userError;
+      if (userError) {
+        throw userError;
+      }
 
       if (!user) {
-        setMessage("يجب تسجيل الدخول أولًا.");
+        setMessage(
+          "يجب تسجيل الدخول أولًا."
+        );
+
         setLoading(false);
+
         return;
       }
 
-      const { data: profileData, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select("id, role, institute_id, directorate_id")
-          .eq("id", user.id)
-          .single();
+      const {
+        data: profileData,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select(
+          "id, role, institute_id, directorate_id"
+        )
+        .eq("id", user.id)
+        .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        throw profileError;
+      }
 
       if (!profileData) {
-        setMessage("لم يتم العثور على بيانات المستخدم.");
+        setMessage(
+          "لم يتم العثور على بيانات المستخدم."
+        );
+
         setLoading(false);
+
         return;
       }
 
-      if (!ALLOWED_ROLES.includes(profileData.role)) {
-        setMessage("ليس لديك صلاحية لعرض تقرير الحضور.");
+      if (
+        !ALLOWED_ROLES.includes(
+          profileData.role
+        )
+      ) {
+        setMessage(
+          "ليس لديك صلاحية لعرض تقرير الحضور."
+        );
+
         setLoading(false);
+
         return;
       }
 
-      const currentProfile = profileData as Profile;
+      const currentProfile =
+        profileData as Profile;
 
       setProfile(currentProfile);
 
       // -------------------------------------------------------
-      // شيخ / IT Admin
+      // مستخدم المعهد
       // -------------------------------------------------------
       if (
-        ["sheikh", "it_admin"].includes(currentProfile.role) &&
+        ["sheikh", "it_admin"].includes(
+          currentProfile.role
+        ) &&
         currentProfile.institute_id
       ) {
-        const { data: instituteData, error: instituteError } =
-          await supabase
-            .from("institutes")
-            .select("id, name, code, directorate_id")
-            .eq("id", currentProfile.institute_id)
-            .maybeSingle();
+        const {
+          data: instituteData,
+          error: instituteError,
+        } = await supabase
+          .from("institutes")
+          .select(
+            "id, name, code, directorate_id"
+          )
+          .eq(
+            "id",
+            currentProfile.institute_id
+          )
+          .maybeSingle();
 
-        if (instituteError) throw instituteError;
+        if (instituteError) {
+          throw instituteError;
+        }
 
-        setInstitutes(instituteData ? [instituteData] : []);
+        setInstitutes(
+          instituteData
+            ? [instituteData]
+            : []
+        );
 
-        setSelectedInstitute(currentProfile.institute_id);
+        setSelectedInstitute(
+          currentProfile.institute_id
+        );
       }
 
       // -------------------------------------------------------
       // المدير / Super Admin
       // -------------------------------------------------------
       if (
-        ["director", "super_admin"].includes(currentProfile.role)
+        ["director", "super_admin"].includes(
+          currentProfile.role
+        )
       ) {
-        let instituteQuery = supabase
+        let query = supabase
           .from("institutes")
-          .select("id, name, code, directorate_id")
+          .select(
+            "id, name, code, directorate_id"
+          )
           .eq("is_active", true)
           .order("name");
 
         if (currentProfile.directorate_id) {
-          instituteQuery = instituteQuery.eq(
+          query = query.eq(
             "directorate_id",
             currentProfile.directorate_id
           );
@@ -244,30 +331,43 @@ export default function AttendanceReportPage() {
         const {
           data: instituteData,
           error: instituteError,
-        } = await instituteQuery;
+        } = await query;
 
-        if (instituteError) throw instituteError;
+        if (instituteError) {
+          throw instituteError;
+        }
 
-        setInstitutes(instituteData || []);
-
-        // إذا كان instituteId موجود في الرابط نحافظ عليه
-        const params = new URLSearchParams(
-          window.location.search
+        setInstitutes(
+          instituteData || []
         );
 
-        const instituteIdFromUrl = params.get("instituteId");
+        const params =
+          new URLSearchParams(
+            window.location.search
+          );
+
+        const instituteIdFromUrl =
+          params.get("instituteId");
 
         if (
           instituteIdFromUrl &&
           (instituteData || []).some(
-            (item) => item.id === instituteIdFromUrl
+            (item) =>
+              item.id ===
+              instituteIdFromUrl
           )
         ) {
-          setSelectedInstitute(instituteIdFromUrl);
+          setSelectedInstitute(
+            instituteIdFromUrl
+          );
         }
       }
     } catch (error: any) {
-      console.error("loadInitialData error:", error);
+      console.error(
+        "loadInitialData error:",
+        error
+      );
+
       setMessage(
         error?.message ||
           "حدث خطأ أثناء تحميل بيانات التقرير."
@@ -278,34 +378,45 @@ export default function AttendanceReportPage() {
   }
 
   // =========================================================
-  // تحميل بيانات معهد واحد
+  // تحميل بيانات معهد
   // =========================================================
-  async function loadInstituteData(instituteId: string) {
+  async function loadInstituteData(
+    instituteId: string
+  ) {
     try {
       setReportLoading(true);
       setMessage("");
 
       // -------------------------------------------------------
-      // Classes
+      // الفصول
       // -------------------------------------------------------
       const {
         data: classData,
         error: classError,
       } = await supabase
         .from("classes")
-        .select("id, name, institute_id")
-        .eq("institute_id", instituteId)
+        .select(
+          "id, name, institute_id"
+        )
+        .eq(
+          "institute_id",
+          instituteId
+        )
         .eq("is_active", true)
         .order("name");
 
-      if (classError) throw classError;
+      if (classError) {
+        throw classError;
+      }
 
-      setClasses(classData || []);
+      setClasses(
+        classData || []
+      );
 
       // -------------------------------------------------------
-      // Students
+      // الطلاب
       // IMPORTANT:
-      // students.full_name وليس students.name
+      // full_name وليس name
       // -------------------------------------------------------
       const {
         data: studentData,
@@ -315,23 +426,30 @@ export default function AttendanceReportPage() {
         .select(
           "id, full_name, class_id, institute_id, national_id, phone"
         )
-        .eq("institute_id", instituteId)
+        .eq(
+          "institute_id",
+          instituteId
+        )
         .eq("is_active", true)
         .order("full_name");
 
-      if (studentError) throw studentError;
+      if (studentError) {
+        throw studentError;
+      }
 
-      setStudents(studentData || []);
+      setStudents(
+        studentData || []
+      );
 
-      // -------------------------------------------------------
-      // Attendance
-      // -------------------------------------------------------
       await loadAttendance(
         [instituteId],
         studentData || []
       );
     } catch (error: any) {
-      console.error("loadInstituteData error:", error);
+      console.error(
+        "loadInstituteData error:",
+        error
+      );
 
       setStudents([]);
       setClasses([]);
@@ -347,7 +465,7 @@ export default function AttendanceReportPage() {
   }
 
   // =========================================================
-  // تحميل بيانات جميع المعاهد
+  // تحميل جميع المعاهد
   // =========================================================
   async function loadDirectorateData() {
     try {
@@ -358,41 +476,55 @@ export default function AttendanceReportPage() {
         setClasses([]);
         setStudents([]);
         setAttendance([]);
+
         setReportLoading(false);
+
         return;
       }
 
-      const instituteIds = institutes.map(
-        (institute) => institute.id
-      );
+      const instituteIds =
+        institutes.map(
+          (item) => item.id
+        );
 
       if (instituteIds.length === 0) {
         setClasses([]);
         setStudents([]);
         setAttendance([]);
+
         setReportLoading(false);
+
         return;
       }
 
       // -------------------------------------------------------
-      // Classes
+      // الفصول
       // -------------------------------------------------------
       const {
         data: classData,
         error: classError,
       } = await supabase
         .from("classes")
-        .select("id, name, institute_id")
-        .in("institute_id", instituteIds)
+        .select(
+          "id, name, institute_id"
+        )
+        .in(
+          "institute_id",
+          instituteIds
+        )
         .eq("is_active", true)
         .order("name");
 
-      if (classError) throw classError;
+      if (classError) {
+        throw classError;
+      }
 
-      setClasses(classData || []);
+      setClasses(
+        classData || []
+      );
 
       // -------------------------------------------------------
-      // Students
+      // الطلاب
       // -------------------------------------------------------
       const {
         data: studentData,
@@ -402,17 +534,21 @@ export default function AttendanceReportPage() {
         .select(
           "id, full_name, class_id, institute_id, national_id, phone"
         )
-        .in("institute_id", instituteIds)
+        .in(
+          "institute_id",
+          instituteIds
+        )
         .eq("is_active", true)
         .order("full_name");
 
-      if (studentError) throw studentError;
+      if (studentError) {
+        throw studentError;
+      }
 
-      setStudents(studentData || []);
+      setStudents(
+        studentData || []
+      );
 
-      // -------------------------------------------------------
-      // Attendance
-      // -------------------------------------------------------
       await loadAttendance(
         instituteIds,
         studentData || []
@@ -444,30 +580,38 @@ export default function AttendanceReportPage() {
     currentStudents: Student[]
   ) {
     try {
-      if (instituteIds.length === 0) {
+      if (
+        instituteIds.length === 0 ||
+        currentStudents.length === 0
+      ) {
         setAttendance([]);
         return;
       }
 
-      const studentIds = currentStudents.map(
-        (student) => student.id
-      );
-
-      if (studentIds.length === 0) {
-        setAttendance([]);
-        return;
-      }
+      const studentIds =
+        currentStudents.map(
+          (student) => student.id
+        );
 
       let query = supabase
         .from("attendance")
         .select(
           "id, student_id, institute_id, class_id, attendance_date, status"
         )
-        .in("institute_id", instituteIds)
-        .in("student_id", studentIds)
-        .order("attendance_date", {
-          ascending: false,
-        });
+        .in(
+          "institute_id",
+          instituteIds
+        )
+        .in(
+          "student_id",
+          studentIds
+        )
+        .order(
+          "attendance_date",
+          {
+            ascending: false,
+          }
+        );
 
       if (fromDate) {
         query = query.gte(
@@ -488,11 +632,18 @@ export default function AttendanceReportPage() {
         error,
       } = await query;
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
-      setAttendance(data || []);
+      setAttendance(
+        data || []
+      );
     } catch (error: any) {
-      console.error("loadAttendance error:", error);
+      console.error(
+        "loadAttendance error:",
+        error
+      );
 
       setAttendance([]);
 
@@ -509,14 +660,22 @@ export default function AttendanceReportPage() {
   async function refreshReport() {
     if (!profile) return;
 
-    if (isInstituteUser && profile.institute_id) {
-      await loadInstituteData(profile.institute_id);
+    if (
+      isInstituteUser &&
+      profile.institute_id
+    ) {
+      await loadInstituteData(
+        profile.institute_id
+      );
+
       return;
     }
 
     if (isCentralManager) {
       if (selectedInstitute) {
-        await loadInstituteData(selectedInstitute);
+        await loadInstituteData(
+          selectedInstitute
+        );
       } else {
         await loadDirectorateData();
       }
@@ -524,197 +683,298 @@ export default function AttendanceReportPage() {
   }
 
   // =========================================================
-  // البيانات حسب المعهد المختار
+  // قائمة الفصول بدون تكرار الاسم
   // =========================================================
-  const filteredClasses = useMemo(() => {
-    if (!selectedInstitute) {
-      return classes;
-    }
+  const filteredClasses =
+    useMemo(() => {
+      const source = selectedInstitute
+        ? classes.filter(
+            (item) =>
+              item.institute_id ===
+              selectedInstitute
+          )
+        : classes;
 
-    return classes.filter(
-      (item) =>
-        item.institute_id === selectedInstitute
-    );
-  }, [classes, selectedInstitute]);
+      const unique =
+        new Map<string, ClassItem>();
 
-  // =========================================================
-  // التقرير الرئيسي
-  // =========================================================
-  const report = useMemo<ReportRow[]>(() => {
-    const classMap = new Map<string, string>();
+      source.forEach((item) => {
+        const key =
+          `${item.institute_id}-${item.name.trim()}`;
 
-    classes.forEach((item) => {
-      classMap.set(item.id, item.name);
-    });
+        if (!unique.has(key)) {
+          unique.set(key, item);
+        }
+      });
 
-    const instituteMap = new Map<string, string>();
-
-    institutes.forEach((item) => {
-      instituteMap.set(item.id, item.name);
-    });
-
-    const attendanceByStudent = new Map<
-      string,
-      AttendanceRow[]
-    >();
-
-    attendance.forEach((row) => {
-      const existing =
-        attendanceByStudent.get(row.student_id) || [];
-
-      existing.push(row);
-
-      attendanceByStudent.set(
-        row.student_id,
-        existing
+      return Array.from(
+        unique.values()
       );
-    });
+    }, [
+      classes,
+      selectedInstitute,
+    ]);
 
-    return students
-      .filter((student) => {
-        if (
-          selectedInstitute &&
-          student.institute_id !== selectedInstitute
-        ) {
-          return false;
+  // =========================================================
+  // Map الفصول
+  // =========================================================
+  const classMap =
+    useMemo(() => {
+      const map =
+        new Map<string, string>();
+
+      classes.forEach((item) => {
+        map.set(
+          item.id,
+          item.name
+        );
+      });
+
+      return map;
+    }, [classes]);
+
+  // =========================================================
+  // Map المعاهد
+  // =========================================================
+  const instituteMap =
+    useMemo(() => {
+      const map =
+        new Map<string, string>();
+
+      institutes.forEach((item) => {
+        map.set(
+          item.id,
+          item.name
+        );
+      });
+
+      return map;
+    }, [institutes]);
+
+  // =========================================================
+  // التقرير
+  // =========================================================
+  const report =
+    useMemo<ReportRow[]>(() => {
+      const attendanceByStudent =
+        new Map<
+          string,
+          AttendanceRow[]
+        >();
+
+      attendance.forEach(
+        (row) => {
+          const existing =
+            attendanceByStudent.get(
+              row.student_id
+            ) || [];
+
+          existing.push(row);
+
+          attendanceByStudent.set(
+            row.student_id,
+            existing
+          );
         }
+      );
 
-        if (
-          selectedClass &&
-          student.class_id !== selectedClass
-        ) {
-          return false;
-        }
-
-        if (search.trim()) {
-          const value = search
-            .trim()
-            .toLowerCase();
-
-          const fullName =
-            student.full_name?.toLowerCase() || "";
-
-          const nationalId =
-            student.national_id?.toLowerCase() || "";
-
-          const phone =
-            student.phone?.toLowerCase() || "";
-
+      return students
+        .filter((student) => {
           if (
-            !fullName.includes(value) &&
-            !nationalId.includes(value) &&
-            !phone.includes(value)
+            selectedInstitute &&
+            student.institute_id !==
+              selectedInstitute
           ) {
             return false;
           }
-        }
-
-        return true;
-      })
-      .map((student) => {
-        const records =
-          attendanceByStudent.get(student.id) || [];
-
-        let present = 0;
-        let absent = 0;
-        let late = 0;
-        let excused = 0;
-
-        records.forEach((record) => {
-          const status =
-            record.status?.toLowerCase();
 
           if (
-            status === "present" ||
-            status === "حاضر"
+            selectedClass &&
+            student.class_id !==
+              selectedClass
           ) {
-            present++;
-          } else if (
-            status === "absent" ||
-            status === "غائب"
-          ) {
-            absent++;
-          } else if (
-            status === "late" ||
-            status === "متأخر"
-          ) {
-            late++;
-          } else if (
-            status === "excused" ||
-            status === "معذور"
-          ) {
-            excused++;
+            return false;
           }
-        });
 
-        const total =
-          present +
-          absent +
-          late +
-          excused;
+          if (search.trim()) {
+            const value =
+              search
+                .trim()
+                .toLowerCase();
 
-        const attended =
-          present + late + excused;
+            const fullName =
+              student.full_name
+                ?.toLowerCase() ||
+              "";
 
-        const percentage =
-          total > 0
-            ? Math.round(
-                (attended / total) * 100
+            const nationalId =
+              student.national_id
+                ?.toLowerCase() ||
+              "";
+
+            const phone =
+              student.phone
+                ?.toLowerCase() ||
+              "";
+
+            if (
+              !fullName.includes(
+                value
+              ) &&
+              !nationalId.includes(
+                value
+              ) &&
+              !phone.includes(
+                value
               )
-            : 0;
+            ) {
+              return false;
+            }
+          }
 
-        return {
-          student,
-          className: student.class_id
-            ? classMap.get(student.class_id) ||
-              "بدون فصل"
-            : "بدون فصل",
-          instituteName:
-            instituteMap.get(
-              student.institute_id
-            ) || "غير محدد",
-          present,
-          absent,
-          late,
-          excused,
-          total,
-          percentage,
-        };
-      });
-  }, [
-    students,
-    attendance,
-    classes,
-    institutes,
-    selectedInstitute,
-    selectedClass,
-    search,
-  ]);
+          return true;
+        })
+        .map((student) => {
+          const records =
+            attendanceByStudent.get(
+              student.id
+            ) || [];
+
+          let present = 0;
+          let absent = 0;
+          let late = 0;
+          let excused = 0;
+
+          records.forEach(
+            (record) => {
+              const status =
+                record.status
+                  ?.toLowerCase()
+                  .trim();
+
+              if (
+                status ===
+                  "present" ||
+                status ===
+                  "حاضر"
+              ) {
+                present++;
+              } else if (
+                status ===
+                  "absent" ||
+                status ===
+                  "غائب"
+              ) {
+                absent++;
+              } else if (
+                status ===
+                  "late" ||
+                status ===
+                  "متأخر"
+              ) {
+                late++;
+              } else if (
+                status ===
+                  "excused" ||
+                status ===
+                  "معذور"
+              ) {
+                excused++;
+              }
+            }
+          );
+
+          const total =
+            present +
+            absent +
+            late +
+            excused;
+
+          const attended =
+            present +
+            late +
+            excused;
+
+          const percentage =
+            total > 0
+              ? Math.round(
+                  (attended /
+                    total) *
+                    100
+                )
+              : 0;
+
+          return {
+            student,
+
+            className:
+              student.class_id
+                ? classMap.get(
+                    student.class_id
+                  ) ||
+                  "بدون فصل"
+                : "بدون فصل",
+
+            instituteName:
+              instituteMap.get(
+                student.institute_id
+              ) ||
+              "غير محدد",
+
+            present,
+            absent,
+            late,
+            excused,
+            total,
+            percentage,
+          };
+        });
+    }, [
+      students,
+      attendance,
+      selectedInstitute,
+      selectedClass,
+      search,
+      classMap,
+      instituteMap,
+    ]);
 
   // =========================================================
-  // إجماليات التقرير
+  // الإجماليات
   // =========================================================
-  const totals = useMemo(() => {
-    return report.reduce(
-      (acc, row) => {
-        acc.students++;
-        acc.present += row.present;
-        acc.absent += row.absent;
-        acc.late += row.late;
-        acc.excused += row.excused;
-        acc.total += row.total;
-        return acc;
-      },
-      {
-        students: 0,
-        present: 0,
-        absent: 0,
-        late: 0,
-        excused: 0,
-        total: 0,
-      }
-    );
-  }, [report]);
+  const totals =
+    useMemo(() => {
+      return report.reduce(
+        (acc, row) => {
+          acc.students++;
+
+          acc.present +=
+            row.present;
+
+          acc.absent +=
+            row.absent;
+
+          acc.late +=
+            row.late;
+
+          acc.excused +=
+            row.excused;
+
+          acc.total +=
+            row.total;
+
+          return acc;
+        },
+        {
+          students: 0,
+          present: 0,
+          absent: 0,
+          late: 0,
+          excused: 0,
+          total: 0,
+        }
+      );
+    }, [report]);
 
   const overallPercentage =
     totals.total > 0
@@ -728,48 +988,86 @@ export default function AttendanceReportPage() {
       : 0;
 
   // =========================================================
-  // ملخص حسب المعهد
+  // ملخص المعاهد
   // =========================================================
   const instituteSummary =
-    useMemo<InstituteSummary[]>(() => {
-      const grouped = new Map<
-        string,
-        InstituteSummary
-      >();
+    useMemo<InstituteSummary[]>(
+      () => {
+        const grouped =
+          new Map<
+            string,
+            InstituteSummary
+          >();
 
-      report.forEach((row) => {
-        const instituteId =
-          row.student.institute_id;
+        report.forEach(
+          (row) => {
+            const instituteId =
+              row.student
+                .institute_id;
 
-        const existing = grouped.get(
-          instituteId
+            const existing =
+              grouped.get(
+                instituteId
+              );
+
+            if (existing) {
+              // FIX:
+              // زيادة عدد الطلاب لكل طالب
+              existing.students += 1;
+
+              existing.present +=
+                row.present;
+
+              existing.absent +=
+                row.absent;
+
+              existing.late +=
+                row.late;
+
+              existing.excused +=
+                row.excused;
+
+              existing.total +=
+                row.total;
+
+              return;
+            }
+
+            grouped.set(
+              instituteId,
+              {
+                instituteId,
+                instituteName:
+                  row.instituteName,
+
+                students: 1,
+
+                present:
+                  row.present,
+
+                absent:
+                  row.absent,
+
+                late:
+                  row.late,
+
+                excused:
+                  row.excused,
+
+                total:
+                  row.total,
+
+                percentage: 0,
+              }
+            );
+          }
         );
 
-        if (existing) {
-          existing.present += row.present;
-          existing.absent += row.absent;
-          existing.late += row.late;
-          existing.excused += row.excused;
-          existing.total += row.total;
-          return;
-        }
-
-        grouped.set(instituteId, {
-          instituteId,
-          instituteName: row.instituteName,
-          students: 1,
-          present: row.present,
-          absent: row.absent,
-          late: row.late,
-          excused: row.excused,
-          total: row.total,
-          percentage: 0,
-        });
-      });
-
-      return Array.from(grouped.values()).map(
-        (item) => ({
+        return Array.from(
+          grouped.values()
+        ).map((item) => ({
           ...item,
+
           percentage:
             item.total > 0
               ? Math.round(
@@ -780,24 +1078,42 @@ export default function AttendanceReportPage() {
                     100
                 )
               : 0,
-        })
-      );
-    }, [report]);
+        }));
+      },
+      [report]
+    );
 
   // =========================================================
-  // HTML escaping للطباعة
+  // HTML Escape
   // =========================================================
-  function escapeHtml(value: unknown) {
+  function escapeHtml(
+    value: unknown
+  ) {
     return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+      .replace(
+        /&/g,
+        "&amp;"
+      )
+      .replace(
+        /</g,
+        "&lt;"
+      )
+      .replace(
+        />/g,
+        "&gt;"
+      )
+      .replace(
+        /"/g,
+        "&quot;"
+      )
+      .replace(
+        /'/g,
+        "&#039;"
+      );
   }
 
   // =========================================================
-  // تنسيق التاريخ
+  // التاريخ
   // =========================================================
   function formatDateForPrint(
     value: string
@@ -808,74 +1124,136 @@ export default function AttendanceReportPage() {
       `${value}T00:00:00`
     );
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
       return value;
     }
 
-    return date.toLocaleDateString("ar-EG", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
+    return date.toLocaleDateString(
+      "ar-EG",
+      {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }
+    );
   }
 
   // =========================================================
-  // طباعة التقرير
+  // الطباعة
   // =========================================================
   function handlePrintReport() {
-    const instituteName = selectedInstitute
-      ? institutes.find(
-          (item) =>
-            item.id === selectedInstitute
-        )?.name || "المعهد"
-      : "جميع المعاهد";
+    const instituteName =
+      selectedInstitute
+        ? institutes.find(
+            (item) =>
+              item.id ===
+              selectedInstitute
+          )?.name ||
+          "المعهد"
+        : "جميع المعاهد";
 
-    const className = selectedClass
-      ? classes.find(
-          (item) =>
-            item.id === selectedClass
-        )?.name || "الفصل"
-      : "جميع الفصول";
+    const className =
+      selectedClass
+        ? classes.find(
+            (item) =>
+              item.id ===
+              selectedClass
+          )?.name ||
+          "الفصل"
+        : "جميع الفصول";
 
-    const rowsHtml = report
-      .map(
-        (row, index) => `
-          <tr>
-            <td>${index + 1}</td>
-            <td>${escapeHtml(
-              row.student.full_name
-            )}</td>
-            <td>${escapeHtml(
-              row.instituteName
-            )}</td>
-            <td>${escapeHtml(
-              row.className
-            )}</td>
-            <td>${row.present}</td>
-            <td>${row.absent}</td>
-            <td>${row.late}</td>
-            <td>${row.excused}</td>
-            <td>${row.total}</td>
-            <td>${row.percentage}%</td>
-          </tr>
-        `
-      )
-      .join("");
+    const rowsHtml =
+      report
+        .map(
+          (row, index) => `
+            <tr>
+              <td>${index + 1}</td>
+
+              <td>
+                ${escapeHtml(
+                  row.student
+                    .full_name
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  row.instituteName
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  row.className
+                )}
+              </td>
+
+              <td>
+                ${row.present}
+              </td>
+
+              <td>
+                ${row.absent}
+              </td>
+
+              <td>
+                ${row.late}
+              </td>
+
+              <td>
+                ${row.excused}
+              </td>
+
+              <td>
+                ${row.total}
+              </td>
+
+              <td>
+                ${row.percentage}%
+              </td>
+            </tr>
+          `
+        )
+        .join("");
 
     const summaryHtml =
       instituteSummary
         .map(
           (item) => `
             <tr>
-              <td>${escapeHtml(
-                item.instituteName
-              )}</td>
-              <td>${item.students}</td>
-              <td>${item.present}</td>
-              <td>${item.absent}</td>
-              <td>${item.late}</td>
-              <td>${item.excused}</td>
-              <td>${item.percentage}%</td>
+              <td>
+                ${escapeHtml(
+                  item.instituteName
+                )}
+              </td>
+
+              <td>
+                ${item.students}
+              </td>
+
+              <td>
+                ${item.present}
+              </td>
+
+              <td>
+                ${item.absent}
+              </td>
+
+              <td>
+                ${item.late}
+              </td>
+
+              <td>
+                ${item.excused}
+              </td>
+
+              <td>
+                ${item.percentage}%
+              </td>
             </tr>
           `
         )
@@ -892,13 +1270,20 @@ export default function AttendanceReportPage() {
       setMessage(
         "تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة."
       );
+
       return;
     }
 
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html lang="ar" dir="rtl">
+
+      <html
+        lang="ar"
+        dir="rtl"
+      >
+
       <head>
+
         <meta charset="UTF-8" />
 
         <title>
@@ -906,6 +1291,7 @@ export default function AttendanceReportPage() {
         </title>
 
         <style>
+
           @page {
             size: A4 landscape;
             margin: 12mm;
@@ -923,8 +1309,11 @@ export default function AttendanceReportPage() {
               sans-serif;
 
             direction: rtl;
+
             color: #111827;
+
             margin: 0;
+
             background: #fff;
           }
 
@@ -946,6 +1335,7 @@ export default function AttendanceReportPage() {
 
           .filters {
             display: grid;
+
             grid-template-columns:
               repeat(4, 1fr);
 
@@ -955,43 +1345,59 @@ export default function AttendanceReportPage() {
           }
 
           .filter {
-            border: 1px solid #d1d5db;
+            border:
+              1px solid #d1d5db;
+
             border-radius: 8px;
+
             padding: 8px;
+
             background: #f9fafb;
           }
 
           .filter strong {
             display: block;
+
             font-size: 11px;
+
             color: #6b7280;
+
             margin-bottom: 3px;
           }
 
           .stats {
             display: grid;
+
             grid-template-columns:
               repeat(5, 1fr);
 
             gap: 8px;
+
             margin-bottom: 20px;
           }
 
           .stat {
-            border: 1px solid #d1d5db;
+            border:
+              1px solid #d1d5db;
+
             border-radius: 8px;
+
             padding: 10px;
+
             text-align: center;
           }
 
           .stat strong {
             display: block;
+
             font-size: 18px;
+
             margin-top: 4px;
           }
 
           h2 {
             font-size: 17px;
+
             margin:
               20px 0
               10px;
@@ -999,48 +1405,68 @@ export default function AttendanceReportPage() {
 
           table {
             width: 100%;
-            border-collapse: collapse;
+
+            border-collapse:
+              collapse;
+
             margin-bottom: 20px;
           }
 
           th,
           td {
-            border: 1px solid #d1d5db;
-            padding: 7px 6px;
+            border:
+              1px solid #d1d5db;
+
+            padding:
+              7px 6px;
+
             text-align: center;
+
             font-size: 11px;
           }
 
           th {
-            background: #f3f4f6;
+            background:
+              #f3f4f6;
+
             font-weight: 700;
           }
 
           tbody tr:nth-child(even) {
-            background: #fafafa;
+            background:
+              #fafafa;
           }
 
           .footer {
             margin-top: 20px;
+
             display: flex;
+
             justify-content:
               space-between;
 
             font-size: 11px;
+
             color: #6b7280;
           }
 
           .empty {
             text-align: center;
+
             padding: 30px;
-            border: 1px solid #d1d5db;
+
+            border:
+              1px solid #d1d5db;
           }
+
         </style>
+
       </head>
 
       <body>
 
         <div class="header">
+
           <h1>
             تقرير الحضور والغياب
           </h1>
@@ -1052,26 +1478,41 @@ export default function AttendanceReportPage() {
           <p>
             تقرير متابعة وتحليل حضور الطلاب
           </p>
+
         </div>
 
         <div class="filters">
 
           <div class="filter">
-            <strong>المعهد</strong>
+
+            <strong>
+              المعهد
+            </strong>
+
             ${escapeHtml(
               instituteName
             )}
+
           </div>
 
           <div class="filter">
-            <strong>الفصل</strong>
+
+            <strong>
+              الفصل
+            </strong>
+
             ${escapeHtml(
               className
             )}
+
           </div>
 
           <div class="filter">
-            <strong>من تاريخ</strong>
+
+            <strong>
+              من تاريخ
+            </strong>
+
             ${escapeHtml(
               fromDate
                 ? formatDateForPrint(
@@ -1079,10 +1520,15 @@ export default function AttendanceReportPage() {
                   )
                 : "كل التواريخ"
             )}
+
           </div>
 
           <div class="filter">
-            <strong>إلى تاريخ</strong>
+
+            <strong>
+              إلى تاريخ
+            </strong>
+
             ${escapeHtml(
               toDate
                 ? formatDateForPrint(
@@ -1090,6 +1536,7 @@ export default function AttendanceReportPage() {
                   )
                 : "كل التواريخ"
             )}
+
           </div>
 
         </div>
@@ -1098,6 +1545,7 @@ export default function AttendanceReportPage() {
 
           <div class="stat">
             الطلاب
+
             <strong>
               ${totals.students}
             </strong>
@@ -1105,6 +1553,7 @@ export default function AttendanceReportPage() {
 
           <div class="stat">
             حاضر
+
             <strong>
               ${totals.present}
             </strong>
@@ -1112,6 +1561,7 @@ export default function AttendanceReportPage() {
 
           <div class="stat">
             غائب
+
             <strong>
               ${totals.absent}
             </strong>
@@ -1119,6 +1569,7 @@ export default function AttendanceReportPage() {
 
           <div class="stat">
             متأخر
+
             <strong>
               ${totals.late}
             </strong>
@@ -1126,6 +1577,7 @@ export default function AttendanceReportPage() {
 
           <div class="stat">
             نسبة الحضور
+
             <strong>
               ${overallPercentage}%
             </strong>
@@ -1141,21 +1593,49 @@ export default function AttendanceReportPage() {
               </h2>
 
               <table>
+
                 <thead>
+
                   <tr>
-                    <th>المعهد</th>
-                    <th>الطلاب</th>
-                    <th>حاضر</th>
-                    <th>غائب</th>
-                    <th>متأخر</th>
-                    <th>معذور</th>
-                    <th>نسبة الحضور</th>
+
+                    <th>
+                      المعهد
+                    </th>
+
+                    <th>
+                      الطلاب
+                    </th>
+
+                    <th>
+                      حاضر
+                    </th>
+
+                    <th>
+                      غائب
+                    </th>
+
+                    <th>
+                      متأخر
+                    </th>
+
+                    <th>
+                      معذور
+                    </th>
+
+                    <th>
+                      نسبة الحضور
+                    </th>
+
                   </tr>
+
                 </thead>
 
                 <tbody>
+
                   ${summaryHtml}
+
                 </tbody>
+
               </table>
             `
             : ""
@@ -1169,24 +1649,61 @@ export default function AttendanceReportPage() {
           report.length > 0
             ? `
               <table>
+
                 <thead>
+
                   <tr>
-                    <th>#</th>
-                    <th>اسم الطالب</th>
-                    <th>المعهد</th>
-                    <th>الفصل</th>
-                    <th>حاضر</th>
-                    <th>غائب</th>
-                    <th>متأخر</th>
-                    <th>معذور</th>
-                    <th>الإجمالي</th>
-                    <th>نسبة الحضور</th>
+
+                    <th>
+                      #
+                    </th>
+
+                    <th>
+                      اسم الطالب
+                    </th>
+
+                    <th>
+                      المعهد
+                    </th>
+
+                    <th>
+                      الفصل
+                    </th>
+
+                    <th>
+                      حاضر
+                    </th>
+
+                    <th>
+                      غائب
+                    </th>
+
+                    <th>
+                      متأخر
+                    </th>
+
+                    <th>
+                      معذور
+                    </th>
+
+                    <th>
+                      الإجمالي
+                    </th>
+
+                    <th>
+                      نسبة الحضور
+                    </th>
+
                   </tr>
+
                 </thead>
 
                 <tbody>
+
                   ${rowsHtml}
+
                 </tbody>
+
               </table>
             `
             : `
@@ -1197,6 +1714,7 @@ export default function AttendanceReportPage() {
         }
 
         <div class="footer">
+
           <span>
             تاريخ الطباعة:
             ${new Date().toLocaleString(
@@ -1207,15 +1725,20 @@ export default function AttendanceReportPage() {
           <span>
             نظام إدارة المعاهد الأزهرية
           </span>
+
         </div>
 
         <script>
-          window.onload = function () {
-            window.print();
-          };
+
+          window.onload =
+            function () {
+              window.print();
+            };
+
         </script>
 
       </body>
+
       </html>
     `);
 
@@ -1232,13 +1755,17 @@ export default function AttendanceReportPage() {
         className="min-h-screen bg-slate-50 p-6"
       >
         <div className="mx-auto max-w-7xl">
+
           <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+
             <RefreshCw className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-600" />
 
             <p className="text-slate-600">
               جاري تحميل تقرير الحضور والغياب...
             </p>
+
           </div>
+
         </div>
       </main>
     );
@@ -1260,13 +1787,17 @@ export default function AttendanceReportPage() {
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
 
             <div>
+
               <div className="mb-2 flex items-center gap-3">
 
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+
                   <BarChart3 className="h-6 w-6" />
+
                 </div>
 
                 <div>
+
                   <h1 className="text-2xl font-bold text-slate-900">
                     تقرير الحضور والغياب
                   </h1>
@@ -1274,9 +1805,11 @@ export default function AttendanceReportPage() {
                   <p className="mt-1 text-sm text-slate-500">
                     متابعة وتحليل حضور الطلاب خلال الفترة المحددة
                   </p>
+
                 </div>
 
               </div>
+
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -1287,6 +1820,7 @@ export default function AttendanceReportPage() {
                 disabled={reportLoading}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
+
                 <RefreshCw
                   className={`h-4 w-4 ${
                     reportLoading
@@ -1296,6 +1830,7 @@ export default function AttendanceReportPage() {
                 />
 
                 تحديث التقرير
+
               </button>
 
               <button
@@ -1303,13 +1838,17 @@ export default function AttendanceReportPage() {
                 onClick={handlePrintReport}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
               >
+
                 <Printer className="h-4 w-4" />
+
                 طباعة التقرير
+
               </button>
 
             </div>
 
           </div>
+
         </section>
 
         {/* Message */}
@@ -1325,10 +1864,13 @@ export default function AttendanceReportPage() {
           <div className="mb-5 flex items-center gap-3">
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+
               <CalendarDays className="h-5 w-5" />
+
             </div>
 
             <div>
+
               <h2 className="font-bold text-slate-900">
                 خيارات التقرير
               </h2>
@@ -1336,6 +1878,7 @@ export default function AttendanceReportPage() {
               <p className="text-xs text-slate-500">
                 حدد المعهد والفصل والفترة الزمنية
               </p>
+
             </div>
 
           </div>
@@ -1344,6 +1887,7 @@ export default function AttendanceReportPage() {
 
             {/* Institute */}
             <div>
+
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 المعهد
               </label>
@@ -1354,11 +1898,13 @@ export default function AttendanceReportPage() {
                   setSelectedInstitute(
                     event.target.value
                   );
+
                   setSelectedClass("");
                 }}
                 disabled={isInstituteUser}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
               >
+
                 {isCentralManager && (
                   <option value="">
                     جميع المعاهد
@@ -1375,11 +1921,14 @@ export default function AttendanceReportPage() {
                     </option>
                   )
                 )}
+
               </select>
+
             </div>
 
             {/* Class */}
             <div>
+
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 الفصل
               </label>
@@ -1393,6 +1942,7 @@ export default function AttendanceReportPage() {
                 }
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
+
                 <option value="">
                   جميع الفصول
                 </option>
@@ -1407,11 +1957,14 @@ export default function AttendanceReportPage() {
                     </option>
                   )
                 )}
+
               </select>
+
             </div>
 
             {/* From */}
             <div>
+
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 من تاريخ
               </label>
@@ -1426,10 +1979,12 @@ export default function AttendanceReportPage() {
                 }
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
+
             </div>
 
             {/* To */}
             <div>
+
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 إلى تاريخ
               </label>
@@ -1444,10 +1999,12 @@ export default function AttendanceReportPage() {
                 }
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
+
             </div>
 
             {/* Search */}
             <div>
+
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 بحث
               </label>
@@ -1469,6 +2026,7 @@ export default function AttendanceReportPage() {
                 />
 
               </div>
+
             </div>
 
           </div>
@@ -1478,11 +2036,12 @@ export default function AttendanceReportPage() {
         {/* Stats */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
 
-          {/* Students */}
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+
             <div className="flex items-center justify-between">
 
               <div>
+
                 <p className="text-sm text-slate-500">
                   الطلاب
                 </p>
@@ -1490,20 +2049,25 @@ export default function AttendanceReportPage() {
                 <p className="mt-2 text-2xl font-bold text-slate-900">
                   {totals.students}
                 </p>
+
               </div>
 
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+
                 <Users className="h-5 w-5" />
+
               </div>
 
             </div>
+
           </div>
 
-          {/* Present */}
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+
             <div className="flex items-center justify-between">
 
               <div>
+
                 <p className="text-sm text-slate-500">
                   حاضر
                 </p>
@@ -1511,20 +2075,25 @@ export default function AttendanceReportPage() {
                 <p className="mt-2 text-2xl font-bold text-emerald-600">
                   {totals.present}
                 </p>
+
               </div>
 
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+
                 <CheckCircle2 className="h-5 w-5" />
+
               </div>
 
             </div>
+
           </div>
 
-          {/* Absent */}
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+
             <div className="flex items-center justify-between">
 
               <div>
+
                 <p className="text-sm text-slate-500">
                   غائب
                 </p>
@@ -1532,20 +2101,25 @@ export default function AttendanceReportPage() {
                 <p className="mt-2 text-2xl font-bold text-red-600">
                   {totals.absent}
                 </p>
+
               </div>
 
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+
                 <XCircle className="h-5 w-5" />
+
               </div>
 
             </div>
+
           </div>
 
-          {/* Late */}
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+
             <div className="flex items-center justify-between">
 
               <div>
+
                 <p className="text-sm text-slate-500">
                   متأخر
                 </p>
@@ -1553,20 +2127,25 @@ export default function AttendanceReportPage() {
                 <p className="mt-2 text-2xl font-bold text-amber-600">
                   {totals.late}
                 </p>
+
               </div>
 
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+
                 <Clock3 className="h-5 w-5" />
+
               </div>
 
             </div>
+
           </div>
 
-          {/* Percentage */}
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+
             <div className="flex items-center justify-between">
 
               <div>
+
                 <p className="text-sm text-slate-500">
                   نسبة الحضور
                 </p>
@@ -1574,13 +2153,17 @@ export default function AttendanceReportPage() {
                 <p className="mt-2 text-2xl font-bold text-indigo-600">
                   {overallPercentage}%
                 </p>
+
               </div>
 
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+
                 <TrendingUp className="h-5 w-5" />
+
               </div>
 
             </div>
+
           </div>
 
         </section>
@@ -1591,10 +2174,13 @@ export default function AttendanceReportPage() {
           <div className="mb-5 flex items-center gap-3">
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+
               <Building2 className="h-5 w-5" />
+
             </div>
 
             <div>
+
               <h2 className="font-bold text-slate-900">
                 ملخص الحضور حسب المعهد
               </h2>
@@ -1602,6 +2188,7 @@ export default function AttendanceReportPage() {
               <p className="text-xs text-slate-500">
                 مقارنة مؤشرات الحضور بين المعاهد
               </p>
+
             </div>
 
           </div>
@@ -1612,6 +2199,7 @@ export default function AttendanceReportPage() {
               <table className="w-full min-w-[800px] border-collapse">
 
                 <thead>
+
                   <tr className="border-b border-slate-200 text-right">
 
                     <th className="px-4 py-3 text-sm font-bold text-slate-700">
@@ -1643,6 +2231,7 @@ export default function AttendanceReportPage() {
                     </th>
 
                   </tr>
+
                 </thead>
 
                 <tbody>
@@ -1660,7 +2249,7 @@ export default function AttendanceReportPage() {
                           {item.instituteName}
                         </td>
 
-                        <td className="px-4 py-4 text-center text-slate-700">
+                        <td className="px-4 py-4 text-center font-semibold text-slate-700">
                           {item.students}
                         </td>
 
@@ -1723,17 +2312,22 @@ export default function AttendanceReportPage() {
             <div className="flex items-center gap-3">
 
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+
                 <ShieldCheck className="h-5 w-5" />
+
               </div>
 
               <div>
+
                 <h2 className="font-bold text-slate-900">
                   تفاصيل حضور الطلاب
                 </h2>
 
                 <p className="text-xs text-slate-500">
-                  عدد النتائج: {report.length}
+                  عدد النتائج:{" "}
+                  {report.length}
                 </p>
+
               </div>
 
             </div>
@@ -1756,6 +2350,7 @@ export default function AttendanceReportPage() {
               <table className="w-full min-w-[1000px] border-collapse">
 
                 <thead>
+
                   <tr className="border-b border-slate-200 bg-slate-50 text-right">
 
                     <th className="px-3 py-3 text-xs font-bold text-slate-700">
@@ -1799,6 +2394,7 @@ export default function AttendanceReportPage() {
                     </th>
 
                   </tr>
+
                 </thead>
 
                 <tbody>
@@ -1812,52 +2408,63 @@ export default function AttendanceReportPage() {
                         className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
                       >
 
+                        {/* # */}
                         <td className="px-3 py-3 text-xs text-slate-500">
                           {index + 1}
                         </td>
 
+                        {/* اسم الطالب */}
                         <td className="px-3 py-3">
 
                           <div className="font-semibold text-slate-900">
-                            {row.student.full_name}
+                            {
+                              row.student
+                                .full_name
+                            }
                           </div>
 
-                          {row.student.national_id && (
-                            <div className="mt-1 text-[11px] text-slate-400">
-                              {row.student.national_id}
-                            </div>
-                          )}
-
                         </td>
 
+                        {/* المعهد */}
                         <td className="px-3 py-3 text-xs text-slate-600">
-                          {row.instituteName}
+                          {
+                            row.instituteName
+                          }
                         </td>
 
+                        {/* الفصل */}
                         <td className="px-3 py-3 text-xs text-slate-600">
-                          {row.className}
+                          {
+                            row.className
+                          }
                         </td>
 
+                        {/* حاضر */}
                         <td className="px-3 py-3 text-center font-semibold text-emerald-600">
                           {row.present}
                         </td>
 
+                        {/* غائب */}
                         <td className="px-3 py-3 text-center font-semibold text-red-600">
                           {row.absent}
                         </td>
 
+                        {/* متأخر */}
                         <td className="px-3 py-3 text-center font-semibold text-amber-600">
                           {row.late}
                         </td>
 
+                        {/* معذور */}
                         <td className="px-3 py-3 text-center text-slate-600">
                           {row.excused}
                         </td>
 
+                        {/* الإجمالي */}
                         <td className="px-3 py-3 text-center font-semibold text-slate-800">
                           {row.total}
                         </td>
 
+                        {/* النسبة */}
                         <td className="px-3 py-3 text-center">
 
                           <span
@@ -1871,7 +2478,10 @@ export default function AttendanceReportPage() {
                                 : "bg-red-50 text-red-700"
                             }`}
                           >
-                            {row.percentage}%
+                            {
+                              row.percentage
+                            }
+                            %
                           </span>
 
                         </td>
