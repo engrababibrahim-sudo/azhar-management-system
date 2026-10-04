@@ -34,7 +34,6 @@ type ClassItem = {
   id: string;
   name: string;
   institute_id: string;
-  stage: string | null;
 };
 
 type Student = {
@@ -169,9 +168,8 @@ export default function AttendanceReportPage() {
   const [message, setMessage] = useState("");
 
   /*
-   * مهم:
-   * لا نستخدم useSearchParams هنا حتى لا يحدث خطأ Vercel أثناء prerender.
-   * نقرأ instituteId من window.location.search داخل useEffect فقط.
+   * نقرأ instituteId من الرابط بدون useSearchParams
+   * حتى لا يحدث خطأ Vercel أثناء build/prerender.
    */
   const [requestedInstituteId, setRequestedInstituteId] = useState<
     string | null
@@ -185,7 +183,7 @@ export default function AttendanceReportPage() {
     ["sheikh", "it_admin"].includes(profile.role);
 
   /*
-   * قراءة instituteId من الرابط بدون useSearchParams
+   * قراءة instituteId من الرابط
    */
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -247,7 +245,7 @@ export default function AttendanceReportPage() {
 
       /*
        * مستخدم المعهد:
-       * نعرض معهد المستخدم فقط مهما كان instituteId الموجود في الرابط.
+       * نعرض المعهد المرتبط بالمستخدم فقط.
        */
       if (
         ["sheikh", "it_admin"].includes(profileData.role)
@@ -278,7 +276,7 @@ export default function AttendanceReportPage() {
 
       /*
        * المدير / super_admin:
-       * تحميل معاهد الإدارة التابعة له.
+       * تحميل معاهد الإدارة التعليمية.
        */
       if (CENTRAL_ROLES.includes(profileData.role)) {
         if (!profileData.directorate_id) {
@@ -303,14 +301,11 @@ export default function AttendanceReportPage() {
         setInstitutes(loadedInstitutes);
 
         /*
-         * إذا تم فتح الصفحة من صفحة تفاصيل معهد:
+         * إذا تم فتح التقرير من صفحة معهد:
          *
          * /attendance-report?instituteId=XXXXXXXX
          *
-         * نعرض هذا المعهد فقط.
-         *
-         * إذا لم يوجد المعهد أو الـ ID غير صحيح:
-         * نرجع للوضع العام "كل المعاهد".
+         * يتم عرض هذا المعهد فقط.
          */
         if (requestedInstituteId) {
           const requestedInstitute = loadedInstitutes.find(
@@ -328,7 +323,10 @@ export default function AttendanceReportPage() {
         }
       }
     } catch (error: any) {
-      console.error("Attendance report initial load error:", error);
+      console.error(
+        "Attendance report initial load error:",
+        error
+      );
 
       setMessage(
         error?.message ||
@@ -340,29 +338,43 @@ export default function AttendanceReportPage() {
   }
 
   /*
-   * في حالة وصول requestedInstituteId بعد تحميل البيانات
-   * نطبقه على المدير / super_admin.
+   * تطبيق instituteId بعد تحميل قائمة المعاهد
    */
   useEffect(() => {
     if (!profile) return;
-    if (!CENTRAL_ROLES.includes(profile.role)) return;
-    if (!requestedInstituteId) return;
-    if (!institutes.length) return;
+
+    if (!CENTRAL_ROLES.includes(profile.role)) {
+      return;
+    }
+
+    if (!requestedInstituteId) {
+      return;
+    }
+
+    if (!institutes.length) {
+      return;
+    }
 
     const instituteExists = institutes.some(
-      (institute) => institute.id === requestedInstituteId
+      (institute) =>
+        institute.id === requestedInstituteId
     );
 
     if (instituteExists) {
       setSelectedInstitute(requestedInstituteId);
     }
-  }, [profile, requestedInstituteId, institutes]);
+  }, [
+    profile,
+    requestedInstituteId,
+    institutes,
+  ]);
 
   /*
-   * تحميل البيانات عند تغيير المعهد أو التاريخ.
+   * تحميل البيانات عند تغيير المعهد أو التاريخ
    */
   useEffect(() => {
     if (!profile) return;
+
     if (!institutes.length) return;
 
     if (isInstituteUser) {
@@ -399,10 +411,14 @@ export default function AttendanceReportPage() {
       setReportLoading(true);
       setMessage("");
 
+      /*
+       * تم إصلاح المشكلة هنا:
+       * لا يوجد stage لأن العمود غير موجود في جدول classes.
+       */
       const { data: classesData, error: classesError } =
         await supabase
           .from("classes")
-          .select("id, name, institute_id, stage")
+          .select("id, name, institute_id")
           .eq("institute_id", instituteId)
           .eq("is_active", true)
           .order("name");
@@ -454,7 +470,10 @@ export default function AttendanceReportPage() {
       setStudents(studentsData || []);
       setAttendance(attendanceData);
     } catch (error: any) {
-      console.error("Institute attendance report error:", error);
+      console.error(
+        "Institute attendance report error:",
+        error
+      );
 
       setMessage(
         error?.message ||
@@ -470,7 +489,7 @@ export default function AttendanceReportPage() {
   }
 
   /*
-   * تحميل بيانات كل معاهد الإدارة
+   * تحميل بيانات جميع معاهد الإدارة
    */
   async function loadDirectorateData() {
     try {
@@ -488,10 +507,13 @@ export default function AttendanceReportPage() {
         return;
       }
 
+      /*
+       * تم إصلاح stage هنا أيضًا.
+       */
       const { data: classesData, error: classesError } =
         await supabase
           .from("classes")
-          .select("id, name, institute_id, stage")
+          .select("id, name, institute_id")
           .in("institute_id", instituteIds)
           .eq("is_active", true)
           .order("name");
@@ -543,7 +565,10 @@ export default function AttendanceReportPage() {
       setStudents(studentsData || []);
       setAttendance(attendanceData);
     } catch (error: any) {
-      console.error("Directorate attendance report error:", error);
+      console.error(
+        "Directorate attendance report error:",
+        error
+      );
 
       setMessage(
         error?.message ||
@@ -559,7 +584,7 @@ export default function AttendanceReportPage() {
   }
 
   /*
-   * تحديث التقرير يدويًا
+   * تحديث التقرير
    */
   async function refreshReport() {
     if (!profile) return;
@@ -590,7 +615,7 @@ export default function AttendanceReportPage() {
   }
 
   /*
-   * الفصول التابعة للمعهد المختار
+   * الفصول التابعة للمعهد
    */
   const filteredClasses = useMemo(() => {
     if (!selectedInstitute) {
@@ -598,9 +623,13 @@ export default function AttendanceReportPage() {
     }
 
     return classes.filter(
-      (item) => item.institute_id === selectedInstitute
+      (item) =>
+        item.institute_id === selectedInstitute
     );
-  }, [classes, selectedInstitute]);
+  }, [
+    classes,
+    selectedInstitute,
+  ]);
 
   /*
    * تقرير الطلاب
@@ -622,16 +651,18 @@ export default function AttendanceReportPage() {
       );
     }
 
-    const searchValue = search.trim().toLowerCase();
+    const searchValue =
+      search.trim().toLowerCase();
 
     if (searchValue) {
-      filteredStudents = filteredStudents.filter(
-        (student) => {
+      filteredStudents =
+        filteredStudents.filter((student) => {
           const name =
             student.name?.toLowerCase?.() || "";
 
           const nationalId =
-            student.national_id?.toLowerCase?.() || "";
+            student.national_id?.toLowerCase?.() ||
+            "";
 
           const phone =
             student.phone?.toLowerCase?.() || "";
@@ -641,14 +672,15 @@ export default function AttendanceReportPage() {
             nationalId.includes(searchValue) ||
             phone.includes(searchValue)
           );
-        }
-      );
+        });
     }
 
     return filteredStudents.map((student) => {
-      const studentAttendance = attendance.filter(
-        (row) => row.student_id === student.id
-      );
+      const studentAttendance =
+        attendance.filter(
+          (row) =>
+            row.student_id === student.id
+        );
 
       let present = 0;
       let absent = 0;
@@ -656,32 +688,48 @@ export default function AttendanceReportPage() {
       let excused = 0;
 
       studentAttendance.forEach((row) => {
-        const status = normalizeStatus(row.status);
+        const status = normalizeStatus(
+          row.status
+        );
 
-        if (status === "present") present++;
-        else if (status === "absent") absent++;
-        else if (status === "late") late++;
-        else if (status === "excused") excused++;
+        if (status === "present") {
+          present++;
+        } else if (status === "absent") {
+          absent++;
+        } else if (status === "late") {
+          late++;
+        } else if (status === "excused") {
+          excused++;
+        }
       });
 
       const total =
-        present + absent + late + excused;
+        present +
+        absent +
+        late +
+        excused;
 
       const attended =
-        present + late + excused;
+        present +
+        late +
+        excused;
 
       const percentage =
         total > 0
-          ? Math.round((attended / total) * 100)
+          ? Math.round(
+              (attended / total) * 100
+            )
           : 0;
 
       const classItem = classes.find(
-        (item) => item.id === student.class_id
+        (item) =>
+          item.id === student.class_id
       );
 
       return {
         student,
-        className: classItem?.name || "غير محدد",
+        className:
+          classItem?.name || "غير محدد",
         present,
         absent,
         late,
@@ -704,34 +752,45 @@ export default function AttendanceReportPage() {
    */
   const totals = useMemo(() => {
     const present = report.reduce(
-      (sum, row) => sum + row.present,
+      (sum, row) =>
+        sum + row.present,
       0
     );
 
     const absent = report.reduce(
-      (sum, row) => sum + row.absent,
+      (sum, row) =>
+        sum + row.absent,
       0
     );
 
     const late = report.reduce(
-      (sum, row) => sum + row.late,
+      (sum, row) =>
+        sum + row.late,
       0
     );
 
     const excused = report.reduce(
-      (sum, row) => sum + row.excused,
+      (sum, row) =>
+        sum + row.excused,
       0
     );
 
     const total =
-      present + absent + late + excused;
+      present +
+      absent +
+      late +
+      excused;
 
     const attended =
-      present + late + excused;
+      present +
+      late +
+      excused;
 
     const percentage =
       total > 0
-        ? Math.round((attended / total) * 100)
+        ? Math.round(
+            (attended / total) * 100
+          )
         : 0;
 
     return {
@@ -752,20 +811,25 @@ export default function AttendanceReportPage() {
   >(() => {
     return institutes
       .map((institute) => {
-        const instituteStudents = students.filter(
-          (student) =>
-            student.institute_id === institute.id
-        );
+        const instituteStudents =
+          students.filter(
+            (student) =>
+              student.institute_id ===
+              institute.id
+          );
 
         const studentIds = new Set(
           instituteStudents.map(
-            (student) => student.id
+            (student) =>
+              student.id
           )
         );
 
         const instituteAttendance =
           attendance.filter((row) =>
-            studentIds.has(row.student_id)
+            studentIds.has(
+              row.student_id
+            )
           );
 
         let present = 0;
@@ -773,30 +837,56 @@ export default function AttendanceReportPage() {
         let late = 0;
         let excused = 0;
 
-        instituteAttendance.forEach((row) => {
-          const status = normalizeStatus(row.status);
+        instituteAttendance.forEach(
+          (row) => {
+            const status =
+              normalizeStatus(
+                row.status
+              );
 
-          if (status === "present") present++;
-          else if (status === "absent") absent++;
-          else if (status === "late") late++;
-          else if (status === "excused") excused++;
-        });
+            if (status === "present") {
+              present++;
+            } else if (
+              status === "absent"
+            ) {
+              absent++;
+            } else if (
+              status === "late"
+            ) {
+              late++;
+            } else if (
+              status === "excused"
+            ) {
+              excused++;
+            }
+          }
+        );
 
         const total =
-          present + absent + late + excused;
+          present +
+          absent +
+          late +
+          excused;
 
         const attended =
-          present + late + excused;
+          present +
+          late +
+          excused;
 
         const percentage =
           total > 0
-            ? Math.round((attended / total) * 100)
+            ? Math.round(
+                (attended / total) * 100
+              )
             : 0;
 
         return {
-          instituteId: institute.id,
-          instituteName: institute.name,
-          total: instituteStudents.length,
+          instituteId:
+            institute.id,
+          instituteName:
+            institute.name,
+          total:
+            instituteStudents.length,
           present,
           absent,
           late,
@@ -805,9 +895,13 @@ export default function AttendanceReportPage() {
         };
       })
       .filter((item) => {
-        if (!selectedInstitute) return true;
+        if (!selectedInstitute) {
+          return true;
+        }
+
         return (
-          item.instituteId === selectedInstitute
+          item.instituteId ===
+          selectedInstitute
         );
       });
   }, [
@@ -820,21 +914,27 @@ export default function AttendanceReportPage() {
   /*
    * اسم المعهد الحالي
    */
-  const currentInstituteName = useMemo(() => {
-    if (!selectedInstitute) {
-      return "جميع المعاهد";
-    }
+  const currentInstituteName =
+    useMemo(() => {
+      if (!selectedInstitute) {
+        return "جميع المعاهد";
+      }
 
-    return (
-      institutes.find(
-        (institute) =>
-          institute.id === selectedInstitute
-      )?.name || "المعهد"
-    );
-  }, [institutes, selectedInstitute]);
+      return (
+        institutes.find(
+          (institute) =>
+            institute.id ===
+            selectedInstitute
+        )?.name ||
+        "المعهد"
+      );
+    }, [
+      institutes,
+      selectedInstitute,
+    ]);
 
   /*
-   * طباعة التقرير
+   * حماية HTML الخاص بالطباعة
    */
   function escapeHtml(value: string) {
     return value
@@ -842,17 +942,27 @@ export default function AttendanceReportPage() {
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+      .replaceAll(
+        "'",
+        "&#039;"
+      );
   }
 
+  /*
+   * طباعة التقرير
+   */
   function handlePrintReport() {
     const rowsHtml = report
       .map(
         (row, index) => `
           <tr>
             <td>${index + 1}</td>
-            <td>${escapeHtml(row.student.name || "-")}</td>
-            <td>${escapeHtml(row.className)}</td>
+            <td>${escapeHtml(
+              row.student.name || "-"
+            )}</td>
+            <td>${escapeHtml(
+              row.className
+            )}</td>
             <td>${row.present}</td>
             <td>${row.absent}</td>
             <td>${row.late}</td>
@@ -864,12 +974,15 @@ export default function AttendanceReportPage() {
       )
       .join("");
 
-    const instituteRowsHtml = instituteSummary
-      .map(
-        (item, index) => `
+    const instituteRowsHtml =
+      instituteSummary
+        .map(
+          (item, index) => `
           <tr>
             <td>${index + 1}</td>
-            <td>${escapeHtml(item.instituteName)}</td>
+            <td>${escapeHtml(
+              item.instituteName
+            )}</td>
             <td>${item.total}</td>
             <td>${item.present}</td>
             <td>${item.absent}</td>
@@ -878,15 +991,18 @@ export default function AttendanceReportPage() {
             <td>${item.percentage}%</td>
           </tr>
         `
-      )
-      .join("");
+        )
+        .join("");
 
     const html = `
       <!DOCTYPE html>
       <html lang="ar" dir="rtl">
       <head>
         <meta charset="UTF-8" />
-        <title>تقرير الحضور والغياب</title>
+
+        <title>
+          تقرير الحضور والغياب
+        </title>
 
         <style>
           @page {
@@ -899,18 +1015,30 @@ export default function AttendanceReportPage() {
           }
 
           body {
-            font-family: Arial, Tahoma, sans-serif;
+            font-family:
+              Arial,
+              Tahoma,
+              sans-serif;
+
             direction: rtl;
+
             color: #111827;
+
             margin: 0;
             padding: 0;
+
             background: white;
           }
 
           .header {
             text-align: center;
+
             margin-bottom: 18px;
-            border-bottom: 2px solid #111827;
+
+            border-bottom:
+              2px solid
+              #111827;
+
             padding-bottom: 12px;
           }
 
@@ -931,108 +1059,190 @@ export default function AttendanceReportPage() {
 
           .cards {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+
+            grid-template-columns:
+              repeat(5, 1fr);
+
             gap: 8px;
+
             margin-bottom: 18px;
           }
 
           .card {
-            border: 1px solid #d1d5db;
+            border:
+              1px solid
+              #d1d5db;
+
             border-radius: 8px;
+
             padding: 10px;
+
             text-align: center;
           }
 
           .card .label {
             font-size: 12px;
+
             color: #6b7280;
+
             margin-bottom: 5px;
           }
 
           .card .value {
             font-size: 19px;
+
             font-weight: bold;
           }
 
           h3 {
             margin: 18px 0 8px;
+
             font-size: 17px;
           }
 
           table {
             width: 100%;
-            border-collapse: collapse;
+
+            border-collapse:
+              collapse;
+
             margin-bottom: 16px;
           }
 
           th,
           td {
-            border: 1px solid #9ca3af;
+            border:
+              1px solid
+              #9ca3af;
+
             padding: 6px;
+
             text-align: center;
+
             font-size: 11px;
           }
 
           th {
             background: #f3f4f6;
+
             font-weight: bold;
           }
 
           .footer {
             margin-top: 20px;
+
             display: flex;
-            justify-content: space-between;
+
+            justify-content:
+              space-between;
+
             font-size: 11px;
+
             color: #6b7280;
           }
         </style>
       </head>
 
       <body>
+
         <div class="header">
-          <h1>منصة الإدارة والمتابعة التعليمية</h1>
-          <h2>تقرير الحضور والغياب</h2>
+
+          <h1>
+            منصة الإدارة والمتابعة التعليمية
+          </h1>
+
+          <h2>
+            تقرير الحضور والغياب
+          </h2>
 
           <div class="meta">
-            ${escapeHtml(currentInstituteName)}
+
+            ${escapeHtml(
+              currentInstituteName
+            )}
+
             <br />
+
             الفترة من
-            ${escapeHtml(formatDateArabic(startDate))}
+
+            ${escapeHtml(
+              formatDateArabic(
+                startDate
+              )
+            )}
+
             إلى
-            ${escapeHtml(formatDateArabic(endDate))}
+
+            ${escapeHtml(
+              formatDateArabic(
+                endDate
+              )
+            )}
+
           </div>
+
         </div>
 
         <div class="cards">
+
           <div class="card">
-            <div class="label">إجمالي السجلات</div>
-            <div class="value">${totals.total}</div>
+            <div class="label">
+              إجمالي السجلات
+            </div>
+
+            <div class="value">
+              ${totals.total}
+            </div>
           </div>
 
           <div class="card">
-            <div class="label">حاضر</div>
-            <div class="value">${totals.present}</div>
+            <div class="label">
+              حاضر
+            </div>
+
+            <div class="value">
+              ${totals.present}
+            </div>
           </div>
 
           <div class="card">
-            <div class="label">غائب</div>
-            <div class="value">${totals.absent}</div>
+            <div class="label">
+              غائب
+            </div>
+
+            <div class="value">
+              ${totals.absent}
+            </div>
           </div>
 
           <div class="card">
-            <div class="label">متأخر</div>
-            <div class="value">${totals.late}</div>
+            <div class="label">
+              متأخر
+            </div>
+
+            <div class="value">
+              ${totals.late}
+            </div>
           </div>
 
           <div class="card">
-            <div class="label">نسبة الحضور</div>
-            <div class="value">${totals.percentage}%</div>
+            <div class="label">
+              نسبة الحضور
+            </div>
+
+            <div class="value">
+              ${totals.percentage}%
+            </div>
           </div>
+
         </div>
 
-        <h3>ملخص المعاهد</h3>
+        <h3>
+          ملخص المعاهد
+        </h3>
 
         <table>
+
           <thead>
             <tr>
               <th>#</th>
@@ -1047,21 +1257,30 @@ export default function AttendanceReportPage() {
           </thead>
 
           <tbody>
+
             ${
               instituteRowsHtml ||
               `
                 <tr>
-                  <td colspan="8">لا توجد بيانات</td>
+                  <td colspan="8">
+                    لا توجد بيانات
+                  </td>
                 </tr>
               `
             }
+
           </tbody>
+
         </table>
 
-        <h3>تفاصيل الطلاب</h3>
+        <h3>
+          تفاصيل الطلاب
+        </h3>
 
         <table>
+
           <thead>
+
             <tr>
               <th>#</th>
               <th>اسم الطالب</th>
@@ -1073,51 +1292,69 @@ export default function AttendanceReportPage() {
               <th>الإجمالي</th>
               <th>النسبة</th>
             </tr>
+
           </thead>
 
           <tbody>
+
             ${
               rowsHtml ||
               `
                 <tr>
-                  <td colspan="9">لا توجد بيانات</td>
+                  <td colspan="9">
+                    لا توجد بيانات
+                  </td>
                 </tr>
               `
             }
+
           </tbody>
+
         </table>
 
         <div class="footer">
+
           <span>
-            تم إنشاء التقرير بواسطة منصة الإدارة والمتابعة التعليمية
+            تم إنشاء التقرير بواسطة
+            منصة الإدارة والمتابعة التعليمية
           </span>
 
           <span>
             تاريخ الطباعة:
             ${escapeHtml(
-              new Date().toLocaleDateString("ar-EG")
+              new Date().toLocaleDateString(
+                "ar-EG"
+              )
             )}
           </span>
+
         </div>
+
       </body>
       </html>
     `;
 
-    const printWindow = window.open(
-      "",
-      "_blank",
-      "width=1200,height=800"
-    );
+    const printWindow =
+      window.open(
+        "",
+        "_blank",
+        "width=1200,height=800"
+      );
 
     if (!printWindow) {
       setMessage(
         "تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة."
       );
+
       return;
     }
 
     printWindow.document.open();
-    printWindow.document.write(html);
+
+    printWindow.document.write(
+      html
+    );
+
     printWindow.document.close();
 
     printWindow.focus();
@@ -1137,6 +1374,7 @@ export default function AttendanceReportPage() {
         className="min-h-screen bg-slate-50 flex items-center justify-center p-6"
       >
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
+
           <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin mx-auto mb-4" />
 
           <h2 className="text-lg font-bold text-slate-800">
@@ -1146,6 +1384,7 @@ export default function AttendanceReportPage() {
           <p className="text-sm text-slate-500 mt-2">
             يرجى الانتظار قليلًا
           </p>
+
         </div>
       </div>
     );
@@ -1154,13 +1393,19 @@ export default function AttendanceReportPage() {
   /*
    * منع الوصول غير المصرح
    */
-  if (!profile || !ALLOWED_ROLES.includes(profile.role)) {
+  if (
+    !profile ||
+    !ALLOWED_ROLES.includes(
+      profile.role
+    )
+  ) {
     return (
       <div
         dir="rtl"
         className="min-h-screen bg-slate-50 flex items-center justify-center p-6"
       >
         <div className="max-w-md w-full bg-white rounded-2xl border border-red-200 shadow-sm p-8 text-center">
+
           <ShieldCheck className="w-12 h-12 text-red-500 mx-auto mb-4" />
 
           <h2 className="text-xl font-bold text-slate-800">
@@ -1170,6 +1415,7 @@ export default function AttendanceReportPage() {
           <p className="text-slate-500 mt-2">
             ليس لديك صلاحية لعرض تقرير الحضور والغياب.
           </p>
+
         </div>
       </div>
     );
@@ -1184,15 +1430,19 @@ export default function AttendanceReportPage() {
 
         {/* العنوان */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
 
             <div>
+
               <div className="flex items-center gap-3">
+
                 <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center">
                   <BarChart3 className="w-6 h-6 text-blue-600" />
                 </div>
 
                 <div>
+
                   <h1 className="text-2xl font-bold text-slate-800">
                     تقرير الحضور والغياب
                   </h1>
@@ -1200,38 +1450,51 @@ export default function AttendanceReportPage() {
                   <p className="text-sm text-slate-500 mt-1">
                     متابعة وتحليل حضور الطلاب خلال الفترة المحددة
                   </p>
+
                 </div>
+
               </div>
+
             </div>
 
             <div className="flex flex-wrap gap-2">
+
               <button
                 onClick={refreshReport}
                 disabled={reportLoading}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
+
                 <RefreshCw
                   className={`w-4 h-4 ${
-                    reportLoading ? "animate-spin" : ""
+                    reportLoading
+                      ? "animate-spin"
+                      : ""
                   }`}
                 />
 
                 تحديث التقرير
+
               </button>
 
               <button
                 onClick={handlePrintReport}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
               >
+
                 <Printer className="w-4 h-4" />
 
                 طباعة التقرير
+
               </button>
+
             </div>
+
           </div>
+
         </div>
 
-        {/* رسالة الخطأ */}
+        {/* الرسالة */}
         {message && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
             {message}
@@ -1240,12 +1503,15 @@ export default function AttendanceReportPage() {
 
         {/* الفلاتر */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
           <div className="flex items-center gap-2 mb-5">
+
             <CalendarDays className="w-5 h-5 text-blue-600" />
 
             <h2 className="font-bold text-slate-800">
               خيارات التقرير
             </h2>
+
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -1253,6 +1519,7 @@ export default function AttendanceReportPage() {
             {/* المعهد */}
             {isCentralManager && (
               <div>
+
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   المعهد
                 </label>
@@ -1260,28 +1527,36 @@ export default function AttendanceReportPage() {
                 <select
                   value={selectedInstitute}
                   onChange={(e) =>
-                    handleInstituteChange(e.target.value)
+                    handleInstituteChange(
+                      e.target.value
+                    )
                   }
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 >
+
                   <option value="">
                     جميع المعاهد
                   </option>
 
-                  {institutes.map((institute) => (
-                    <option
-                      key={institute.id}
-                      value={institute.id}
-                    >
-                      {institute.name}
-                    </option>
-                  ))}
+                  {institutes.map(
+                    (institute) => (
+                      <option
+                        key={institute.id}
+                        value={institute.id}
+                      >
+                        {institute.name}
+                      </option>
+                    )
+                  )}
+
                 </select>
+
               </div>
             )}
 
             {/* الفصل */}
             <div>
+
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 الفصل
               </label>
@@ -1289,24 +1564,35 @@ export default function AttendanceReportPage() {
               <select
                 value={selectedClass}
                 onChange={(e) =>
-                  setSelectedClass(e.target.value)
+                  setSelectedClass(
+                    e.target.value
+                  )
                 }
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
+
                 <option value="">
                   جميع الفصول
                 </option>
 
-                {filteredClasses.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
+                {filteredClasses.map(
+                  (item) => (
+                    <option
+                      key={item.id}
+                      value={item.id}
+                    >
+                      {item.name}
+                    </option>
+                  )
+                )}
+
               </select>
+
             </div>
 
             {/* من */}
             <div>
+
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 من تاريخ
               </label>
@@ -1315,14 +1601,18 @@ export default function AttendanceReportPage() {
                 type="date"
                 value={startDate}
                 onChange={(e) =>
-                  setStartDate(e.target.value)
+                  setStartDate(
+                    e.target.value
+                  )
                 }
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
+
             </div>
 
             {/* إلى */}
             <div>
+
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 إلى تاريخ
               </label>
@@ -1331,112 +1621,166 @@ export default function AttendanceReportPage() {
                 type="date"
                 value={endDate}
                 onChange={(e) =>
-                  setEndDate(e.target.value)
+                  setEndDate(
+                    e.target.value
+                  )
                 }
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
+
             </div>
 
-            {/* بحث */}
+            {/* البحث */}
             <div>
+
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 بحث
               </label>
 
               <div className="relative">
+
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
 
                 <input
                   value={search}
                   onChange={(e) =>
-                    setSearch(e.target.value)
+                    setSearch(
+                      e.target.value
+                    )
                   }
                   placeholder="اسم الطالب أو الرقم..."
                   className="w-full rounded-xl border border-slate-200 bg-white pr-10 pl-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
+
               </div>
+
             </div>
+
           </div>
+
         </div>
 
         {/* الإحصائيات */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
             <div className="flex items-center justify-between">
+
               <div>
+
                 <p className="text-sm text-slate-500">
                   الطلاب
                 </p>
 
                 <p className="text-2xl font-bold text-slate-800 mt-1">
-                  {formatNumber(report.length)}
+                  {formatNumber(
+                    report.length
+                  )}
                 </p>
+
               </div>
 
               <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center">
+
                 <Users className="w-5 h-5 text-blue-600" />
+
               </div>
+
             </div>
+
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
             <div className="flex items-center justify-between">
+
               <div>
+
                 <p className="text-sm text-slate-500">
                   حاضر
                 </p>
 
                 <p className="text-2xl font-bold text-emerald-600 mt-1">
-                  {formatNumber(totals.present)}
+                  {formatNumber(
+                    totals.present
+                  )}
                 </p>
+
               </div>
 
               <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+
               </div>
+
             </div>
+
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
             <div className="flex items-center justify-between">
+
               <div>
+
                 <p className="text-sm text-slate-500">
                   غائب
                 </p>
 
                 <p className="text-2xl font-bold text-red-600 mt-1">
-                  {formatNumber(totals.absent)}
+                  {formatNumber(
+                    totals.absent
+                  )}
                 </p>
+
               </div>
 
               <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center">
+
                 <XCircle className="w-5 h-5 text-red-600" />
+
               </div>
+
             </div>
+
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
             <div className="flex items-center justify-between">
+
               <div>
+
                 <p className="text-sm text-slate-500">
                   متأخر
                 </p>
 
                 <p className="text-2xl font-bold text-amber-600 mt-1">
-                  {formatNumber(totals.late)}
+                  {formatNumber(
+                    totals.late
+                  )}
                 </p>
+
               </div>
 
               <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center">
+
                 <Clock3 className="w-5 h-5 text-amber-600" />
+
               </div>
+
             </div>
+
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+
             <div className="flex items-center justify-between">
+
               <div>
+
                 <p className="text-sm text-slate-500">
                   نسبة الحضور
                 </p>
@@ -1444,13 +1788,19 @@ export default function AttendanceReportPage() {
                 <p className="text-2xl font-bold text-indigo-600 mt-1">
                   {totals.percentage}%
                 </p>
+
               </div>
 
               <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center">
+
                 <TrendingUp className="w-5 h-5 text-indigo-600" />
+
               </div>
+
             </div>
+
           </div>
+
         </div>
 
         {/* ملخص المعاهد */}
@@ -1458,10 +1808,13 @@ export default function AttendanceReportPage() {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
             <div className="p-5 border-b border-slate-100">
+
               <div className="flex items-center gap-2">
+
                 <Building2 className="w-5 h-5 text-blue-600" />
 
                 <div>
+
                   <h2 className="font-bold text-slate-800">
                     ملخص الحضور حسب المعهد
                   </h2>
@@ -1469,14 +1822,21 @@ export default function AttendanceReportPage() {
                   <p className="text-xs text-slate-500 mt-1">
                     عرض سريع لمؤشرات الحضور والغياب لكل معهد
                   </p>
+
                 </div>
+
               </div>
+
             </div>
 
             <div className="overflow-x-auto">
+
               <table className="w-full text-sm">
+
                 <thead className="bg-slate-50">
+
                   <tr>
+
                     <th className="px-4 py-3 text-right font-bold text-slate-700">
                       المعهد
                     </th>
@@ -1504,68 +1864,98 @@ export default function AttendanceReportPage() {
                     <th className="px-4 py-3 text-center font-bold text-indigo-700">
                       النسبة
                     </th>
+
                   </tr>
+
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {instituteSummary.map((item) => (
-                    <tr
-                      key={item.instituteId}
-                      className="hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-3 font-semibold text-slate-800">
-                        {item.instituteName}
-                      </td>
 
-                      <td className="px-4 py-3 text-center">
-                        {formatNumber(item.total)}
-                      </td>
+                  {instituteSummary.map(
+                    (item) => (
+                      <tr
+                        key={
+                          item.instituteId
+                        }
+                        className="hover:bg-slate-50"
+                      >
 
-                      <td className="px-4 py-3 text-center text-emerald-600 font-semibold">
-                        {formatNumber(item.present)}
-                      </td>
+                        <td className="px-4 py-3 font-semibold text-slate-800">
+                          {item.instituteName}
+                        </td>
 
-                      <td className="px-4 py-3 text-center text-red-600 font-semibold">
-                        {formatNumber(item.absent)}
-                      </td>
+                        <td className="px-4 py-3 text-center">
+                          {formatNumber(
+                            item.total
+                          )}
+                        </td>
 
-                      <td className="px-4 py-3 text-center text-amber-600 font-semibold">
-                        {formatNumber(item.late)}
-                      </td>
+                        <td className="px-4 py-3 text-center text-emerald-600 font-semibold">
+                          {formatNumber(
+                            item.present
+                          )}
+                        </td>
 
-                      <td className="px-4 py-3 text-center text-slate-600 font-semibold">
-                        {formatNumber(item.excused)}
-                      </td>
+                        <td className="px-4 py-3 text-center text-red-600 font-semibold">
+                          {formatNumber(
+                            item.absent
+                          )}
+                        </td>
 
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
-                            item.percentage >= 90
-                              ? "bg-emerald-50 text-emerald-700"
-                              : item.percentage >= 75
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-red-50 text-red-700"
-                          }`}
-                        >
-                          {item.percentage}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-4 py-3 text-center text-amber-600 font-semibold">
+                          {formatNumber(
+                            item.late
+                          )}
+                        </td>
 
-                  {instituteSummary.length === 0 && (
+                        <td className="px-4 py-3 text-center text-slate-600 font-semibold">
+                          {formatNumber(
+                            item.excused
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-center">
+
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                              item.percentage >=
+                              90
+                                ? "bg-emerald-50 text-emerald-700"
+                                : item.percentage >=
+                                  75
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {item.percentage}%
+                          </span>
+
+                        </td>
+
+                      </tr>
+                    )
+                  )}
+
+                  {instituteSummary.length ===
+                    0 && (
                     <tr>
+
                       <td
                         colSpan={7}
                         className="px-4 py-10 text-center text-slate-500"
                       >
                         لا توجد بيانات للعرض.
                       </td>
+
                     </tr>
                   )}
+
                 </tbody>
+
               </table>
+
             </div>
+
           </div>
         )}
 
@@ -1573,9 +1963,11 @@ export default function AttendanceReportPage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
           <div className="p-5 border-b border-slate-100">
+
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
 
               <div>
+
                 <h2 className="font-bold text-slate-800">
                   تفاصيل حضور الطلاب
                 </h2>
@@ -1583,30 +1975,44 @@ export default function AttendanceReportPage() {
                 <p className="text-xs text-slate-500 mt-1">
                   {currentInstituteName}
                 </p>
+
               </div>
 
               <div className="text-sm text-slate-500">
+
                 النتائج:
+
                 <span className="font-bold text-slate-800 mr-1">
-                  {formatNumber(report.length)}
+                  {formatNumber(
+                    report.length
+                  )}
                 </span>
+
               </div>
+
             </div>
+
           </div>
 
           {reportLoading ? (
             <div className="py-16 text-center">
+
               <div className="w-10 h-10 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin mx-auto mb-4" />
 
               <p className="text-sm text-slate-500">
                 جاري تحديث التقرير...
               </p>
+
             </div>
           ) : (
             <div className="overflow-x-auto">
+
               <table className="w-full text-sm">
+
                 <thead className="bg-slate-50">
+
                   <tr>
+
                     <th className="px-4 py-3 text-right font-bold text-slate-700">
                       الطالب
                     </th>
@@ -1638,76 +2044,100 @@ export default function AttendanceReportPage() {
                     <th className="px-4 py-3 text-center font-bold text-indigo-700">
                       النسبة
                     </th>
+
                   </tr>
+
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {report.map((row) => (
-                    <tr
-                      key={row.student.id}
-                      className="hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-800">
-                          {row.student.name}
-                        </div>
 
-                        {row.student.national_id && (
-                          <div className="text-xs text-slate-400 mt-1">
-                            {row.student.national_id}
+                  {report.map(
+                    (row) => (
+                      <tr
+                        key={
+                          row.student.id
+                        }
+                        className="hover:bg-slate-50"
+                      >
+
+                        <td className="px-4 py-3">
+
+                          <div className="font-semibold text-slate-800">
+                            {row.student.name}
                           </div>
-                        )}
-                      </td>
 
-                      <td className="px-4 py-3 text-slate-600">
-                        {row.className}
-                      </td>
+                          {row.student
+                            .national_id && (
+                            <div className="text-xs text-slate-400 mt-1">
+                              {
+                                row.student
+                                  .national_id
+                              }
+                            </div>
+                          )}
 
-                      <td className="px-4 py-3 text-center text-emerald-600 font-semibold">
-                        {row.present}
-                      </td>
+                        </td>
 
-                      <td className="px-4 py-3 text-center text-red-600 font-semibold">
-                        {row.absent}
-                      </td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {row.className}
+                        </td>
 
-                      <td className="px-4 py-3 text-center text-amber-600 font-semibold">
-                        {row.late}
-                      </td>
+                        <td className="px-4 py-3 text-center text-emerald-600 font-semibold">
+                          {row.present}
+                        </td>
 
-                      <td className="px-4 py-3 text-center text-slate-600 font-semibold">
-                        {row.excused}
-                      </td>
+                        <td className="px-4 py-3 text-center text-red-600 font-semibold">
+                          {row.absent}
+                        </td>
 
-                      <td className="px-4 py-3 text-center font-semibold text-slate-800">
-                        {row.total}
-                      </td>
+                        <td className="px-4 py-3 text-center text-amber-600 font-semibold">
+                          {row.late}
+                        </td>
 
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
-                            row.percentage >= 90
-                              ? "bg-emerald-50 text-emerald-700"
-                              : row.percentage >= 75
-                              ? "bg-amber-50 text-amber-700"
-                              : row.percentage > 0
-                              ? "bg-red-50 text-red-700"
-                              : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {row.percentage}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-4 py-3 text-center text-slate-600 font-semibold">
+                          {row.excused}
+                        </td>
 
-                  {report.length === 0 && (
+                        <td className="px-4 py-3 text-center font-semibold text-slate-800">
+                          {row.total}
+                        </td>
+
+                        <td className="px-4 py-3 text-center">
+
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                              row.percentage >=
+                              90
+                                ? "bg-emerald-50 text-emerald-700"
+                                : row.percentage >=
+                                  75
+                                ? "bg-amber-50 text-amber-700"
+                                : row.percentage >
+                                  0
+                                ? "bg-red-50 text-red-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {row.percentage}%
+                          </span>
+
+                        </td>
+
+                      </tr>
+                    )
+                  )}
+
+                  {report.length ===
+                    0 && (
                     <tr>
+
                       <td
                         colSpan={8}
                         className="px-4 py-16 text-center"
                       >
+
                         <div className="flex flex-col items-center">
+
                           <BarChart3 className="w-12 h-12 text-slate-300 mb-3" />
 
                           <p className="font-semibold text-slate-600">
@@ -1717,15 +2147,22 @@ export default function AttendanceReportPage() {
                           <p className="text-sm text-slate-400 mt-1">
                             جرّبي تغيير الفترة أو الفلاتر المستخدمة.
                           </p>
+
                         </div>
+
                       </td>
+
                     </tr>
                   )}
+
                 </tbody>
 
-                {report.length > 0 && (
+                {report.length >
+                  0 && (
                   <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+
                     <tr>
+
                       <td
                         colSpan={2}
                         className="px-4 py-4 font-bold text-slate-800"
@@ -1734,11 +2171,15 @@ export default function AttendanceReportPage() {
                       </td>
 
                       <td className="px-4 py-4 text-center font-bold text-emerald-700">
-                        {totals.present}
+                        {
+                          totals.present
+                        }
                       </td>
 
                       <td className="px-4 py-4 text-center font-bold text-red-700">
-                        {totals.absent}
+                        {
+                          totals.absent
+                        }
                       </td>
 
                       <td className="px-4 py-4 text-center font-bold text-amber-700">
@@ -1746,23 +2187,35 @@ export default function AttendanceReportPage() {
                       </td>
 
                       <td className="px-4 py-4 text-center font-bold text-slate-700">
-                        {totals.excused}
+                        {
+                          totals.excused
+                        }
                       </td>
 
                       <td className="px-4 py-4 text-center font-bold text-slate-800">
-                        {totals.total}
+                        {
+                          totals.total
+                        }
                       </td>
 
                       <td className="px-4 py-4 text-center font-bold text-indigo-700">
-                        {totals.percentage}%
+                        {
+                          totals.percentage
+                        }%
                       </td>
+
                     </tr>
+
                   </tfoot>
                 )}
+
               </table>
+
             </div>
           )}
+
         </div>
+
       </div>
     </div>
   );
