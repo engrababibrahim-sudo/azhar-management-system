@@ -70,6 +70,11 @@ export default function StudentsPage() {
   const [requestedInstituteId, setRequestedInstituteId] =
     useState<string | null>(null);
 
+  // عند فتح الصفحة من رابط "طلاب الفصل" يتم تمرير classId
+  // لعرض طلاب هذا الفصل فقط.
+  const [requestedClassId, setRequestedClassId] =
+    useState<string | null>(null);
+
   const [parentLookupLoading, setParentLookupLoading] =
     useState(false);
 
@@ -166,6 +171,18 @@ export default function StudentsPage() {
     );
 
     return params.get("instituteId");
+  }
+
+  function getRequestedClassFromUrl() {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const params = new URLSearchParams(
+      window.location.search
+    );
+
+    return params.get("classId");
   }
 
   // =====================================================
@@ -284,9 +301,14 @@ export default function StudentsPage() {
     try {
       const requestedId =
         getRequestedInstituteFromUrl();
+      const requestedClass =
+        getRequestedClassFromUrl();
 
       setRequestedInstituteId(
         requestedId
+      );
+      setRequestedClassId(
+        requestedClass
       );
 
       // -----------------------------------------
@@ -400,6 +422,36 @@ export default function StudentsPage() {
           instituteData.id,
         ]);
 
+        if (requestedClass) {
+          const { data: requestedClassData, error: requestedClassError } =
+            await supabase
+              .from("classes")
+              .select("id, institute_id")
+              .eq("id", requestedClass)
+              .eq("institute_id", instituteData.id)
+              .eq("is_active", true)
+              .maybeSingle();
+
+          if (requestedClassError) {
+            throw new Error(
+              "تعذر التحقق من الفصل المطلوب: " +
+                requestedClassError.message
+            );
+          }
+
+          if (!requestedClassData) {
+            throw new Error(
+              "الفصل المطلوب غير موجود ضمن المعهد المرتبط بالحساب."
+            );
+          }
+
+          setSelectedClass(requestedClassData.id);
+          setRequestedClassId(requestedClassData.id);
+        } else {
+          setSelectedClass("all");
+          setRequestedClassId(null);
+        }
+
         return;
       }
 
@@ -482,13 +534,44 @@ export default function StudentsPage() {
           );
 
           // -----------------------------------------
-          // أهم سطر:
           // تحميل طلاب المعهد المحدد فقط
           // -----------------------------------------
 
           await loadClassesAndStudents([
             selectedInstituteData.id,
           ]);
+
+          // إذا جاء classId من بطاقة "طلاب الفصل"
+          // نفعّل فلتر الفصل بعد التأكد أنه تابع للمعهد المحدد.
+          if (requestedClass) {
+            const { data: requestedClassData, error: requestedClassError } =
+              await supabase
+                .from("classes")
+                .select("id, institute_id")
+                .eq("id", requestedClass)
+                .eq("institute_id", selectedInstituteData.id)
+                .eq("is_active", true)
+                .maybeSingle();
+
+            if (requestedClassError) {
+              throw new Error(
+                "تعذر التحقق من الفصل المطلوب: " +
+                  requestedClassError.message
+              );
+            }
+
+            if (!requestedClassData) {
+              throw new Error(
+                "الفصل المطلوب غير موجود ضمن المعهد المحدد."
+              );
+            }
+
+            setSelectedClass(requestedClassData.id);
+            setRequestedClassId(requestedClassData.id);
+          } else {
+            setSelectedClass("all");
+            setRequestedClassId(null);
+          }
 
           return;
         }
@@ -1314,6 +1397,37 @@ export default function StudentsPage() {
           await loadClassesAndStudents([
             selected.id,
           ]);
+
+          const urlClassId = getRequestedClassFromUrl();
+          if (urlClassId) {
+            const { data: requestedClassData, error: requestedClassError } =
+              await supabase
+                .from("classes")
+                .select("id, institute_id")
+                .eq("id", urlClassId)
+                .eq("institute_id", selected.id)
+                .eq("is_active", true)
+                .maybeSingle();
+
+            if (requestedClassError) {
+              throw new Error(
+                "تعذر التحقق من الفصل المطلوب: " +
+                  requestedClassError.message
+              );
+            }
+
+            if (!requestedClassData) {
+              throw new Error(
+                "الفصل المطلوب غير موجود ضمن المعهد المحدد."
+              );
+            }
+
+            setRequestedClassId(requestedClassData.id);
+            setSelectedClass(requestedClassData.id);
+          } else {
+            setRequestedClassId(null);
+            setSelectedClass("all");
+          }
         }
 
         // =============================================
@@ -1330,6 +1444,8 @@ export default function StudentsPage() {
           setSelectedInstitute(
             "all"
           );
+          setRequestedClassId(null);
+          setSelectedClass("all");
 
           await loadClassesAndStudents(
             loadedInstitutes.map(
@@ -1388,6 +1504,37 @@ export default function StudentsPage() {
         await loadClassesAndStudents([
           profile.institute_id,
         ]);
+
+        const urlClassId = getRequestedClassFromUrl();
+        if (urlClassId) {
+          const { data: requestedClassData, error: requestedClassError } =
+            await supabase
+              .from("classes")
+              .select("id, institute_id")
+              .eq("id", urlClassId)
+              .eq("institute_id", profile.institute_id)
+              .eq("is_active", true)
+              .maybeSingle();
+
+          if (requestedClassError) {
+            throw new Error(
+              "تعذر التحقق من الفصل المطلوب: " +
+                requestedClassError.message
+            );
+          }
+
+          if (!requestedClassData) {
+            throw new Error(
+              "الفصل المطلوب غير موجود ضمن المعهد المرتبط بالحساب."
+            );
+          }
+
+          setRequestedClassId(requestedClassData.id);
+          setSelectedClass(requestedClassData.id);
+        } else {
+          setRequestedClassId(null);
+          setSelectedClass("all");
+        }
       }
 
       setSuccess(
@@ -1459,6 +1606,12 @@ export default function StudentsPage() {
             {filteredStudents.length}
           </p>
 
+          {requestedClassId && (
+            <p className="text-sm mt-1 font-semibold">
+              الفصل: {getClassName(requestedClassId)}
+            </p>
+          )}
+
           <p className="text-xs text-slate-500 mt-2">
             تاريخ الطباعة:{" "}
             {new Date().toLocaleDateString(
@@ -1497,6 +1650,12 @@ export default function StudentsPage() {
                     isCentralManager && (
                       <p className="text-xs text-blue-600 mt-1 font-medium">
                         يتم عرض طلاب المعهد المحدد فقط
+                      </p>
+                    )}
+
+                    {requestedClassId && (
+                      <p className="text-xs text-purple-600 mt-1 font-medium">
+                        يتم عرض طلاب الفصل المحدد فقط
                       </p>
                     )}
 
@@ -1705,12 +1864,13 @@ export default function StudentsPage() {
 
             <select
               value={selectedClass}
+              disabled={!!requestedClassId}
               onChange={(e) =>
                 setSelectedClass(
                   e.target.value
                 )
               }
-              className="w-full border border-slate-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="w-full border border-slate-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-slate-100 disabled:text-slate-500"
             >
 
               <option value="all">
