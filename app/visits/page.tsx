@@ -396,6 +396,12 @@ export default function VisitsPage() {
     Institute[]
   >([]);
 
+  // When opened from an institute profile:
+  // /visits?instituteId=...
+  // only that institute's visits are loaded.
+  const [requestedInstituteId, setRequestedInstituteId] =
+    useState("");
+
   const [visits, setVisits] = useState<Visit[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -458,11 +464,18 @@ export default function VisitsPage() {
      LOAD DATA
   ======================================================= */
 
-  async function loadData() {
+  async function loadData(instituteIdOverride?: string) {
     setLoading(true);
     setErrorMessage("");
 
     try {
+      const requestedId =
+        instituteIdOverride ??
+        requestedInstituteId;
+
+      if (requestedId) {
+        setInstituteFilter(requestedId);
+      }
       const [
         { data: instituteData, error: instituteError },
         { data: visitData, error: visitError },
@@ -472,27 +485,38 @@ export default function VisitsPage() {
           .select("id,name,code")
           .order("name"),
 
-        supabase
-          .from("visits")
-          .select(
+        (() => {
+          let query = supabase
+            .from("visits")
+            .select(
+              `
+              id,
+              institute_id,
+              visitor,
+              type,
+              visit_date,
+              status,
+              notes,
+              violations,
+              recommendations,
+              tasks,
+              inspection_results,
+              created_at
             `
-            id,
-            institute_id,
-            visitor,
-            type,
-            visit_date,
-            status,
-            notes,
-            violations,
-            recommendations,
-            tasks,
-            inspection_results,
-            created_at
-          `
-          )
-          .order("visit_date", {
-            ascending: false,
-          }),
+            )
+            .order("visit_date", {
+              ascending: false,
+            });
+
+          if (requestedId) {
+            query = query.eq(
+              "institute_id",
+              requestedId
+            );
+          }
+
+          return query;
+        })(),
       ]);
 
       if (instituteError) {
@@ -572,7 +596,18 @@ export default function VisitsPage() {
   }
 
   useEffect(() => {
-    loadData();
+    // Read instituteId from the URL without useSearchParams.
+    const params = new URLSearchParams(
+      window.location.search
+    );
+
+    const instituteId =
+      params.get("instituteId")?.trim() || "";
+
+    setRequestedInstituteId(instituteId);
+
+    loadData(instituteId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* =======================================================
@@ -747,6 +782,14 @@ export default function VisitsPage() {
 
   function openNewVisitForm() {
     resetForm();
+
+    if (requestedInstituteId) {
+      setForm((previous) => ({
+        ...previous,
+        institute: requestedInstituteId,
+      }));
+    }
+
     setShowForm(true);
     setShowDetails(false);
     setErrorMessage("");
@@ -1809,22 +1852,37 @@ export default function VisitsPage() {
             ]}
           />
 
-          <SelectField
-            value={instituteFilter}
-            onChange={setInstituteFilter}
-            options={[
-              {
-                value: "all",
-                label: "كل المعاهد",
-              },
-              ...institutes.map(
-                (institute) => ({
-                  value: institute.id,
-                  label: institute.name,
-                })
-              ),
-            ]}
-          />
+          {requestedInstituteId ? (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+              <div className="mb-1 text-[11px] font-semibold text-gray-400">
+                المعهد المحدد
+              </div>
+              <div className="font-semibold text-gray-900">
+                {institutes.find(
+                  (institute) =>
+                    institute.id ===
+                    requestedInstituteId
+                )?.name || "المعهد المحدد"}
+              </div>
+            </div>
+          ) : (
+            <SelectField
+              value={instituteFilter}
+              onChange={setInstituteFilter}
+              options={[
+                {
+                  value: "all",
+                  label: "كل المعاهد",
+                },
+                ...institutes.map(
+                  (institute) => ({
+                    value: institute.id,
+                    label: institute.name,
+                  })
+                ),
+              ]}
+            />
+          )}
 
           <SelectField
             value={typeFilter}
@@ -2494,30 +2552,41 @@ export default function VisitsPage() {
               <div className="grid gap-4 md:grid-cols-2">
 
                 <FormField label="المعهد">
-                  <SelectField
-                    value={form.institute}
-                    onChange={(value) =>
-                      updateForm(
-                        "institute",
-                        value
-                      )
-                    }
-                    options={[
-                      {
-                        value: "",
-                        label:
-                          "اختر المعهد",
-                      },
-                      ...institutes.map(
-                        (institute) => ({
-                          value:
-                            institute.id,
+                  {requestedInstituteId ? (
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-900">
+                      {institutes.find(
+                        (institute) =>
+                          institute.id ===
+                          requestedInstituteId
+                      )?.name ||
+                        "المعهد المحدد"}
+                    </div>
+                  ) : (
+                    <SelectField
+                      value={form.institute}
+                      onChange={(value) =>
+                        updateForm(
+                          "institute",
+                          value
+                        )
+                      }
+                      options={[
+                        {
+                          value: "",
                           label:
-                            institute.name,
-                        })
-                      ),
-                    ]}
-                  />
+                            "اختر المعهد",
+                        },
+                        ...institutes.map(
+                          (institute) => ({
+                            value:
+                              institute.id,
+                            label:
+                              institute.name,
+                          })
+                        ),
+                      ]}
+                    />
+                  )}
                 </FormField>
 
                 <FormField label="الزائر">
